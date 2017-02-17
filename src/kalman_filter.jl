@@ -183,9 +183,6 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
 
     end # of loop through regimes
 
-    zend = z
-    Pend = P
-
     if !likelihood_only && n_presample_periods > 0
         mainsample_periods = n_presample_periods+1:T
 
@@ -207,7 +204,7 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
         rmse = sqrt(mean((yprederror.^2)', 1))
         rmsd = sqrt(mean((ystdprederror.^2)', 1))
 
-        return log_likelihood, zend, Pend, pred, vpred, yprederror, ystdprederror, rmse, rmsd, filt, vfilt, z0, P0
+        return log_likelihood, pred, vpred, yprederror, ystdprederror, rmse, rmsd, filt, vfilt, z0, P0
     else
         return log_likelihood
     end

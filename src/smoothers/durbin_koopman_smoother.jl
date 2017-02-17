@@ -147,9 +147,9 @@ function durbin_koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{
     # Run the Kalman filter
     # Note that we pass in `zeros(size(D))` instead of `D` because the
     # measurement equation for `data_star` has no constant term
-    _, _, _, pred, vpred, _ = kalman_filter(regime_indices, y_star, TTTs, RRRs, CCCs,
-                                  QQs, ZZs, fill(zeros(Ny), n_regimes), MMs, EEs,
-                                  z0, P0)
+    _, pred, vpred, _ = kalman_filter(regime_indices, y_star, TTTs, RRRs, CCCs,
+                            QQs, ZZs, fill(zeros(Ny), n_regimes), MMs, EEs,
+                            z0, P0)
 
     # Kalman smooth
     α_hat_star, η_hat_star = koopman_smoother(regime_indices, y_star, TTTs, RRRs, CCCs,
