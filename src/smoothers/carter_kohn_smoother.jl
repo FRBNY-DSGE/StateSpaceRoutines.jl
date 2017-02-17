@@ -69,6 +69,20 @@ y(t) = Z*α(t) + D             (state or transition equation)
 α(t+1) = T*α(t) + R*η(t+1)    (measurement or observation equation)
 ```
 """
+function carter_kohn_smoother{S<:AbstractFloat}(data::Matrix{S},
+    TTT::Matrix{S}, RRR::Matrix{S}, z0::Vector{S},
+    pred::Matrix{S}, vpred::Array{S, 3}, filt::Matrix{S}, vfilt::Array{S, 3};
+    n_presample_periods::Int = 0, draw_states::Bool = true)
+
+    T = size(data, 2)
+    regime_indices = Range{Int64}[1:T]
+
+    carter_kohn_smoother(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR],
+        z0, pred, vpred, filt, vfilt;
+        n_presample_periods = n_presample_periods,
+        draw_states = draw_states)
+end
+
 function carter_kohn_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
     data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}},
     z0::Vector{S}, pred::Matrix{S}, vpred::Array{S, 3},
