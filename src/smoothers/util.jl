@@ -12,7 +12,7 @@ function solve_smoothed_shocks{S<:AbstractFloat}(regime_indices::Vector{Range{In
     # Solve for shocks needed to produce smoothed states in each period
     smoothed_shocks = zeros(Ne, T)
 
-    for i = n_regimes:-1:1
+    for i = 1:n_regimes
         # Get state-space system matrices for this regime
         regime_periods = regime_indices[i]
         TTT, RRR = TTTs[i], RRRs[i]
