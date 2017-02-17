@@ -2,8 +2,8 @@ using Base.Test
 using StateSpaceRoutines
 
 my_tests = [
-            "kalman_filter.jl"
-            "smoothers.jl"
+            "kalman_filter"
+            "smoothers"
             ]
 
 for test in my_tests
