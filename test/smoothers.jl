@@ -31,7 +31,11 @@ for smoother in [:hamilton, :koopman, :carter_kohn, :durbin_koopman]
 end
 
 # Compare to expected output
+exp_states, exp_shocks = h5open("$path/reference/smoothers_out.h5", "r") do file
+    read(file, "exp_states"), read(file, "exp_shocks")
+end
+
 for smoother in [:hamilton, :koopman, :carter_kohn, :durbin_koopman]
-    @test_approx_eq_eps states[:koopman] states[smoother] 1e-8
-    @test_approx_eq_eps shocks[:koopman] shocks[smoother] 1e-8
+    @test_approx_eq_eps exp_states states[smoother] 1e-2
+    @test_approx_eq_eps exp_shocks shocks[smoother] 1e-3
 end
