@@ -66,22 +66,24 @@ y(t) = Z*α(t) + D             (state or transition equation)
 ```
 """
 function hamilton_smoother{S<:AbstractFloat}(data::Matrix{S},
-    TTT::Matrix{S}, RRR::Matrix{S}, z0::Vector{S},
-    pred::Matrix{S}, vpred::Array{S, 3}, filt::Matrix{S}, vfilt::Array{S, 3};
+    TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
+    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S},
+    MM::Matrix{S}, EE::Matrix{S}, z0::Vector{S}, P0::Matrix{S};
     n_presample_periods::Int = 0)
 
     T = size(data, 2)
     regime_indices = Range{Int64}[1:T]
 
-    hamilton_smoother(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR],
-        z0, pred, vpred, filt, vfilt;
+    hamilton_smoother(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR], Vector{S}[CCC],
+        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[MM], Matrix{S}[EE], z0, P0;
         n_presample_periods = n_presample_periods)
 end
 
 function hamilton_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
-    data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}},
-    z0::Vector{S}, pred::Matrix{S}, vpred::Array{S, 3},
-    filt::Matrix{S}, vfilt::Array{S, 3};
+    data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}}, CCCs::Vector{Vector{S}},
+    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}},
+    MMs::Vector{Matrix{S}}, EEs::Vector{Matrix{S}},
+    z0::Vector{S} = Vector{S}(), P0::Matrix{S} = Matrix{S}();
     n_presample_periods::Int = 0)
 
     n_regimes = length(regime_indices)
@@ -91,8 +93,17 @@ function hamilton_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}
     Nz = size(TTTs[1], 1) # number of states
     Ne = size(RRRs[1], 2) # number of shocks
 
-    # Smooth the states recursively, starting at t = T-1 and going backwards
-    smoothed_states = copy(filt)
+    # Augment state space with shocks
+    TTTs, RRRs, CCCs, ZZs, z0, P0 =
+        augment_states_with_shocks(regime_indices, TTTs, RRRs, CCCs, QQs, ZZs, z0, P0)
+
+    # Kalman filter stacked states and shocks
+    _, pred, vpred, _, _, _, _, filt, vfilt, _ =
+        kalman_filter(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, MMs, EEs, z0, P0)
+
+    # Smooth the stacked states and shocks recursively, starting at t = T-1 and
+    # going backwards
+    augmented_smoothed_states = copy(filt)
 
     for i = n_regimes:-1:1
         # Get state-space system matrices for this regime
@@ -107,19 +118,20 @@ function hamilton_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}
 
         for t in reverse(regime_periods)
             J = vfilt[:, :, t] * TTT' * pinv(vpred[:, :, t+1])
-            smoothed_states[:, t] = filt[:, t] + J*(smoothed_states[:, t+1] - pred[:, t+1])
+            augmented_smoothed_states[:, t] = filt[:, t] + J*(augmented_smoothed_states[:, t+1] - pred[:, t+1])
         end
     end
 
-    # Map the forecast errors implied by the smoothed states back to shocks
-    smoothed_shocks = solve_smoothed_shocks(regime_indices, TTTs, RRRs, z0, smoothed_states)
+    # Index out states and shocks
+    smoothed_states = augmented_smoothed_states[1:Nz, :]
+    smoothed_shocks = augmented_smoothed_states[Nz+1:end, :]
 
     # Trim the presample if needed
     if n_presample_periods > 0
         mainsample_periods = n_presample_periods+1:T
 
         smoothed_states = smoothed_states[:, mainsample_periods]
-        smoothed_shocks = smoothed_shocks[:, mainsample_periods]
+        smoothed_shocks = smoothed_states[:, mainsample_periods]
     end
 
     return smoothed_states, smoothed_shocks
