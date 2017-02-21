@@ -92,7 +92,7 @@ function hamilton_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}
         augment_states_with_shocks(regime_indices, TTTs, RRRs, CCCs, QQs, ZZs, z0, P0)
 
     # Kalman filter stacked states and shocks
-    _, pred, vpred, _, _, _, _, filt, vfilt, _ =
+    _, pred, vpred, filt, vfilt, _ =
         kalman_filter(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, MMs, EEs, z0, P0)
 
     # Smooth the stacked states and shocks recursively, starting at t = T-1 and

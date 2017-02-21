@@ -23,7 +23,7 @@ shocks = Dict{Symbol, Matrix{Float64}}()
 states[:hamilton], shocks[:hamilton] = hamilton_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0)
 states[:koopman], shocks[:koopman] = koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, z0, P0, pred, vpred)
 states[:carter_kohn], shocks[:carter_kohn] = carter_kohn_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0; draw_states = false)
-states[:durbin_koopman], shocks[:durbin_koopman] = durbin_koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0; draw_states = false)
+states[:durbin_koopman], shocks[:durbin_koopman] = durbin_koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, z0, P0; draw_states = false)
 
 # Check that last-period smoothed states equal last-period filtered states
 for smoother in [:hamilton, :koopman, :carter_kohn, :durbin_koopman]
@@ -42,7 +42,7 @@ end
 
 # Make sure that simulation smoothers run with `draw_states` on
 carter_kohn_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0; draw_states = true)
-durbin_koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0; draw_states = true)
+durbin_koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, z0, P0; draw_states = true)
 
 
 nothing
