@@ -236,17 +236,17 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
 
         pred          = pred[:,     mainsample_periods]
         vpred         = vpred[:, :, mainsample_periods]
+        filt          = filt[:,     mainsample_periods]
+        vfilt         = vfilt[:, :, mainsample_periods]
         yprederror    = yprederror[:,       mainsample_periods]
         ystdprederror = ypredstderror[:, :, mainsample_periods]
-        filt          = filt[:,      mainsample_periods]
-        vfilt         = vfilt[:, :, mainsample_periods]
     end
 
     if !likelihood_only
         rmse = sqrt(mean((yprederror.^2)', 1))
         rmsd = sqrt(mean((ystdprederror.^2)', 1))
 
-        return log_likelihood, pred, vpred, yprederror, ystdprederror, rmse, rmsd, filt, vfilt, z0, P0
+        return log_likelihood, pred, vpred, filt, vfilt, yprederror, ystdprederror, rmse, rmsd, z0, P0
     else
         return log_likelihood
     end
