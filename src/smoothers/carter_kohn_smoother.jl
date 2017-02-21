@@ -29,16 +29,16 @@ sufficient rank to have a left inverse (i.e. that there are more states than sho
 ### Inputs:
 
 - `m`: model object
-- `data`: the (`Ny` x `Nt`) matrix of observable data
+- `data`: the (`Ny` x `T`) matrix of observable data
 - `T`: the (`Nz` x `Nz`) transition matrix
 - `R`: the (`Nz` x `Ne`) matrix translating shocks to states
 - `z0`: the (`Nz` x 1) initial (time 0) states vector
-- `pred`: the (`Nz` x `Nt`) matrix of one-step-ahead predicted states (from the
+- `pred`: the (`Nz` x `T`) matrix of one-step-ahead predicted states (from the
   Kalman Filter)
-- `vpred`: the (`Nz` x `Nz` x `Nt`) matrix of one-step-ahead predicted
+- `vpred`: the (`Nz` x `Nz` x `T`) matrix of one-step-ahead predicted
   covariance matrices
-- `filt`: the (`Nz` x `Nt`) matrix of filtered states
-- `vfilt`: the (`Nz` x `Nz` x `Nt`) matrix of filtered covariance matrices
+- `filt`: the (`Nz` x `T`) matrix of filtered states
+- `vfilt`: the (`Nz` x `Nz` x `T`) matrix of filtered covariance matrices
 - `cond_type`: optional keyword argument specifying the conditional data type:
   one of `:none`, `:semi`, or `:full`. This is only necessary when a DataFrame
   (as opposed to a data matrix) is passed in, so that `df_to_matrix` knows how
@@ -51,12 +51,12 @@ Where:
 - `Nz`: number of states
 - `Ny`: number of observables
 - `Ne`: number of shocks
-- `Nt`: number of periods for which we have data
+- `T`: number of periods for which we have data
 
 ### Outputs:
 
-- `α_hat`: the (`Nz` x `Nt`) matrix of smoothed states
-- `η_hat`: the (`Ne` x `Nt`) matrix of smoothed shocks
+- `α_hat`: the (`Nz` x `T`) matrix of smoothed states
+- `η_hat`: the (`Ne` x `T`) matrix of smoothed shocks
 
 If `n_presample_periods(m)` is nonzero, the `α_hat` and `η_hat` matrices will be
 shorter by that number of columns (taken from the beginning).

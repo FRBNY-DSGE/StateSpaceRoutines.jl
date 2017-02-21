@@ -40,7 +40,7 @@ erratic Moore-Penrose pseudoinverse).
 ### Inputs:
 
 - `m`: model object
-- `data`: the (`Ny` x `Nt`) matrix of observable data
+- `data`: the (`Ny` x `T`) matrix of observable data
 - `T`: the (`Nz` x `Nz`) transition matrix
 - `R`: the (`Nz` x `Ne`) matrix translating shocks to states
 - `C`: the (`Nz` x 1) constant vector in the transition equation
@@ -61,12 +61,12 @@ Where:
 - `Nz`: number of states
 - `Ny`: number of observables
 - `Ne`: number of shocks
-- `Nt`: number of periods for which we have data
+- `T`: number of periods for which we have data
 
 ### Outputs:
 
-- `α_hat`: the (`Nz` x `Nt`) matrix of smoothed states.
-- `η_hat`: the (`Ne` x `Nt`) matrix of smoothed shocks.
+- `α_hat`: the (`Nz` x `T`) matrix of smoothed states.
+- `η_hat`: the (`Ne` x `T`) matrix of smoothed shocks.
 
 If `n_presample_periods(m)` is nonzero, the `α_hat` and `η_hat` matrices will be
 shorter by that number of columns (taken from the beginning).
@@ -111,7 +111,7 @@ function durbin_koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{
     if draw_states
         U, eig, _ = svd(P0)
         α_plus_t  = U * diagm(sqrt(eig)) * randn(Nz)
-        η_plus    = sqrt(QQs[1]) * randn(Ne, Nt)
+        η_plus    = sqrt(QQs[1]) * randn(Ne, T)
     else
         α_plus_t  = zeros(S, Nz)
         η_plus    = zeros(S, Ne, T)

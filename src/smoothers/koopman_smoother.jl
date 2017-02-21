@@ -35,7 +35,7 @@ in the `eta_hat` matrix.
 ### Inputs:
 
 - `m`: model object
-- `data`: the (`Ny` x `Nt`) matrix of observable data
+- `data`: the (`Ny` x `T`) matrix of observable data
 - `T`: the (`Nz` x `Nz`) transition matrix
 - `R`: the (`Nz` x `Ne`) matrix translating shocks to states
 - `C`: the (`Nz` x 1) constant vector in the transition equation
@@ -44,9 +44,9 @@ in the `eta_hat` matrix.
 - `D`: the (`Ny` x 1) constant vector in the measurement equation
 - `z0`: the (`Nz` x 1) initial (time 0) states vector
 - `P0`: the (`Nz` x `Nz`) initial (time 0) state covariance matrix
-- `pred`: the (`Nz` x `Nt`) matrix of one-step-ahead predicted states (from the
+- `pred`: the (`Nz` x `T`) matrix of one-step-ahead predicted states (from the
   Kalman Filter)
-- `vpred`: the (`Nz` x `Nz` x `Nt`) matrix of one-step-ahead predicted
+- `vpred`: the (`Nz` x `Nz` x `T`) matrix of one-step-ahead predicted
   covariance matrices
 - `cond_type`: optional keyword argument specifying the conditional data type:
   one of `:none`, `:semi`, or `:full`. This is only necessary when a DataFrame
@@ -60,12 +60,12 @@ Where:
 - `Nz`: number of states
 - `Ny`: number of observables
 - `Ne`: number of shocks
-- `Nt`: number of periods for which we have data
+- `T`: number of periods for which we have data
 
 ### Outputs:
 
-- `α_hat`: the (`Nz` x `Nt`) matrix of smoothed states
-- `η_hat`: the (`Ne` x `Nt`) matrix of smoothed shocks
+- `α_hat`: the (`Nz` x `T`) matrix of smoothed states
+- `η_hat`: the (`Ne` x `T`) matrix of smoothed shocks
 
 If `n_presample_periods(m)` is nonzero, the `α_hat` and `η_hat` matrices will be
 shorter by that number of columns (taken from the beginning).
@@ -171,16 +171,16 @@ the anticipated shocks to zero in those periods.
 ### Inputs:
 
 - `m`: model object
-- `data`: the (`Ny` x `Nt`) matrix of observable data
+- `data`: the (`Ny` x `T`) matrix of observable data
 - `T`: the (`Nz` x `Nz`) transition matrix
 - `R`: the (`Nz` x `Ne`) matrix translating shocks to states
 - `C`: the (`Nz` x 1) constant vector in the transition equation
 - `Q`: the (`Ne` x `Ne`) covariance matrix for the shocks
 - `Z`: the (`Ny` x `Nz`) measurement matrix
 - `D`: the (`Ny` x 1) constant vector in the measurement equation
-- `pred`: the (`Nz` x `Nt`) matrix of one-step-ahead predicted states (from the
+- `pred`: the (`Nz` x `T`) matrix of one-step-ahead predicted states (from the
   Kalman Filter)
-- `vpred`: the (`Nz` x `Nz` x `Nt`) matrix of one-step-ahead predicted
+- `vpred`: the (`Nz` x `Nz` x `T`) matrix of one-step-ahead predicted
   covariance matrices
 
 Where:
@@ -188,12 +188,12 @@ Where:
 - `Nz`: number of states
 - `Ny`: number of observables
 - `Ne`: number of shocks
-- `Nt`: number of periods for which we have data
+- `T`: number of periods for which we have data
 
 ### Outputs:
 
-- `r`: the (`Nz` x `Nt`) matrix used for state smoothing
-- `η_hat`: the (`Ne` x `Nt`) matrix of smoothed shocks
+- `r`: the (`Nz` x `T`) matrix used for state smoothing
+- `η_hat`: the (`Ne` x `T`) matrix of smoothed shocks
 
 ### Notes
 
