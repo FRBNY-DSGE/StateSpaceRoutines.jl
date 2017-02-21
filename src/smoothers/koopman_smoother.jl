@@ -1,82 +1,65 @@
 """
 ```
-koopman_smoother{S<:AbstractFloat}(m::AbstractModel, df::DataFrame,
-    system::System, z0::Vector{S}, P0::Matrix{S}, pred::Matrix{S}, vpred::Array{S, 3};
-    cond_type::Symbol = :none, include_presample::Bool = false)
+koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, z0, P0, pred, vpred;
+    n_presample_periods = 0)
 
-koopman_smoother{S<:AbstractFloat}(m::AbstractModel, data::Matrix{S},
-    system::System, z0::Vector{S}, P0::Matrix{S}, pred::Matrix{S}, vpred::Array{S, 3};
-    include_presample::Bool = false)
-
-koopman_smoother{S<:AbstractFloat}(m::AbstractModel, df::DataFrame,
-    T::Matrix{S}, R::Matrix{S}, C::Array{S}, Q::Matrix{S}, Z::Matrix{S},
-    D::Vector{S}, z0::Vector{S}, P0::Matrix{S}, pred::Matrix{S}, vpred::Array{S, 3};
-    cond_type::Symbol = :none, include_presample::Bool = false)
-
-koopman_smoother{S<:AbstractFloat}(m::AbstractModel, data::Matrix{S}
-    T::Matrix{S}, R::Matrix{S}, C::Array{S}, Q::Matrix{S}, Z::Matrix{S},
-    D::Vector{S}, z0::Vector{S}, P0::Matrix{S}, pred::Matrix{S}, vpred::Array{S, 3};
-    include_presample::Bool = false)
+koopman_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs,
+    z0, P0, pred, vpred; n_presample_periods = 0)
 ```
+
 This is a Kalman Smoothing program based on S.J. Koopman's \"Disturbance
 Smoother for State Space Models\" (Biometrika, 1993), as specified in
 Durbin and Koopman's \"A Simple and Efficient Simulation Smoother for
 State Space Time Series Analysis\" (Biometrika, 2002). The algorithm has been
-simplified for the case in which there is no measurement error, and the
-model matrices do not vary with time.
+simplified for the case in which there is no measurement error:
 
-Unlike other Kalman Smoothing programs, there is no need to invert
-singular matrices using the Moore-Penrose pseudoinverse (pinv), which
+```
+z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t    (transition equation)
+y_t     = DD  + ZZ*z_t               (measurement equation)
+
+ϵ_t ∼ N(0, QQ)
+```
+
+Unlike other Kalman smoothing programs, there is no need to invert
+singular matrices using the Moore-Penrose pseudoinverse (`pinv`), which
 should lead to efficiency gains and fewer inversion problems. Also, the
 states vector and the corresponding matrices do not need to be augmented
 to include the shock innovations. Instead they are saved automatically
-in the `eta_hat` matrix.
+in the `smoothed_shocks` matrix.
 
-### Inputs:
+### Inputs
 
-- `m`: model object
-- `data`: the (`Ny` x `T`) matrix of observable data
-- `T`: the (`Nz` x `Nz`) transition matrix
-- `R`: the (`Nz` x `Ne`) matrix translating shocks to states
-- `C`: the (`Nz` x 1) constant vector in the transition equation
-- `Q`: the (`Ne` x `Ne`) covariance matrix for the shocks
-- `Z`: the (`Ny` x `Nz`) measurement matrix
-- `D`: the (`Ny` x 1) constant vector in the measurement equation
-- `z0`: the (`Nz` x 1) initial (time 0) states vector
-- `P0`: the (`Nz` x `Nz`) initial (time 0) state covariance matrix
-- `pred`: the (`Nz` x `T`) matrix of one-step-ahead predicted states (from the
-  Kalman Filter)
-- `vpred`: the (`Nz` x `Nz` x `T`) matrix of one-step-ahead predicted
-  covariance matrices
-- `cond_type`: optional keyword argument specifying the conditional data type:
-  one of `:none`, `:semi`, or `:full`. This is only necessary when a DataFrame
-  (as opposed to a data matrix) is passed in, so that `df_to_matrix` knows how
-  many periods of data to keep
-- `include_presample`: indicates whether or not to return presample periods in
-  the returned smoothed states and shocks. Defaults to `false`
+- `data`: `Ny` x `T` matrix containing data `y(1), ... , y(T)`
+- `z0`: `Nz` x 1 initial state vector
+- `P0`: `Nz` x `Nz` initial state covariance matrix
+- `pred`: `Nz` x `T` matrix of one-step predicted state vectors `z_{t|t-1}`
+  (from the Kalman filter)
+- `vpred`: `Nz` x `Nz` x `T` array of mean squared errors `P_{t|t-1}` of
+  predicted state vectors
 
-Where:
+**Method 1 only:** state-space system matrices `TTT`, `RRR`, `CCC`, `QQ`, `ZZ`,
+`DD`. See `?kalman_filter`
 
-- `Nz`: number of states
-- `Ny`: number of observables
-- `Ne`: number of shocks
+**Method 2 only:** `regime_indices` and system matrices for each regime `TTTs`,
+`RRRs`, `CCCs`, `QQs`, `ZZs`, `DDs`. See `?kalman_filter`
+
+where:
+
 - `T`: number of periods for which we have data
+- `Nz`: number of states
+- `Ne`: number of shocks
+- `Ny`: number of observables
 
-### Outputs:
+### Keyword Arguments
 
-- `α_hat`: the (`Nz` x `T`) matrix of smoothed states
-- `η_hat`: the (`Ne` x `T`) matrix of smoothed shocks
+- `n_presample_periods`: if greater than 0, the returned smoothed states and
+  shocks matrices will be shorter by that number of columns (taken from the
+  beginning)
 
-If `n_presample_periods(m)` is nonzero, the `α_hat` and `η_hat` matrices will be
-shorter by that number of columns (taken from the beginning).
+### Outputs
 
-### Notes
-
-The state space model is defined as follows:
-```
-y(t) = Z*α(t) + D             (state or transition equation)
-α(t+1) = T*α(t) + R*η(t+1)    (measurement or observation equation)
-```
+- `smoothed_states`: `Nz` x `T` matrix of smoothed states `z_{t|T}`
+- `smoothed_shocks`: `Ne` x `T` matrix of smoothed shocks `ϵ_{t|T}`
 """
 function koopman_smoother{S<:AbstractFloat}(data::Matrix{S},
     TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
@@ -116,16 +99,18 @@ function koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}}
     smoothed_states[:, 1] = α_hat
 
     for i = 1:n_regimes
-        # Get state-space system matrices for this regime
         regime_periods = regime_indices[i]
 
+        # t = 1 has already been initialized
+        if i == 1
+            regime_periods = regime_periods[2:end]
+        end
+
+        # Get state-space system matrices for this regime
         TTT, RRR     = TTTs[i], RRRs[i]
         QQ,  ZZ,  DD = QQs[i],  ZZs[i],  DDs[i]
 
         for t in regime_periods
-            # t = 1 has already been initialized
-            t == 1 ? continue : nothing
-
             r     = smoothed_disturbances[:, t]
             α_hat = TTT*α_hat + RRR*QQ*RRR'*r
 
@@ -151,57 +136,52 @@ koopman_disturbance_smoother{S<:AbstractFloat}(m::AbstractModel,
     Z::Matrix{S}, D::Array{S}, pred::Matrix{S}, vpred::Array{S, 3})
 ```
 
-This is a Kalman Smoothing program based on S.J. Koopman's \"Disturbance
-Smoother for State Space Models\" (Biometrika, 1993), as specified in
-Durbin and Koopman's \"A Simple and Efficient Simulation Smoother for
-State Space Time Series Analysis\" (Biometrika, 2002). The algorithm has been
-simplified for the case in which there is no measurement error, and the
-model matrices do not vary with time.
-
 This disturbance smoother is intended for use with the state smoother
-`koopman_smoother` from the same papers (Koopman 1993, Durbin and Koopman
-2002). It produces a matrix of vectors, `r`, that is used for state
-smoothing, and an optional matrix, `eta_hat`, containing the smoothed
-shocks. It has been adjusted to account for the possibility of missing
-values in the data, and to accommodate the zero bound model, which
-requires that no anticipated shocks occur before the zero bound window,
-which is achieved by setting the entries in the `Q` matrix corresponding to
-the anticipated shocks to zero in those periods.
+`koopman_smoother` from S.J. Koopman's \"Disturbance Smoother for State Space
+Models\" (Biometrika, 1993), as specified in Durbin and Koopman's \"A Simple and
+Efficient Simulation Smoother for State Space Time Series Analysis\"
+(Biometrika, 2002). The algorithm has been simplified for the case in which
+there is no measurement error:
 
-### Inputs:
+```
+z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t    (transition equation)
+y_t     = DD  + ZZ*z_t               (measurement equation)
 
-- `m`: model object
-- `data`: the (`Ny` x `T`) matrix of observable data
-- `T`: the (`Nz` x `Nz`) transition matrix
-- `R`: the (`Nz` x `Ne`) matrix translating shocks to states
-- `C`: the (`Nz` x 1) constant vector in the transition equation
-- `Q`: the (`Ne` x `Ne`) covariance matrix for the shocks
-- `Z`: the (`Ny` x `Nz`) measurement matrix
-- `D`: the (`Ny` x 1) constant vector in the measurement equation
-- `pred`: the (`Nz` x `T`) matrix of one-step-ahead predicted states (from the
-  Kalman Filter)
-- `vpred`: the (`Nz` x `Nz` x `T`) matrix of one-step-ahead predicted
-  covariance matrices
+ϵ_t ∼ N(0, QQ)
+```
 
-Where:
+### Inputs
 
-- `Nz`: number of states
-- `Ny`: number of observables
-- `Ne`: number of shocks
+- `data`: `Ny` x `T` matrix containing data `y(1), ... , y(T)`
+- `pred`: `Nz` x `T` matrix of one-step predicted state vectors `z_{t|t-1}`
+  (from the Kalman filter)
+- `vpred`: `Nz` x `Nz` x `T` array of mean squared errors `P_{t|t-1}` of
+  predicted state vectors
+
+**Method 1 only:** state-space system matrices `TTT`, `RRR`, `QQ`, `ZZ`,
+`DD`. See `?kalman_filter`
+
+**Method 2 only:** `regime_indices` and system matrices for each regime `TTTs`,
+`RRRs`, `QQs`, `ZZs`, `DDs`. See `?kalman_filter`
+
+where:
+
 - `T`: number of periods for which we have data
+- `Nz`: number of states
+- `Ne`: number of shocks
+- `Ny`: number of observables
 
-### Outputs:
+### Keyword Arguments
 
-- `r`: the (`Nz` x `T`) matrix used for state smoothing
-- `η_hat`: the (`Ne` x `T`) matrix of smoothed shocks
+- `n_presample_periods`: if greater than 0, the returned smoothed disturbances 
+  and shocks matrices will be shorter by that number of columns (taken from the
+  beginning)
 
-### Notes
+### Outputs
 
-The state space model is defined as follows:
-```
-y(t) = Z*α(t) + D             (state or transition equation)
-α(t+1) = T*α(t) + R*η(t+1)    (measurement or observation equation)
-```
+- `smoothed_disturbances`: `Nz` x `T` matrix of smoothed disturbances `r_t` used
+  for state smoothing
+- `smoothed_shocks`: `Ne` x `T` matrix of smoothed shocks `ϵ_{t|T}`
 """
 function koopman_disturbance_smoother{S<:AbstractFloat}(data::Matrix{S},
     TTT::Matrix{S}, RRR::Matrix{S},

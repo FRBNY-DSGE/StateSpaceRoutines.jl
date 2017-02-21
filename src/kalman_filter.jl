@@ -5,61 +5,103 @@ and written by Iskander Karibzhanov.
 
 """
 ```
-kalman_filter{S<:AbstractFloat}(data::Matrix{S},
-    TTT::Matrix{S}, CCC::Vector{S}, ZZ::Matrix{S}, DD::Vector{S}, VVall::Matrix{S},
-    z0::Vector{S} = Vector{S}(), P0::Matrix{S} = Matrix{S}();
-    likelihood_only::Bool = false)
+kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0 = Vector(),
+    P0 = Matrix(); likelihood_only = false, n_presample_periods = 0)
+
+kalman_filter(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs,
+    MMs, EEs, z0 = Vector(), P0 = Matrix(); likelihood_only = false,
+    n_presample_periods = 0)
+```
+
+This function implements the Kalman filter for the following state-space model:
+
+```
+z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t          (transition equation)
+y_t     = DD  + ZZ*z_t  + MM*ϵ_t  + η_t    (measurement equation)
+
+ϵ_t ∼ N(0, QQ)
+η_t ∼ N(0, EE)
 ```
 
 ### Inputs
 
-- `data`: a `Ny` x `T` `Matrix` containing data `y(1), ... , y(T)`.
-- `TTT`: an `Nz` x `Nz` `Matrix` for a time-invariant transition matrix in the transition
-  equation.
-- `CCC`: an `Nz` x 1 `Vector` for a time-invariant input vector in the transition equation.
-- `ZZ`: an `Ny` x `Nz` `Matrix` for a time-invariant measurement matrix in the measurement
-  equation.
-- `DD`: an `Ny` x 1 constant vector in measurement equation
-- `VVall`: See `Measurement` type for description
+- `data`: `Ny` x `T` matrix containing data `y(1), ... , y(T)`
+- `z0`: optional `Nz` x 1 initial state vector
+- `P0`: optional `Nz` x `Nz` initial state covariance matrix
 
-#### Optional Inputs
-- `z0`: an optional `Nz` x 1 initial state vector.
-- `P0`: an optional `Nz` x `Nz` covariance matrix of an initial state vector.
-- `likelihood_only`: an optional keyword argument indicating whether we want optional output
-  variables returned as well
+**Method 1 only:**
 
-Where:
+- `TTT`: `Nz` x `Nz` state transition matrix
+- `RRR`: `Nz` x `Ne` matrix in the transition equation mapping shocks to states
+- `CCC`: `Nz` x 1 constant vector in the transition equation
+- `QQ`: `Ne` x `Ne` matrix of shock covariances
+- `ZZ`: `Ny` x `Nz` matrix in the measurement equation mapping states to
+  observables
+- `DD`: `Ny` x 1 constant vector in the measurement equation
+- `MM`: `Ny` x `Ne` matrix in the measurement equation mapping shocks to
+  observables
+- `EE`: `Ny` x `Ny` matrix of measurement error covariances
 
-- `Nz`: number of states
-- `Ny`: number of observables
+**Method 2 only:**
+
+- `regime_indices`: `Vector{Range{Int64}}` of length `n_regimes`, where
+  `regime_indices[i]` indicates the time periods `t` in regime `i`
+- `TTTs`: `Vector{Matrix{S}}` of `TTT` matrices for each regime
+- `RRRs`
+- `CCCs`
+- `QQs`
+- `ZZs`
+- `DDs`
+- `MMs`
+- `EEs`
+
+where:
+
 - `T`: number of time periods for which we have data
+- `Nz`: number of states
+- `Ne`: number of shocks
+- `Ny`: number of observables
+
+### Keyword Arguments
+
+- `likelihood_only`: indicates whether we want to return only the likelihood or
+  all return values
+- `n_presample_periods`: if greater than 0, the first `n_presample_periods` will
+  be omitted from the likelihood calculation and all return values
 
 ### Outputs
 
-- a `Kalman` object. See documentation for `Kalman`.
+- `log_likelihood`: log likelihood of the state-space model
+- `pred`: `Nz` x `T` matrix of one-step predicted state vectors `z_{t|t-1}`
+- `vpred`: `Nz` x `Nz` x `T` array of mean squared errors `P_{t|t-1}` of
+  predicted state vectors
+- `filt`: `Nz` x `T` matrix of filtered state vectors `z_{t|t}`
+- `vfilt`: `Nz` x `Nz` x `T` matrix containing mean squared errors `P_{t|t}` of
+  filtered state vectors
+- `yprederror`: `Ny` x `T` matrix of observable prediction errors
+  `y_t - y_{t|t-1}`
+- `ystdprederror`: `Ny` x `T` matrix of standardized observable prediction errors
+  `V_{t|t-1} \ (y_t - y_{t|t-1})`, where `y_t - y_{t|t-1} ∼ N(0, V_{t|t-1}`
+- `rmse`: 1 x `T` row vector of root mean squared prediction errors
+- `rmsd`: 1 x `T` row vector of root mean squared standardized prediction errors
 
 ### Notes
-
-The state space model is defined as follows:
-```
-z(t+1) = CCC + TTT*z(t) + RRR*ϵ(t)   (state or transition equation)
-y(t) = DD + ZZ*z(t) + u(t)           (observation or measurement equation)
-```
 
 When `z0` and `P0` are omitted, the initial state vector and its covariance
 matrix of the time invariant Kalman filters are computed under the stationarity
 condition:
+
 ```
 z0  = (I - TTT)\CCC
-P0 = reshape(I - kron(TTT, TTT))\vec(V), Nz, Nz)
+P0 = reshape(I - kron(TTT, TTT))\vec(RRR*QQ*RRR'), Nz, Nz)
 ```
 
-Where:
+where:
 
 - `kron(TTT, TTT)` is a matrix of dimension `Nz^2` x `Nz^2`, the Kronecker
   product of `TTT`
-- `vec(V)` is the `Nz^2` x 1 column vector constructed by stacking the `Nz`
-  columns of `V`
+- `vec(RRR*QQ*RRR')` is the `Nz^2` x 1 column vector constructed by stacking the
+  `Nz` columns of `RRR*QQ*RRR'`
 
 All eigenvalues of `TTT` are inside the unit circle when the state space model
 is stationary.  When the preceding formula cannot be applied, the initial state
@@ -171,7 +213,7 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
 
             ## Update
             PZG = P*ZZ_t' + G_t
-            z = z + PZG*ddy                    # z_{t|t} = z_{t|t-1} + P_{t|t-1}*ZZ(Θ)' + ...
+            z = z + PZG*ddy                    # z_{t|t} = z_{t|t-1} + P_{t|t-1}*ZZ' + ...
             P = P - PZG/D*PZG'                 # P_{t|t} = P_{t|t-1} - PZG*(1/D)*PZG
 
             if !likelihood_only

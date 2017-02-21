@@ -1,73 +1,68 @@
 """
 ```
-carter_kohn_smoother{S<:AbstractFloat}(m::AbstractModel, df::DataFrame,
-    system::System, kal::Kalman{S};
-    cond_type::Symbol = :none, include_presample::Bool = false)
+carter_kohn_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0;
+    n_presample_periods = 0, draw_states = true)
 
-carter_kohn_smoother{S<:AbstractFloat}(m::AbstractModel, data::Matrix{S},
-    system::System, kal::Kalman{S};
-    include_presample::Bool = false)
-
-carter_kohn_smoother{S<:AbstractFloat}(m::AbstractModel, data::Matrix{S},
-    T::Matrix{S}, R::Matrix{S}, z0::Vector{S},
-    pred::Matrix{S}, vpred::Array{S, 3},
-    filt::Matrix{S}, vfilt::Array{S, 3};
-    include_presample::Bool = false)
+carter_kohn_smoother(regime_indices, data, TTTs, RRRs, CCCs,
+    QQs, ZZs, DDs, MMs, EEs, z0, P0; n_presample_periods = 0,
+    draw_states = true)
 ```
-This program is a simulation smoother based on Carter and Kohn's
-\"On Gibbs Sampling for State Space Modeks\" (Biometrika, 1994).
-It recursively sampling from the conditional distribution of time t
-states given the full set of observables and states from time t+1 to
-time T. Unlike the Durbin Koopman simulation smoother, this one does
-rely on inverting potentially singular matrices using the Moore-Penrose
-pseudoinverse.
+This program is a simulation smoother based on Carter and Kohn's \"On Gibbs
+Sampling for State Space Models\" (Biometrika, 1994).  It recursively samples
+from the conditional distribution of time-t states given the full set of
+observables and states from time t+1 to time T. Unlike the Durbin-Koopman
+simulation smoother, this one does rely on inverting potentially singular
+matrices using the Moore-Penrose pseudoinverse. However, the state-space
+representation is general enough to allow measurement error:
 
-Smoothed shocks are extracted by mapping the forecast errors implied by the
-smoothed states back into shocks. As such, this routine assumes that R has
-sufficient rank to have a left inverse (i.e. that there are more states than shocks).
+```
+z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t          (transition equation)
+y_t     = DD  + ZZ*z_t  + MM*ϵ_t  + η_t    (measurement equation)
 
-### Inputs:
+ϵ_t ∼ N(0, QQ)
+η_t ∼ N(0, EE)
+```
 
-- `m`: model object
-- `data`: the (`Ny` x `T`) matrix of observable data
-- `T`: the (`Nz` x `Nz`) transition matrix
-- `R`: the (`Nz` x `Ne`) matrix translating shocks to states
-- `z0`: the (`Nz` x 1) initial (time 0) states vector
-- `pred`: the (`Nz` x `T`) matrix of one-step-ahead predicted states (from the
-  Kalman Filter)
-- `vpred`: the (`Nz` x `Nz` x `T`) matrix of one-step-ahead predicted
-  covariance matrices
-- `filt`: the (`Nz` x `T`) matrix of filtered states
-- `vfilt`: the (`Nz` x `Nz` x `T`) matrix of filtered covariance matrices
-- `cond_type`: optional keyword argument specifying the conditional data type:
-  one of `:none`, `:semi`, or `:full`. This is only necessary when a DataFrame
-  (as opposed to a data matrix) is passed in, so that `df_to_matrix` knows how
-  many periods of data to keep
-- `include_presample`: indicates whether or not to return presample periods in
-  the returned smoothed states and shocks. Defaults to `false`
+The state space is augmented with shocks (see `?augment_states_with_shocks`),
+and the augmented state space is Kalman filtered and smoothed. Finally, the
+smoothed states and shocks are indexed out of the augmented state vectors.
 
-Where:
+### Inputs
 
-- `Nz`: number of states
-- `Ny`: number of observables
-- `Ne`: number of shocks
+- `data`: `Ny` x `T` matrix containing data `y(1), ... , y(T)`
+- `z0`: `Nz` x 1 initial state vector
+- `P0`: `Nz` x `Nz` initial state covariance matrix
+- `pred`: `Nz` x `T` matrix of one-step predicted state vectors `z_{t|t-1}`
+  (from the Kalman filter)
+- `vpred`: `Nz` x `Nz` x `T` array of mean squared errors `P_{t|t-1}` of
+  predicted state vectors
+
+**Method 1 only:** state-space system matrices `TTT`, `RRR`, `CCC`, `QQ`, `ZZ`,
+`DD`, `MM`, `EE`. See `?kalman_filter`
+
+**Method 2 only:** `regime_indices` and system matrices for each regime `TTTs`,
+`RRRs`, `CCCs`, `QQs`, `ZZs`, `DDs`, `MMs`, `EEs`. See `?kalman_filter`
+
+where:
+
 - `T`: number of periods for which we have data
+- `Nz`: number of states
+- `Ne`: number of shocks
+- `Ny`: number of observables
 
-### Outputs:
+### Keyword Arguments
 
-- `α_hat`: the (`Nz` x `T`) matrix of smoothed states
-- `η_hat`: the (`Ne` x `T`) matrix of smoothed shocks
+- `n_presample_periods`: if greater than 0, the returned smoothed states and
+  shocks matrices will be shorter by that number of columns (taken from the
+  beginning)
+- `draw_states`: indicates whether to draw smoothed states from the distribution
+  `N(z_{t|T}, P_{t|T})` or to use the mean `z_{t|T}` (reducing to the Hamilton
+  smoother). Defaults to `true`
 
-If `n_presample_periods(m)` is nonzero, the `α_hat` and `η_hat` matrices will be
-shorter by that number of columns (taken from the beginning).
+### Outputs
 
-### Notes
-
-The state space model is defined as follows:
-```
-y(t) = Z*α(t) + D             (state or transition equation)
-α(t+1) = T*α(t) + R*η(t+1)    (measurement or observation equation)
-```
+- `smoothed_states`: `Nz` x `T` matrix of smoothed states `z_{t|T}`
+- `smoothed_shocks`: `Ne` x `T` matrix of smoothed shocks `ϵ_{t|T}`
 """
 function carter_kohn_smoother{S<:AbstractFloat}(data::Matrix{S},
     TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
@@ -120,7 +115,6 @@ function carter_kohn_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int
     end
 
     for i = n_regimes:-1:1
-        # Get state-space system matrices for this regime
         regime_periods = regime_indices[i]
 
         # The smoothed state in t = T is the same as the filtered state
@@ -128,6 +122,7 @@ function carter_kohn_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int
             regime_periods = regime_periods[1:end-1]
         end
 
+        # Get state-space system matrices for this regime
         TTT = TTTs[i]
 
         for t in reverse(regime_periods)

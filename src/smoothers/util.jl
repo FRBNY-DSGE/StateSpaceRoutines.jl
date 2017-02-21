@@ -1,7 +1,43 @@
+"""
+```
+augment_states_with_shocks(regime_indices, TTTs, RRRs, CCCs, QQs, ZZs, z0, P0)
+```
+
+Go from original state space:
+
+```
+z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t          (transition equation)
+y_t     = DD  + ZZ*z_t  + MM*ϵ_t  + η_t    (measurement equation)
+
+ϵ_t ∼ N(0, QQ)
+η_t ∼ N(0, EE)
+```
+
+to augmented state space:
+
+```
+|z_{t+1}| = |CCC| + |TTT 0| |z_t| + |RRR| ϵ_t    (transition equation)
+|ϵ_{t+1}|   | 0 |   | 0  0| |ϵ_t|   | I |
+
+y_t = DD + |ZZ| |z_t| + MM*ϵ_t + η_t             (measurement equation)
+           | 0| |ϵ_t|
+
+ϵ_t ∼ N(0, QQ)
+η_t ∼ N(0, EE)
+```
+
+with initial state and covariance:
+
+```
+|z0| and |P0  0|
+| 0|     | 0 QQ|
+```
+
+Returns the augmented `TTTs`, `RRRs`, CCCs`, `ZZs`, `z0`, and `P0`.
+"""
 function augment_states_with_shocks{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
     TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}}, CCCs::Vector{Vector{S}},
-    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}},
-    z0::Vector{S} = Vector{S}(), P0::Matrix{S} = Matrix{S}())
+    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, z0::Vector{S}, P0::Matrix{S})
 
     n_regimes = length(regime_indices)
 
