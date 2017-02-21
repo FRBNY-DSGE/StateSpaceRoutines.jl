@@ -39,3 +39,10 @@ for smoother in [:hamilton, :koopman, :carter_kohn, :durbin_koopman]
     @test_approx_eq_eps exp_states states[smoother] 1e-2
     @test_approx_eq_eps exp_shocks shocks[smoother] 1e-3
 end
+
+# Make sure that simulation smoothers run with `draw_states` on
+carter_kohn_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0; draw_states = true)
+durbin_koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0; draw_states = true)
+
+
+nothing
