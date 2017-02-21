@@ -114,7 +114,7 @@ function carter_kohn_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int
 
     augmented_smoothed_states[:, T] = if draw_states
         U, eig, _ = svd(Pend)
-        zend + U*diagm(sqrt(eig))*randn(Nz)
+        zend + U*diagm(sqrt(eig))*randn(Nz+Ne)
     else
         zend
     end
@@ -137,7 +137,7 @@ function carter_kohn_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int
 
             augmented_smoothed_states[:, t] = if draw_states
                 U, eig, _ = svd(Σ)
-                μ + U*diagm(sqrt(eig))*randn(Nz)
+                μ + U*diagm(sqrt(eig))*randn(Nz+Ne)
             else
                 μ
             end
