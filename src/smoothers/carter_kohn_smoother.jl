@@ -12,8 +12,13 @@ Sampling for State Space Models\" (Biometrika, 1994).  It recursively samples
 from the conditional distribution of time-t states given the full set of
 observables and states from time t+1 to time T. Unlike the Durbin-Koopman
 simulation smoother, this one does rely on inverting potentially singular
-matrices using the Moore-Penrose pseudoinverse. However, the state-space
-representation is general enough to allow measurement error:
+matrices using the Moore-Penrose pseudoinverse.
+
+The state space is augmented with shocks (see `?augment_states_with_shocks`),
+and the augmented state space is Kalman filtered and smoothed. Finally, the
+smoothed states and shocks are indexed out of the augmented state vectors.
+
+The original state space (before augmenting with shocks) is given by:
 
 ```
 z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t          (transition equation)
@@ -22,10 +27,6 @@ y_t     = DD  + ZZ*z_t  + MM*ϵ_t  + η_t    (measurement equation)
 ϵ_t ∼ N(0, QQ)
 η_t ∼ N(0, EE)
 ```
-
-The state space is augmented with shocks (see `?augment_states_with_shocks`),
-and the augmented state space is Kalman filtered and smoothed. Finally, the
-smoothed states and shocks are indexed out of the augmented state vectors.
 
 ### Inputs
 

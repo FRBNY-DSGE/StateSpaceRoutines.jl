@@ -10,8 +10,13 @@ hamilton_smoother(regime_indices, data, TTTs, RRRs, CCCs,
 This is a Kalman smoothing program based on the treatment in James Hamilton's
 \"Time Series Analysis\". Unlike the Koopman smoother, this one does rely on
 inverting potentially singular matrices using the Moore-Penrose
-pseudoinverse. However, the state-space representation is general enough to
-allow measurement error:
+pseudoinverse.
+
+The state space is augmented with shocks (see `?augment_states_with_shocks`),
+and the augmented state space is Kalman filtered and smoothed. Finally, the
+smoothed states and shocks are indexed out of the augmented state vectors.
+
+The original state space (before augmenting with shocks) is given by:
 
 ```
 z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t          (transition equation)
@@ -20,10 +25,6 @@ y_t     = DD  + ZZ*z_t  + MM*ϵ_t  + η_t    (measurement equation)
 ϵ_t ∼ N(0, QQ)
 η_t ∼ N(0, EE)
 ```
-
-The state space is augmented with shocks (see `?augment_states_with_shocks`),
-and the augmented state space is Kalman filtered and smoothed. Finally, the
-smoothed states and shocks are indexed out of the augmented state vectors.
 
 ### Inputs
 

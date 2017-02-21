@@ -9,15 +9,7 @@ durbin_koopman_smoother(regime_indices, data, TTTs, RRRs, CCCs,
 
 This program is a simulation smoother based on Durbin and Koopman's
 \"A Simple and Efficient Simulation Smoother for State Space Time Series
-Analysis\" (Biometrika, 2002). The algorithm has been simplified for the
-case in which there is no measurement error:
-
-```
-z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t    (transition equation)
-y_t     = DD  + ZZ*z_t               (measurement equation)
-
-ϵ_t ∼ N(0, QQ)
-```
+Analysis\" (Biometrika, 2002).
 
 Unlike other simulation smoothers (for example, that of Carter and Kohn,
 1994), this method does not require separate draws for each period, draws
@@ -31,6 +23,16 @@ for multiple draws of state vectors (requiring singular value
 decompositions), as well as inverting state covariance matrices
 (requiring the use of the computationally intensive and relatively
 erratic Moore-Penrose pseudoinverse).
+
+The state space is given by:
+
+```
+z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t          (transition equation)
+y_t     = DD  + ZZ*z_t  + MM*ϵ_t  + η_t    (measurement equation)
+
+ϵ_t ∼ N(0, QQ)
+η_t ∼ N(0, EE)
+```
 
 ### Inputs
 
@@ -72,21 +74,22 @@ where:
 function durbin_koopman_smoother{S<:AbstractFloat}(data::Matrix{S},
     TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
     QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S},
-    z0::Vector{S}, P0::Matrix{S};
+    MM::Matrix{S}, EE::Matrix{S}, z0::Vector{S}, P0::Matrix{S};
     n_presample_periods::Int = 0, draw_states::Bool = true)
 
     T = size(data, 2)
     regime_indices = Range{Int64}[1:T]
 
     durbin_koopman_smoother(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR], Vector{S}[CCC],
-        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], z0, P0;
+        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[MM], Matrix{S}[EE],  z0, P0;
         n_presample_periods = n_presample_periods, draw_states = draw_states)
 end
 
 function durbin_koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
     data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}}, CCCs::Vector{Vector{S}},
     QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}},
-    z0::Vector{S}, P0::Matrix{S}; n_presample_periods::Int = 0, draw_states::Bool = true)
+    MMs::Vector{Matrix{S}}, EEs::Vector{Matrix{S}}, z0::Vector{S}, P0::Matrix{S};
+    n_presample_periods::Int = 0, draw_states::Bool = true)
 
     n_regimes = length(regime_indices)
 
@@ -136,12 +139,9 @@ function durbin_koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{
     # Run the Kalman filter
     # Note that we pass in `zeros(size(D))` instead of `D` because the
     # measurement equation for `data_star` has no constant term
-    MM = zeros(Ny, Ne)
-    EE = zeros(Ny, Ny)
     _, pred, vpred, _ = kalman_filter(regime_indices, y_star, TTTs, RRRs, CCCs,
                             QQs, ZZs, fill(zeros(Ny), n_regimes),
-                            fill(MM, n_regimes), fill(EE, n_regimes),
-                            z0, P0)
+                            MMs, EEs, z0, P0)
 
     # Kalman smooth
     α_hat_star, η_hat_star = koopman_smoother(regime_indices, y_star, TTTs, RRRs, CCCs,

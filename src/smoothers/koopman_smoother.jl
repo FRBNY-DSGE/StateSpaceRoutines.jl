@@ -10,15 +10,7 @@ koopman_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs,
 This is a Kalman Smoothing program based on S.J. Koopman's \"Disturbance
 Smoother for State Space Models\" (Biometrika, 1993), as specified in
 Durbin and Koopman's \"A Simple and Efficient Simulation Smoother for
-State Space Time Series Analysis\" (Biometrika, 2002). The algorithm has been
-simplified for the case in which there is no measurement error:
-
-```
-z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t    (transition equation)
-y_t     = DD  + ZZ*z_t               (measurement equation)
-
-ϵ_t ∼ N(0, QQ)
-```
+State Space Time Series Analysis\" (Biometrika, 2002).
 
 Unlike other Kalman smoothing programs, there is no need to invert
 singular matrices using the Moore-Penrose pseudoinverse (`pinv`), which
@@ -26,6 +18,16 @@ should lead to efficiency gains and fewer inversion problems. Also, the
 states vector and the corresponding matrices do not need to be augmented
 to include the shock innovations. Instead they are saved automatically
 in the `smoothed_shocks` matrix.
+
+The state space is given by:
+
+```
+z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t          (transition equation)
+y_t     = DD  + ZZ*z_t  + MM*ϵ_t  + η_t    (measurement equation)
+
+ϵ_t ∼ N(0, QQ)
+η_t ∼ N(0, EE)
+```
 
 ### Inputs
 
@@ -173,7 +175,7 @@ where:
 
 ### Keyword Arguments
 
-- `n_presample_periods`: if greater than 0, the returned smoothed disturbances 
+- `n_presample_periods`: if greater than 0, the returned smoothed disturbances
   and shocks matrices will be shorter by that number of columns (taken from the
   beginning)
 
