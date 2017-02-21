@@ -65,7 +65,7 @@ where:
 """
 function koopman_smoother{S<:AbstractFloat}(data::Matrix{S},
     TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
-    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S},
+    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, MM::Matrix{S}, EE::Matrix{S},
     z0::Vector{S}, P0::Matrix{S}, pred::Matrix{S}, vpred::Array{S, 3};
     n_presample_periods::Int = 0)
 
@@ -73,13 +73,15 @@ function koopman_smoother{S<:AbstractFloat}(data::Matrix{S},
     regime_indices = Range{Int64}[1:T]
 
     koopman_smoother(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR], Vector{S}[CCC],
-        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], z0, P0, pred, vpred;
+        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[MM], Matrix{S}[EE],
+        z0, P0, pred, vpred;
         n_presample_periods = n_presample_periods)
 end
 
 function koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
     data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}}, CCCs::Vector{Vector{S}},
     QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}},
+    MMs::Vector{Matrix{S}}, EEs::Vector{Matrix{S}},
     z0::Vector{S}, P0::Matrix{S}, pred::Matrix{S}, vpred::Array{S, 3};
     n_presample_periods::Int = 0)
 
@@ -91,7 +93,7 @@ function koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}}
 
     # Call disturbance smoother
     smoothed_disturbances, smoothed_shocks = koopman_disturbance_smoother(regime_indices, data,
-                                                 TTTs, RRRs, QQs, ZZs, DDs, pred, vpred)
+                                                 TTTs, RRRs, QQs, ZZs, DDs, MMs, EEs, pred, vpred)
 
     # Initialize outputs
     smoothed_states = zeros(S, Nz, T)
@@ -187,7 +189,7 @@ where:
 """
 function koopman_disturbance_smoother{S<:AbstractFloat}(data::Matrix{S},
     TTT::Matrix{S}, RRR::Matrix{S},
-    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S},
+    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, MM::Matrix{S}, EE::Matrix{S},
     pred::Matrix{S}, vpred::Array{S, 3},
     n_presample_periods::Int = 0)
 
@@ -195,13 +197,14 @@ function koopman_disturbance_smoother{S<:AbstractFloat}(data::Matrix{S},
     regime_indices = Range{Int64}[1:T]
 
     koopman_disturbance_smoother(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR],
-        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], pred, vpred;
-        n_presample_periods = n_presample_periods)
+        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[MM], Matrix{S}[EE],
+        pred, vpred; n_presample_periods = n_presample_periods)
 end
 
 function koopman_disturbance_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
     data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}},
     QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}},
+    MMs::Vector{Matrix{S}}, EEs::Vector{Matrix{S}},
     pred::Matrix{S}, vpred::Array{S, 3}; n_presample_periods::Int = 0)
 
     n_regimes = length(regime_indices)
@@ -223,6 +226,14 @@ function koopman_disturbance_smoother{S<:AbstractFloat}(regime_indices::Vector{R
 
         TTT, RRR     = TTTs[i], RRRs[i]
         QQ,  ZZ,  DD = QQs[i],  ZZs[i],  DDs[i]
+        MM,  EE      = MMs[i],  EEs[i]
+
+        if !all(x -> x == 0, MM)
+            error("Koopman smoother not implemented for MM != 0")
+        end
+
+        R = EE + MM*QQ*MM' # R = Var(y_t) = Var(u_t)
+        G = RRR*QQ*MM'     # G = Cov(z_t, y_t)
 
         for t in reverse(regime_periods)
             # If an element of the vector y_t is missing (NaN) for the observation t, the
@@ -231,13 +242,15 @@ function koopman_disturbance_smoother{S<:AbstractFloat}(regime_indices::Vector{R
             y_t  = data[nonmissing, t]
             ZZ_t = ZZ[nonmissing, :]
             DD_t = DD[nonmissing]
+            G_t  = G[:, nonmissing]
+            R_t  = R[nonmissing, nonmissing]
 
             a = pred[:, t]
             P = vpred[:, :, t]
 
-            F = ZZ_t*P*ZZ_t'
+            F = ZZ_t*P*ZZ_t' + R_t
             v = y_t - ZZ_t*a - DD_t
-            K = TTT*P*ZZ_t'/F
+            K = (TTT*P*ZZ_t' + G_t)/F
             L = TTT - K*ZZ_t
 
             r = ZZ_t'/F*v + L'*r

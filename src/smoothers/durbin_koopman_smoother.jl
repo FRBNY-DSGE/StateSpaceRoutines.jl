@@ -81,7 +81,7 @@ function durbin_koopman_smoother{S<:AbstractFloat}(data::Matrix{S},
     regime_indices = Range{Int64}[1:T]
 
     durbin_koopman_smoother(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR], Vector{S}[CCC],
-        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[MM], Matrix{S}[EE],  z0, P0;
+        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[MM], Matrix{S}[EE], z0, P0;
         n_presample_periods = n_presample_periods, draw_states = draw_states)
 end
 
@@ -145,7 +145,7 @@ function durbin_koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{
 
     # Kalman smooth
     α_hat_star, η_hat_star = koopman_smoother(regime_indices, y_star, TTTs, RRRs, CCCs,
-                                 QQs, ZZs, fill(zeros(Ny), n_regimes),
+                                 QQs, ZZs, fill(zeros(Ny), n_regimes), MMs, EEs,
                                  z0, P0, pred, vpred)
 
     # Compute draw (states and shocks)

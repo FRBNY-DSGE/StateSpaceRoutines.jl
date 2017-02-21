@@ -21,7 +21,7 @@ states = Dict{Symbol, Matrix{Float64}}()
 shocks = Dict{Symbol, Matrix{Float64}}()
 
 states[:hamilton], shocks[:hamilton] = hamilton_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0)
-states[:koopman], shocks[:koopman] = koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, z0, P0, pred, vpred)
+states[:koopman], shocks[:koopman] = koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0, pred, vpred)
 states[:carter_kohn], shocks[:carter_kohn] = carter_kohn_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0; draw_states = false)
 states[:durbin_koopman], shocks[:durbin_koopman] = durbin_koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0; draw_states = false)
 
