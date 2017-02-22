@@ -25,3 +25,47 @@ Note that not all the routines are implemented for the most general state-space
 representation above. In particular, `koopman_smoother` and
 `durbin_koopman_smoother` assume that `MM` is zero and will error out if a
 nonzero `MM` is passed in.
+
+
+## Time-Invariant Methods
+
+```
+kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0 = Vector(), P0 = Matrix(); likelihood_only = false, n_presample_periods = 0)
+
+hamilton_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0; n_presample_periods = 0)
+koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, z0, P0, pred, vpred; n_presample_periods = 0)
+carter_kohn_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0; n_presample_periods = 0, draw_states = true)
+durbin_koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, z0, P0; n_presample_periods = 0, draw_states = true)
+```
+
+For more information, see the documentation for each function (e.g. by entering
+`?kalman_filter` in the REPL).
+
+
+## Regime-Switching Methods
+
+All of the provided algorithms can handle time-varying state-space systems. To
+do this, define `regime_indices`, a `Vector{Range{Int64}}` of length
+`n_regimes`, where `regime_indices[i]` indicates the range of periods `t` in
+regime `i`. Let `TTT_i`, `RRR_i`, etc. denote the state-space matrices in regime
+`i`. Then the state space is given by:
+
+```
+z_{t+1} = CCC_i + TTT_i*z_t + RRR_i*ϵ_t          (transition equation)
+y_t     = DD_i  + ZZ_i*z_t  + MM_i*ϵ_t  + η_t    (measurement equation)
+
+ϵ_t ∼ N(0, QQ_i)
+η_t ∼ N(0, EE_i)
+```
+
+Letting `TTTs = [TTT_1, ..., TTT_{n_regimes}]`, etc., we can then call the time-
+varying methods of the algorithms:
+
+```
+kalman_filter(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, MMs, EEs, z0 = Vector(), P0 = Matrix(); likelihood_only = false, n_presample_periods = 0)
+
+hamilton_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, MMs, EEs, z0, P0; n_presample_periods = 0)
+koopman_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, z0, P0, pred, vpred; n_presample_periods = 0)
+carter_kohn_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, MMs, EEs, z0, P0; n_presample_periods = 0, draw_states = true)
+durbin_koopman_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, z0, P0; n_presample_periods = 0, draw_states = true)
+```
