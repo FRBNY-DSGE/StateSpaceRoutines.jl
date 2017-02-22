@@ -22,12 +22,16 @@ in the `smoothed_shocks` matrix.
 The state space is given by:
 
 ```
-z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t          (transition equation)
-y_t     = DD  + ZZ*z_t  + MM*ϵ_t  + η_t    (measurement equation)
+z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t    (transition equation)
+y_t     = DD  + ZZ*z_t  + η_t        (measurement equation)
 
 ϵ_t ∼ N(0, QQ)
 η_t ∼ N(0, EE)
 ```
+
+Note that we assume no correlation between the measurement error and the shocks
+ϵ_t (that is, `MM = 0`). This program will error out if a nonzero `MM` is passed
+in.
 
 ### Inputs
 
@@ -144,15 +148,21 @@ This disturbance smoother is intended for use with the state smoother
 `koopman_smoother` from S.J. Koopman's \"Disturbance Smoother for State Space
 Models\" (Biometrika, 1993), as specified in Durbin and Koopman's \"A Simple and
 Efficient Simulation Smoother for State Space Time Series Analysis\"
-(Biometrika, 2002). The algorithm has been simplified for the case in which
-there is no measurement error:
+(Biometrika, 2002).
+
+The state space is given by:
 
 ```
 z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t    (transition equation)
-y_t     = DD  + ZZ*z_t               (measurement equation)
+y_t     = DD  + ZZ*z_t  + η_t        (measurement equation)
 
 ϵ_t ∼ N(0, QQ)
+η_t ∼ N(0, EE)
 ```
+
+Note that we assume no correlation between the measurement error and the shocks
+ϵ_t (that is, `MM = 0`). This program will error out if a nonzero `MM` is passed
+in.
 
 ### Inputs
 

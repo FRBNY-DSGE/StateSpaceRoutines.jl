@@ -20,3 +20,8 @@ The provided algorithms are:
 - Simulation smoothers:
   + `carter_kohn_smoother`: C.K. Carter and R. Kohn, ["On Gibbs Sampling for State Space Models"](https://www.jstor.org/stable/2337125) (_Biometrika_, 1994)
   + `durbin_koopman_smoother`: J. Durbin and S.J. Koopman, ["A Simple and Efficient Simulation Smoother for State Space Time Series Analysis"](https://www.jstor.org/stable/4140605) (_Biometrika_, 2002)
+
+Note that not all the routines are implemented for the most general state-space
+representation above. In particular, `koopman_smoother` and
+`durbin_koopman_smoother` assume that `MM` is zero and will error out if a
+nonzero `MM` is passed in.
