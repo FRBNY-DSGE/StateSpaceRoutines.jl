@@ -232,9 +232,6 @@ function koopman_disturbance_smoother{S<:AbstractFloat}(regime_indices::Vector{R
             error("Koopman smoother not implemented for MM != 0")
         end
 
-        R = EE + MM*QQ*MM' # R = Var(y_t) = Var(u_t)
-        G = RRR*QQ*MM'     # G = Cov(z_t, y_t)
-
         for t in reverse(regime_periods)
             # If an element of the vector y_t is missing (NaN) for the observation t, the
             # corresponding row is ditched from the measurement equation
@@ -242,18 +239,17 @@ function koopman_disturbance_smoother{S<:AbstractFloat}(regime_indices::Vector{R
             y_t  = data[nonmissing, t]
             ZZ_t = ZZ[nonmissing, :]
             DD_t = DD[nonmissing]
-            G_t  = G[:, nonmissing]
-            R_t  = R[nonmissing, nonmissing]
+            EE_t = EE[nonmissing, nonmissing]
 
-            a = pred[:, t]
-            P = vpred[:, :, t]
+            z = pred[:, t]                    # z_{t|t-1}
+            P = vpred[:, :, t]                # P_{t|t-1}
+            dy = y_t - ZZ_t*z - DD_t          # dy = y_t - ZZ*z_{t|t-1} - DD
+            V = ZZ_t*P*ZZ_t' + EE_t           # V_{t|t-1} = Var(dy)
 
-            F = ZZ_t*P*ZZ_t' + R_t
-            v = y_t - ZZ_t*a - DD_t
-            K = (TTT*P*ZZ_t' + G_t)/F
+            K = TTT*P*ZZ_t'/V
             L = TTT - K*ZZ_t
 
-            r = ZZ_t'/F*v + L'*r
+            r = ZZ_t'/V*dy + L'*r
             smoothed_disturbances[:, t] = r
 
             smoothed_shocks[:, t] = QQ*RRR'*r
