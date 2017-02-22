@@ -121,6 +121,10 @@ function durbin_koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{
         TTT, RRR, CCC = TTTs[i], RRRs[i], CCCs[i]
         QQ,  ZZ,  DD  = QQs[i],  ZZs[i],  DDs[i]
 
+        if !all(x -> x == 0, MMs[i])
+            error("Durbin-Koopman smoother not implemented for MM != 0")
+        end
+
         for t in regime_periods
             η_plus_t = η_plus[:, t]
             α_plus_t = TTT*α_plus_t + RRR*η_plus_t + CCC
