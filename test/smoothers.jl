@@ -44,5 +44,11 @@ end
 carter_kohn_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0; draw_states = true)
 durbin_koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0; draw_states = true)
 
+# Check that Koopman and Durbin-Koopman smoothers error out when there is
+# covariance between shocks and measurement error
+MM[1, 1] = 10.0
+@test_throws ErrorException koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0, pred, vpred)
+@test_throws ErrorException durbin_koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0; draw_states = false)
+
 
 nothing
