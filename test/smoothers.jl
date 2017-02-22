@@ -36,8 +36,8 @@ exp_states, exp_shocks = h5open("$path/reference/smoothers_out.h5", "r") do file
 end
 
 for smoother in [:hamilton, :koopman, :carter_kohn, :durbin_koopman]
-    @test_approx_eq_eps exp_states states[smoother] 1e-2
-    @test_approx_eq_eps exp_shocks shocks[smoother] 1e-3
+    @test_approx_eq exp_states states[smoother]
+    @test_approx_eq exp_shocks shocks[smoother]
 end
 
 # Make sure that simulation smoothers run with `draw_states` on
