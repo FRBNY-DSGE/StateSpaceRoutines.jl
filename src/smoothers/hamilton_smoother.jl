@@ -1,10 +1,10 @@
 """
 ```
-hamilton_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0, P0;
+hamilton_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0;
     n_presample_periods = 0)
 
 hamilton_smoother(regime_indices, data, TTTs, RRRs, CCCs,
-    QQs, ZZs, DDs, MMs, EEs, z0, P0; n_presample_periods = 0)
+    QQs, ZZs, DDs, EEs, z0, P0; n_presample_periods = 0)
 ```
 
 This is a Kalman smoothing program based on the treatment in James Hamilton's
@@ -19,8 +19,8 @@ smoothed states and shocks are indexed out of the augmented state vectors.
 The original state space (before augmenting with shocks) is given by:
 
 ```
-z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t          (transition equation)
-y_t     = DD  + ZZ*z_t  + MM*ϵ_t  + η_t    (measurement equation)
+z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t    (transition equation)
+y_t     = DD  + ZZ*z_t  + η_t        (measurement equation)
 
 ϵ_t ∼ N(0, QQ)
 η_t ∼ N(0, EE)
@@ -37,10 +37,10 @@ y_t     = DD  + ZZ*z_t  + MM*ϵ_t  + η_t    (measurement equation)
   predicted state vectors
 
 **Method 1 only:** state-space system matrices `TTT`, `RRR`, `CCC`, `QQ`, `ZZ`,
-`DD`, `MM`, `EE`. See `?kalman_filter`
+`DD`, `EE`. See `?kalman_filter`
 
 **Method 2 only:** `regime_indices` and system matrices for each regime `TTTs`,
-`RRRs`, `CCCs`, `QQs`, `ZZs`, `DDs`, `MMs`, `EEs`. See `?kalman_filter`
+`RRRs`, `CCCs`, `QQs`, `ZZs`, `DDs`, `EEs`. See `?kalman_filter`
 
 where:
 
@@ -62,28 +62,25 @@ where:
 """
 function hamilton_smoother{S<:AbstractFloat}(data::Matrix{S},
     TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
-    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S},
-    MM::Matrix{S}, EE::Matrix{S}, z0::Vector{S}, P0::Matrix{S};
-    n_presample_periods::Int = 0)
+    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, EE::Matrix{S},
+    z0::Vector{S}, P0::Matrix{S}; n_presample_periods::Int = 0)
 
     T = size(data, 2)
     regime_indices = Range{Int64}[1:T]
 
     hamilton_smoother(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR], Vector{S}[CCC],
-        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[MM], Matrix{S}[EE], z0, P0;
+        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[EE], z0, P0;
         n_presample_periods = n_presample_periods)
 end
 
 function hamilton_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
     data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}}, CCCs::Vector{Vector{S}},
-    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}},
-    MMs::Vector{Matrix{S}}, EEs::Vector{Matrix{S}},
+    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}}, EEs::Vector{Matrix{S}},
     z0::Vector{S} = Vector{S}(), P0::Matrix{S} = Matrix{S}();
     n_presample_periods::Int = 0)
 
-    n_regimes = length(regime_indices)
-
     # Dimensions
+    n_regimes = length(regime_indices)
     T  = size(data,    2) # number of periods of data
     Nz = size(TTTs[1], 1) # number of states
     Ne = size(RRRs[1], 2) # number of shocks
@@ -94,7 +91,7 @@ function hamilton_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}
 
     # Kalman filter stacked states and shocks
     _, pred, vpred, filt, vfilt, _ =
-        kalman_filter(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, MMs, EEs, z0, P0)
+        kalman_filter(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, EEs, z0, P0)
 
     # Smooth the stacked states and shocks recursively, starting at t = T-1 and
     # going backwards

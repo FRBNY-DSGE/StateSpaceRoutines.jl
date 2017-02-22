@@ -34,10 +34,6 @@ y_t     = DD  + ZZ*z_t  + η_t        (measurement equation)
 η_t ∼ N(0, EE)
 ```
 
-Note that we assume no correlation between the measurement error and the shocks
-ϵ_t (that is, `MM = 0`). This program will error out if a nonzero `MM` is passed
-in.
-
 ### Inputs
 
 - `data`: `Ny` x `T` matrix containing data `y(1), ... , y(T)`
@@ -49,10 +45,10 @@ in.
   predicted state vectors
 
 **Method 1 only:** state-space system matrices `TTT`, `RRR`, `CCC`, `QQ`, `ZZ`,
-`DD`. See `?kalman_filter`
+`DD`, `EE`. See `?kalman_filter`
 
 **Method 2 only:** `regime_indices` and system matrices for each regime `TTTs`,
-`RRRs`, `CCCs`, `QQs`, `ZZs`, `DDs`. See `?kalman_filter`
+`RRRs`, `CCCs`, `QQs`, `ZZs`, `DDs`, `EEs`. See `?kalman_filter`
 
 where:
 
@@ -77,27 +73,26 @@ where:
 """
 function durbin_koopman_smoother{S<:AbstractFloat}(data::Matrix{S},
     TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
-    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S},
-    MM::Matrix{S}, EE::Matrix{S}, z0::Vector{S}, P0::Matrix{S};
+    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, EE::Matrix{S},
+    z0::Vector{S}, P0::Matrix{S};
     n_presample_periods::Int = 0, draw_states::Bool = true)
 
     T = size(data, 2)
     regime_indices = Range{Int64}[1:T]
 
     durbin_koopman_smoother(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR], Vector{S}[CCC],
-        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[MM], Matrix{S}[EE], z0, P0;
+        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[EE], z0, P0;
         n_presample_periods = n_presample_periods, draw_states = draw_states)
 end
 
 function durbin_koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
     data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}}, CCCs::Vector{Vector{S}},
-    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}},
-    MMs::Vector{Matrix{S}}, EEs::Vector{Matrix{S}}, z0::Vector{S}, P0::Matrix{S};
+    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}}, EEs::Vector{Matrix{S}},
+    z0::Vector{S}, P0::Matrix{S};
     n_presample_periods::Int = 0, draw_states::Bool = true)
 
-    n_regimes = length(regime_indices)
-
     # Dimensions
+    n_regimes = length(regime_indices)
     T  = size(data,    2) # number of periods of data
     Nz = size(TTTs[1], 1) # number of states
     Ne = size(RRRs[1], 2) # number of shocks
@@ -125,10 +120,6 @@ function durbin_koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{
         TTT, RRR, CCC = TTTs[i], RRRs[i], CCCs[i]
         QQ,  ZZ,  DD  = QQs[i],  ZZs[i],  DDs[i]
 
-        if !all(x -> x == 0, MMs[i])
-            error("Durbin-Koopman smoother not implemented for MM != 0")
-        end
-
         for t in regime_periods
             η_plus_t = η_plus[:, t]
             α_plus_t = TTT*α_plus_t + RRR*η_plus_t + CCC
@@ -148,12 +139,12 @@ function durbin_koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{
     # Note that we pass in `zeros(size(D))` instead of `D` because the
     # measurement equation for `data_star` has no constant term
     _, pred, vpred, _ = kalman_filter(regime_indices, y_star, TTTs, RRRs, CCCs,
-                            QQs, ZZs, fill(zeros(Ny), n_regimes),
-                            MMs, EEs, z0, P0)
+                            QQs, ZZs, fill(zeros(Ny), n_regimes), EEs,
+                            z0, P0)
 
     # Kalman smooth
     α_hat_star, η_hat_star = koopman_smoother(regime_indices, y_star, TTTs, RRRs, CCCs,
-                                 QQs, ZZs, fill(zeros(Ny), n_regimes), MMs, EEs,
+                                 QQs, ZZs, fill(zeros(Ny), n_regimes), EEs,
                                  z0, P0, pred, vpred)
 
     # Compute draw (states and shocks)

@@ -5,19 +5,19 @@ and written by Iskander Karibzhanov.
 
 """
 ```
-kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, MM, EE, z0 = Vector(),
+kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0 = Vector(),
     P0 = Matrix(); likelihood_only = false, n_presample_periods = 0)
 
 kalman_filter(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs,
-    MMs, EEs, z0 = Vector(), P0 = Matrix(); likelihood_only = false,
+    EEs, z0 = Vector(), P0 = Matrix(); likelihood_only = false,
     n_presample_periods = 0)
 ```
 
 This function implements the Kalman filter for the following state-space model:
 
 ```
-z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t          (transition equation)
-y_t     = DD  + ZZ*z_t  + MM*ϵ_t  + η_t    (measurement equation)
+z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t    (transition equation)
+y_t     = DD  + ZZ*z_t  + η_t        (measurement equation)
 
 ϵ_t ∼ N(0, QQ)
 η_t ∼ N(0, EE)
@@ -38,8 +38,6 @@ y_t     = DD  + ZZ*z_t  + MM*ϵ_t  + η_t    (measurement equation)
 - `ZZ`: `Ny` x `Nz` matrix in the measurement equation mapping states to
   observables
 - `DD`: `Ny` x 1 constant vector in the measurement equation
-- `MM`: `Ny` x `Ne` matrix in the measurement equation mapping shocks to
-  observables
 - `EE`: `Ny` x `Ny` matrix of measurement error covariances
 
 **Method 2 only:**
@@ -52,7 +50,6 @@ y_t     = DD  + ZZ*z_t  + MM*ϵ_t  + η_t    (measurement equation)
 - `QQs`
 - `ZZs`
 - `DDs`
-- `MMs`
 - `EEs`
 
 where:
@@ -109,7 +106,7 @@ vector estimate is set to `CCC` and its covariance matrix is given by `1e6 * I`.
 """
 function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
     TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
-    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, MM::Matrix{S}, EE::Matrix{S},
+    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, EE::Matrix{S},
     z0::Vector{S} = Vector{S}(), P0::Matrix{S} = Matrix{S}();
     likelihood_only::Bool = false, n_presample_periods::Int = 0)
 
@@ -117,21 +114,18 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
     regime_indices = Range{Int64}[1:T]
 
     kalman_filter(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR], Vector{S}[CCC],
-        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD],
-        Matrix{S}[MM], Matrix{S}[EE], z0, P0;
+        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[EE], z0, P0;
         likelihood_only = likelihood_only, n_presample_periods = n_presample_periods)
 end
 
 function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
     data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}}, CCCs::Vector{Vector{S}},
-    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}},
-    MMs::Vector{Matrix{S}}, EEs::Vector{Matrix{S}},
+    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}}, EEs::Vector{Matrix{S}},
     z0::Vector{S} = Vector{S}(), P0::Matrix{S} = Matrix{S}();
     likelihood_only::Bool = false, n_presample_periods::Int = 0)
 
-    n_regimes = length(regime_indices)
-
     # Dimensions
+    n_regimes = length(regime_indices)
     T  = size(data,    2) # number of periods of data
     Nz = size(TTTs[1], 1) # number of states
     Ne = size(RRRs[1], 2) # number of shocks
@@ -170,51 +164,46 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
         regime_data = data[:, regime_periods]
 
         TTT, RRR, CCC = TTTs[i], RRRs[i], CCCs[i]
-        QQ,  ZZ,  DD  = QQs[i],  ZZs[i],  DDs[i]
-        MM,  EE       = MMs[i],  EEs[i]
+        ZZ,  DD       = ZZs[i],  DDs[i]
+        QQ,  EE       = QQs[i],  EEs[i]
 
         V = RRR*QQ*RRR'    # V = Var(z_t) = Var(Rϵ_t)
-        R = EE + MM*QQ*MM' # R = Var(y_t) = Var(u_t)
-        G = RRR*QQ*MM'     # G = Cov(z_t, y_t)
 
         for t in regime_periods
-            # If an element of the vector y_t is missing (NaN) for the observation t, the
-            # corresponding row is ditched from the measurement equation
+            # Index out rows of the measurement equation for which we have
+            # nonmissing data in period t
             nonmissing = !isnan(data[:, t])
             y_t  = data[nonmissing, t]
             ZZ_t = ZZ[nonmissing, :]
-            G_t  = G[:, nonmissing]
-            R_t  = R[nonmissing, nonmissing]
-            Ny_t = length(y_t)
             DD_t = DD[nonmissing]
+            EE_t = EE[nonmissing, nonmissing]
+            Ny_t = length(y_t)
 
             ## Forecast
-            z = CCC + TTT*z                    # z_{t|t-1} = CCC + TTT*z_{t-1|t-1}
-            P = TTT*P*TTT' + V                 # P_{t|t-1} = TTT*P_{t-1|t-1}*TTT' + TTT*Var(η_t)*TTT'
-            dy = y_t - ZZ_t*z - DD_t           # dy = y_t - ZZ*z_{t|t-1} - DD is prediction error or innovation
-            ZG = ZZ_t*G_t                      # ZG is ZZ*Cov(η_t, ϵ_t)
-            D = ZZ_t*P*ZZ_t' + ZG + ZG' + R_t  # D = ZZ*P_{t|t-1}*ZZ' + ZG + ZG' + R_t
-            D = (D+D')/2
+            z = TTT*z + CCC                 # z_{t|t-1} = TTT*z_{t-1|t-1} + CCC
+            P = TTT*P*TTT' + RRR*QQ*RRR'    # P_{t|t-1} = Var s_{t|t-1} = TTT*P_{t-1|t-1}*TTT' + RRR*QQ*RRR'
+            V = ZZ_t*P*ZZ_t' + EE_t         # V_{t|t-1} = Var y_{t|t-1} = ZZ*P_{t|t-1}*ZZ' + EE
+            V = (V+V')/2
+
+            dy = y_t - ZZ_t*z - DD_t        # dy  = y_t - y_{t|t-1} = prediction error
+            ddy = V\dy                      # ddy = (1/V_{t|t-1})dy = weighted prediction error
 
             if !likelihood_only
                 pred[:, t]                   = z
                 vpred[:, :, t]               = P
                 yprederror[nonmissing, t]    = dy
-                ystdprederror[nonmissing, t] = dy ./ sqrt(diag(D))
+                ystdprederror[nonmissing, t] = dy ./ sqrt(diag(V))
             end
 
-            ddy = D\dy
-
-            # We evaluate the log likelihood function by adding values of L at every iteration
-            # step (for each t = 1,2,...T)
+            ## Compute marginal log-likelihood, log P(y_t|y_1,...y_{t-1},θ)
+            ## log P(y_1,...,y_T|θ) ∝ log P(y_1|θ) + log P(y_2|y_1,θ) + ... + P(y_T|y_1,...,y_{T-1},θ)
             if t > n_presample_periods
-                log_likelihood += -log(det(D))/2 - first(dy'*ddy/2) - Ny_t*log(2*pi)/2
+                log_likelihood += -log(det(V))/2 - first(dy'*ddy/2) - Ny_t*log(2*pi)/2
             end
 
             ## Update
-            PZG = P*ZZ_t' + G_t
-            z = z + PZG*ddy                    # z_{t|t} = z_{t|t-1} + P_{t|t-1}*ZZ' + ...
-            P = P - PZG/D*PZG'                 # P_{t|t} = P_{t|t-1} - PZG*(1/D)*PZG
+            z = z + P'*ZZ_t'*ddy            # z_{t|t} = z_{t|t-1} + P_{t|t-1}'*ZZ'*(1/V_{t|t-1})dy
+            P = P - P'*ZZ_t'/V*ZZ_t*P       # P_{t|t} = P_{t|t-1} - P_{t|t-1}'*ZZ'*(1/V_{t|t-1})*ZZ*P_{t|t-1}
 
             if !likelihood_only
                 filt[:, t]     = z

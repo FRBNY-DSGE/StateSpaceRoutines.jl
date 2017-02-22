@@ -7,7 +7,7 @@ koopman_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs,
     z0, P0, pred, vpred; n_presample_periods = 0)
 ```
 
-This is a Kalman Smoothing program based on S.J. Koopman's \"Disturbance
+This is a Kalman smoothing program based on S.J. Koopman's \"Disturbance
 Smoother for State Space Models\" (Biometrika, 1993), as specified in
 Durbin and Koopman's \"A Simple and Efficient Simulation Smoother for
 State Space Time Series Analysis\" (Biometrika, 2002).
@@ -28,10 +28,6 @@ y_t     = DD  + ZZ*z_t  + η_t        (measurement equation)
 ϵ_t ∼ N(0, QQ)
 η_t ∼ N(0, EE)
 ```
-
-Note that we assume no correlation between the measurement error and the shocks
-ϵ_t (that is, `MM = 0`). This program will error out if a nonzero `MM` is passed
-in.
 
 ### Inputs
 
@@ -69,7 +65,7 @@ where:
 """
 function koopman_smoother{S<:AbstractFloat}(data::Matrix{S},
     TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
-    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, MM::Matrix{S}, EE::Matrix{S},
+    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, EE::Matrix{S},
     z0::Vector{S}, P0::Matrix{S}, pred::Matrix{S}, vpred::Array{S, 3};
     n_presample_periods::Int = 0)
 
@@ -77,52 +73,52 @@ function koopman_smoother{S<:AbstractFloat}(data::Matrix{S},
     regime_indices = Range{Int64}[1:T]
 
     koopman_smoother(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR], Vector{S}[CCC],
-        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[MM], Matrix{S}[EE],
+        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[EE],
         z0, P0, pred, vpred;
         n_presample_periods = n_presample_periods)
 end
 
 function koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
     data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}}, CCCs::Vector{Vector{S}},
-    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}},
-    MMs::Vector{Matrix{S}}, EEs::Vector{Matrix{S}},
+    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}}, EEs::Vector{Matrix{S}},
     z0::Vector{S}, P0::Matrix{S}, pred::Matrix{S}, vpred::Array{S, 3};
     n_presample_periods::Int = 0)
 
-    n_regimes = length(regime_indices)
-
     # Dimensions
+    n_regimes = length(regime_indices)
     T  = size(data,    2) # number of periods of data
     Nz = size(TTTs[1], 1) # number of states
+    Ne = size(RRRs[1], 2) # number of shocks
 
     # Call disturbance smoother
-    smoothed_disturbances, smoothed_shocks = koopman_disturbance_smoother(regime_indices, data,
-                                                 TTTs, RRRs, QQs, ZZs, DDs, MMs, EEs, pred, vpred)
+    state_disturbances, observable_disturbances =
+        koopman_disturbance_smoother(regime_indices, data, TTTs, RRRs,
+            QQs, ZZs, DDs, EEs, pred, vpred)
 
     # Initialize outputs
     smoothed_states = zeros(S, Nz, T)
+    smoothed_shocks = zeros(S, Ne, T)
 
-    r     = smoothed_disturbances[:, 1]
-    α_hat = z0 + P0*r
-    smoothed_states[:, 1] = α_hat
+    r     = state_disturbances[:, 1]
+    α_hat = zeros(S, Nz) # initialize dummy value s.t. α_hat is in scope
 
     for i = 1:n_regimes
         regime_periods = regime_indices[i]
-
-        # t = 1 has already been initialized
-        if i == 1
-            regime_periods = regime_periods[2:end]
-        end
 
         # Get state-space system matrices for this regime
         TTT, RRR     = TTTs[i], RRRs[i]
         QQ,  ZZ,  DD = QQs[i],  ZZs[i],  DDs[i]
 
         for t in regime_periods
-            r     = smoothed_disturbances[:, t]
-            α_hat = TTT*α_hat + RRR*QQ*RRR'*r
+            r     = state_disturbances[:, t]
+            α_hat = if t == 1
+                z0 + P0*r
+            else
+                TTT*α_hat + RRR*QQ*RRR'*r
+            end
 
             smoothed_states[:, t] = α_hat
+            smoothed_shocks[:, t] = QQ*RRR'*r
         end
     end
 
@@ -139,9 +135,11 @@ end
 
 """
 ```
-koopman_disturbance_smoother{S<:AbstractFloat}(m::AbstractModel,
-    data::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Array{S}, Q::Matrix{S},
-    Z::Matrix{S}, D::Array{S}, pred::Matrix{S}, vpred::Array{S, 3})
+koopman_disturbance_smoother(data, TTT, RRR, QQ, ZZ, DD, EE, pred, vpred;
+    n_presample_periods = 0)
+
+koopman_smoother(regime_indices, data, TTTs, RRRs, QQs, ZZs, DDs, EEs,
+    pred, vpred; n_presample_periods = 0)
 ```
 
 This disturbance smoother is intended for use with the state smoother
@@ -159,10 +157,6 @@ y_t     = DD  + ZZ*z_t  + η_t        (measurement equation)
 ϵ_t ∼ N(0, QQ)
 η_t ∼ N(0, EE)
 ```
-
-Note that we assume no correlation between the measurement error and the shocks
-ϵ_t (that is, `MM = 0`). This program will error out if a nonzero `MM` is passed
-in.
 
 ### Inputs
 
@@ -193,40 +187,40 @@ where:
 
 ### Outputs
 
-- `smoothed_disturbances`: `Nz` x `T` matrix of smoothed disturbances `r_t` used
-  for state smoothing
-- `smoothed_shocks`: `Ne` x `T` matrix of smoothed shocks `ϵ_{t|T}`
+- `state_disturbances`: `Nz` x `T` matrix of transition equation disturbances
+  `r_t`
+- `observable_disturbances`: `Ny` x `T` matrix of measurement equation
+  disturbances `e_{t|T}`
 """
 function koopman_disturbance_smoother{S<:AbstractFloat}(data::Matrix{S},
-    TTT::Matrix{S}, RRR::Matrix{S},
-    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, MM::Matrix{S}, EE::Matrix{S},
-    pred::Matrix{S}, vpred::Array{S, 3},
+    TTT::Matrix{S}, RRR::Matrix{S}, QQ::Matrix{S},
+    ZZ::Matrix{S}, DD::Vector{S}, EE::Matrix{S},
+    pred::Matrix{S}, vpred::Array{S, 3};
     n_presample_periods::Int = 0)
 
     T = size(data, 2)
     regime_indices = Range{Int64}[1:T]
 
     koopman_disturbance_smoother(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR],
-        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[MM], Matrix{S}[EE],
+        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[EE],
         pred, vpred; n_presample_periods = n_presample_periods)
 end
 
 function koopman_disturbance_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
     data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}},
-    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}},
-    MMs::Vector{Matrix{S}}, EEs::Vector{Matrix{S}},
+    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}}, EEs::Vector{Matrix{S}},
     pred::Matrix{S}, vpred::Array{S, 3}; n_presample_periods::Int = 0)
 
-    n_regimes = length(regime_indices)
-
     # Dimensions
+    n_regimes = length(regime_indices)
     T  = size(data,    2) # number of periods of data
     Nz = size(TTTs[1], 1) # number of states
     Ne = size(RRRs[1], 2) # number of shocks
+    Ny = size(ZZs[1],  1) # number of observables
 
     # Initialize outputs
-    smoothed_disturbances = zeros(S, Nz, T)
-    smoothed_shocks       = zeros(S, Ne, T)
+    state_disturbances      = zeros(S, Nz, T)
+    observable_disturbances = zeros(S, Ny, T)
 
     r = zeros(S, Nz)
 
@@ -235,12 +229,8 @@ function koopman_disturbance_smoother{S<:AbstractFloat}(regime_indices::Vector{R
         regime_periods = regime_indices[i]
 
         TTT, RRR     = TTTs[i], RRRs[i]
-        QQ,  ZZ,  DD = QQs[i],  ZZs[i],  DDs[i]
-        MM,  EE      = MMs[i],  EEs[i]
-
-        if !all(x -> x == 0, MM)
-            error("Koopman smoother not implemented for MM != 0")
-        end
+        ZZ,  DD      = ZZs[i],  DDs[i]
+        QQ,  EE      = QQs[i],  EEs[i]
 
         for t in reverse(regime_periods)
             # If an element of the vector y_t is missing (NaN) for the observation t, the
@@ -252,17 +242,18 @@ function koopman_disturbance_smoother{S<:AbstractFloat}(regime_indices::Vector{R
             EE_t = EE[nonmissing, nonmissing]
 
             z = pred[:, t]                    # z_{t|t-1}
-            P = vpred[:, :, t]                # P_{t|t-1}
-            dy = y_t - ZZ_t*z - DD_t          # dy = y_t - ZZ*z_{t|t-1} - DD
-            V = ZZ_t*P*ZZ_t' + EE_t           # V_{t|t-1} = Var(dy)
+            P = vpred[:, :, t]                # P_{t|t-1} = Var s_{t|t-1}
+            V = ZZ_t*P*ZZ_t' + EE_t           # V_{t|t-1} = Var y_{t|t-1} = ZZ*P_{t|t-1}*ZZ' + EE
+            dy = y_t - ZZ_t*z - DD_t          # dy = y_t - y_{t|t-1} = prediction error
 
-            K = TTT*P*ZZ_t'/V
+            K = TTT*P*ZZ_t'/V                 # K = TTT*P_{t|t-1}'ZZ'*(1/V_{t|t-1}) = Kalman gain
             L = TTT - K*ZZ_t
 
-            r = ZZ_t'/V*dy + L'*r
-            smoothed_disturbances[:, t] = r
+            e = V\dy - K'*r                   # e_t     = (1/V_{t|t-1})dy - K_t'*r_t
+            r = ZZ_t'*e + TTT'*r              # r_{t-1} = ZZ'*e_t + TTT'*r_t
 
-            smoothed_shocks[:, t] = QQ*RRR'*r
+            state_disturbances[:,               t] = r
+            observable_disturbances[nonmissing, t] = e
 
         end # of loop backward through this regime's periods
 
@@ -272,9 +263,9 @@ function koopman_disturbance_smoother{S<:AbstractFloat}(regime_indices::Vector{R
     if n_presample_periods > 0
         mainsample_periods = n_presample_periods+1:T
 
-        smoothed_disturbances = smoothed_disturbances[:, mainsample_periods]
-        smoothed_shocks       = smoothed_shocks[:,       mainsample_periods]
+        state_disturbances      = state_disturbances[:,      mainsample_periods]
+        observable_disturbances = observable_disturbances[:, mainsample_periods]
     end
 
-    return smoothed_disturbances, smoothed_shocks
+    return state_disturbances, observable_disturbances
 end

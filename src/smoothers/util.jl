@@ -6,8 +6,8 @@ augment_states_with_shocks(regime_indices, TTTs, RRRs, CCCs, QQs, ZZs, z0, P0)
 Go from original state space:
 
 ```
-z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t          (transition equation)
-y_t     = DD  + ZZ*z_t  + MM*ϵ_t  + η_t    (measurement equation)
+z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t    (transition equation)
+y_t     = DD  + ZZ*z_t  + η_t        (measurement equation)
 
 ϵ_t ∼ N(0, QQ)
 η_t ∼ N(0, EE)
@@ -19,7 +19,7 @@ to augmented state space:
 |z_{t+1}| = |CCC| + |TTT 0| |z_t| + |RRR| ϵ_t    (transition equation)
 |ϵ_{t+1}|   | 0 |   | 0  0| |ϵ_t|   | I |
 
-y_t = DD + |ZZ| |z_t| + MM*ϵ_t + η_t             (measurement equation)
+y_t = DD + |ZZ| |z_t| + η_t                      (measurement equation)
            | 0| |ϵ_t|
 
 ϵ_t ∼ N(0, QQ)
