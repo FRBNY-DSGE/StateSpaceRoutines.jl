@@ -1,6 +1,3 @@
-using StateSpaceRoutines
-using HDF5
-
 path = dirname(@__FILE__)
 
 # Initialize arguments to function

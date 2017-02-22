@@ -1,4 +1,4 @@
-using Base.Test
+using Base.Test, HDF5
 using StateSpaceRoutines
 
 my_tests = [
