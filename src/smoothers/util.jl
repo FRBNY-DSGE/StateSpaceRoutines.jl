@@ -11,6 +11,7 @@ y_t     = DD  + ZZ*z_t  + η_t        (measurement equation)
 
 ϵ_t ∼ N(0, QQ)
 η_t ∼ N(0, EE)
+Cov(ϵ_t, η_t) = 0
 ```
 
 to augmented state space:
@@ -24,6 +25,7 @@ y_t = DD + |ZZ| |z_t| + η_t                      (measurement equation)
 
 ϵ_t ∼ N(0, QQ)
 η_t ∼ N(0, EE)
+Cov(ϵ_t, η_t) = 0
 ```
 
 with initial state and covariance:
