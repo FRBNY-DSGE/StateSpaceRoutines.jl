@@ -174,6 +174,7 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
             # Index out rows of the measurement equation for which we have
             # nonmissing data in period t
             nonmissing = !isnan(data[:, t])
+            
             y_t  = data[nonmissing, t]
             ZZ_t = ZZ[nonmissing, :]
             DD_t = DD[nonmissing]
@@ -221,15 +222,15 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
         # If we choose to discard presample periods, then we reassign `z0`
         # and `P0` to be their values at the end of the presample/beginning
         # of the main sample
-        z0 = squeeze(filt[:,     n_presample_periods], 2)
-        P0 = squeeze(vfilt[:, :, n_presample_periods], 3)
+        z0 = filt[:,     n_presample_periods]
+        P0 = vfilt[:, :, n_presample_periods]
 
         pred          = pred[:,     mainsample_periods]
         vpred         = vpred[:, :, mainsample_periods]
         filt          = filt[:,     mainsample_periods]
         vfilt         = vfilt[:, :, mainsample_periods]
-        yprederror    = yprederror[:,       mainsample_periods]
-        ystdprederror = ypredstderror[:, :, mainsample_periods]
+        yprederror    = yprederror[:,  mainsample_periods]
+        ystdprederror = ystdprederror[:, mainsample_periods]
     end
 
     if !likelihood_only
