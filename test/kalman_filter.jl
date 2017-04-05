@@ -12,16 +12,16 @@ out = kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0)
 
 h5open("$path/reference/kalman_filter_out.h5", "r") do h5
     @test_approx_eq read(h5, "log_likelihood") out[1]
-    @test_approx_eq read(h5, "pred")           out[2]
-    @test_approx_eq read(h5, "vpred")          out[3]
-    @test_approx_eq read(h5, "filt")           out[4]
-    @test_approx_eq read(h5, "vfilt")          out[5]
-    @test_approx_eq read(h5, "yprederror")     out[6]
-    @test_approx_eq read(h5, "ystdprederror")  out[7]
-    @test_approx_eq read(h5, "rmse")           out[8]
-    @test_approx_eq read(h5, "rmsd")           out[9]
-    @test_approx_eq z0                         out[10]
-    @test_approx_eq P0                         out[11]
+    @test_approx_eq read(h5, "pred")           out[4]
+    @test_approx_eq read(h5, "vpred")          out[5]
+    @test_approx_eq read(h5, "filt")           out[6]
+    @test_approx_eq read(h5, "vfilt")          out[7]
+    @test_approx_eq read(h5, "yprederror")     out[8]
+    @test_approx_eq read(h5, "ystdprederror")  out[9]
+    @test_approx_eq read(h5, "rmse")           out[10]
+    @test_approx_eq read(h5, "rmsd")           out[11]
+    @test_approx_eq z0                         out[12]
+    @test_approx_eq P0                         out[13]
 end
 
 
@@ -32,16 +32,16 @@ out = kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, EE)
 # we allow greater ϵ
 h5open("$path/reference/kalman_filter_out.h5", "r") do h5
     @test_approx_eq read(h5, "log_likelihood") out[1]
-    @test_approx_eq read(h5, "pred")           out[2]
-    @test_approx_eq read(h5, "vpred")          out[3]
-    @test_approx_eq read(h5, "filt")           out[4]
-    @test_approx_eq read(h5, "vfilt")          out[5]
-    @test_approx_eq read(h5, "yprederror")     out[6]
-    @test_approx_eq read(h5, "ystdprederror")  out[7]
-    @test_approx_eq read(h5, "rmse")           out[8]
-    @test_approx_eq read(h5, "rmsd")           out[9]
-    @test_approx_eq z0                         out[10]
-    @test_approx_eq P0                         out[11]
+    @test_approx_eq read(h5, "pred")           out[4]
+    @test_approx_eq read(h5, "vpred")          out[5]
+    @test_approx_eq read(h5, "filt")           out[6]
+    @test_approx_eq read(h5, "vfilt")          out[7]
+    @test_approx_eq read(h5, "yprederror")     out[8]
+    @test_approx_eq read(h5, "ystdprederror")  out[9]
+    @test_approx_eq read(h5, "rmse")           out[10]
+    @test_approx_eq read(h5, "rmsd")           out[11]
+    @test_approx_eq z0                         out[12]
+    @test_approx_eq P0                         out[13]
 end
 
 

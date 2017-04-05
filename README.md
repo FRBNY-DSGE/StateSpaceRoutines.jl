@@ -26,7 +26,7 @@ The provided algorithms are:
 ## Time-Invariant Methods
 
 ```
-kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0 = Vector(), P0 = Matrix(); likelihood_only = false, n_presample_periods = 0)
+kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0 = Vector(), P0 = Matrix(); allout = true, n_presample_periods = 0)
 
 hamilton_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0; n_presample_periods = 0)
 koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, z0, P0, pred, vpred; n_presample_periods = 0)
@@ -58,7 +58,7 @@ Letting `TTTs = [TTT_1, ..., TTT_{n_regimes}]`, etc., we can then call the time-
 varying methods of the algorithms:
 
 ```
-kalman_filter(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, EEs, z0 = Vector(), P0 = Matrix(); likelihood_only = false, n_presample_periods = 0)
+kalman_filter(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, EEs, z0 = Vector(), P0 = Matrix(); allout = true, n_presample_periods = 0)
 
 hamilton_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, EEs, z0, P0; n_presample_periods = 0)
 koopman_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, z0, P0, pred, vpred; n_presample_periods = 0)
