@@ -105,39 +105,48 @@ All eigenvalues of `TTT` are inside the unit circle when the state space model
 is stationary.  When the preceding formula cannot be applied, the initial state
 vector estimate is set to `CCC` and its covariance matrix is given by `1e6 * I`.
 """
-function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
-    TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
-    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, EE::Matrix{S},
-    z0::Vector{S} = Vector{S}(), P0::Matrix{S} = Matrix{S}();
-    likelihood_only::Bool = false, n_presample_periods::Int = 0)
-
-    T = size(data, 2)
-    regime_indices = Range{Int64}[1:T]
-
-    kalman_filter(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR], Vector{S}[CCC],
-        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[EE], z0, P0;
-        likelihood_only = likelihood_only, n_presample_periods = n_presample_periods)
-end
-
 function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
     data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}}, CCCs::Vector{Vector{S}},
     QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}}, EEs::Vector{Matrix{S}},
     z0::Vector{S} = Vector{S}(), P0::Matrix{S} = Matrix{S}();
     likelihood_only::Bool = false, n_presample_periods::Int = 0)
 
+    # Initialize
+    z = z0
+    P = P0
+    log_likelihood = zero(S)
+
+    for i = 1:length(regime_indices)
+        regime_data = data[:, regime_indices[i]]
+        if i != 1
+            n_presample_periods = 0
+        end
+        L, z, P = kalman_filter(data, TTTs[i], RRRs[i], CCCs[i], QQs[i], ZZs[i], DDs[i], EEs[i], z, P,
+                      likelihood_only = true, n_presample_periods = n_presample_periods)
+        log_likelihood += L
+    end
+
+    return log_likelihood
+end
+
+function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
+    TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
+    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, EE::Matrix{S},
+    z0::Vector{S} = Vector{S}(), P0::Matrix{S} = Matrix{S}();
+    likelihood_only::Bool = false, n_presample_periods::Int = 0)
+
     # Dimensions
-    n_regimes = length(regime_indices)
     T  = size(data,    2) # number of periods of data
-    Nz = size(TTTs[1], 1) # number of states
-    Ne = size(RRRs[1], 2) # number of shocks
-    Ny = size(ZZs[1],  1) # number of observables
+    Nz = size(TTT, 1) # number of states
+    Ne = size(RRR, 2) # number of shocks
+    Ny = size(ZZ,  1) # number of observables
 
     # Populate initial conditions if they are empty
     if isempty(z0) || isempty(P0)
-        e, _ = eig(TTTs[1])
+        e, _ = eig(TTT)
         if all(abs(e) .< 1.)
-            z0 = (UniformScaling(1) - TTTs[1])\CCCs[1]
-            P0 = solve_discrete_lyapunov(TTTs[1], RRRs[1]*QQs[1]*RRRs[1]')
+            z0 = (UniformScaling(1) - TTT)\CCC
+            P0 = solve_discrete_lyapunov(TTT, RRR*QQ*RRR')
         else
             z0 = CCC
             P0 = 1e6 * eye(Nz)
@@ -157,69 +166,57 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
         vfilt         = zeros(Nz, Nz, T)
     end
 
-    log_likelihood = 0.0
+    log_likelihood = zero(S)
 
-    for i = 1:n_regimes
-        # Get state-space system matrices for this regime
-        regime_periods = regime_indices[i]
-        regime_data = data[:, regime_periods]
+    V = RRR*QQ*RRR'    # V = Var(z_t) = Var(Rϵ_t)
 
-        TTT, RRR, CCC = TTTs[i], RRRs[i], CCCs[i]
-        ZZ,  DD       = ZZs[i],  DDs[i]
-        QQ,  EE       = QQs[i],  EEs[i]
+    for t = 1:T
+        # Index out rows of the measurement equation for which we have
+        # nonmissing data in period t
+        nonmissing = !isnan(data[:, t])
+        y_t  = data[nonmissing, t]
+        ZZ_t = ZZ[nonmissing, :]
+        DD_t = DD[nonmissing]
+        EE_t = EE[nonmissing, nonmissing]
+        Ny_t = length(y_t)
 
-        V = RRR*QQ*RRR'    # V = Var(z_t) = Var(Rϵ_t)
+        ## Forecast
+        z = TTT*z + CCC                 # z_{t|t-1} = TTT*z_{t-1|t-1} + CCC
+        P = TTT*P*TTT' + RRR*QQ*RRR'    # P_{t|t-1} = Var s_{t|t-1} = TTT*P_{t-1|t-1}*TTT' + RRR*QQ*RRR'
+        V = ZZ_t*P*ZZ_t' + EE_t         # V_{t|t-1} = Var y_{t|t-1} = ZZ*P_{t|t-1}*ZZ' + EE
+        V = (V+V')/2
 
-        for t in regime_periods
-            # Index out rows of the measurement equation for which we have
-            # nonmissing data in period t
-            nonmissing = !isnan(data[:, t])
-            
-            y_t  = data[nonmissing, t]
-            ZZ_t = ZZ[nonmissing, :]
-            DD_t = DD[nonmissing]
-            EE_t = EE[nonmissing, nonmissing]
-            Ny_t = length(y_t)
+        dy = y_t - ZZ_t*z - DD_t        # dy  = y_t - y_{t|t-1} = prediction error
+        ddy = V\dy                      # ddy = (1/V_{t|t-1})dy = weighted prediction error
 
-            ## Forecast
-            z = TTT*z + CCC                 # z_{t|t-1} = TTT*z_{t-1|t-1} + CCC
-            P = TTT*P*TTT' + RRR*QQ*RRR'    # P_{t|t-1} = Var s_{t|t-1} = TTT*P_{t-1|t-1}*TTT' + RRR*QQ*RRR'
-            V = ZZ_t*P*ZZ_t' + EE_t         # V_{t|t-1} = Var y_{t|t-1} = ZZ*P_{t|t-1}*ZZ' + EE
-            V = (V+V')/2
+        if !likelihood_only
+            pred[:, t]                   = z
+            vpred[:, :, t]               = P
+            yprederror[nonmissing, t]    = dy
+            ystdprederror[nonmissing, t] = dy ./ sqrt(diag(V))
+        end
 
-            dy = y_t - ZZ_t*z - DD_t        # dy  = y_t - y_{t|t-1} = prediction error
-            ddy = V\dy                      # ddy = (1/V_{t|t-1})dy = weighted prediction error
+        ## Compute marginal log-likelihood, log P(y_t|y_1,...y_{t-1},θ)
+        ## log P(y_1,...,y_T|θ) ∝ log P(y_1|θ) + log P(y_2|y_1,θ) + ... + P(y_T|y_1,...,y_{T-1},θ)
+        if t > n_presample_periods
+            log_likelihood += -log(det(V))/2 - first(dy'*ddy/2) - Ny_t*log(2*pi)/2
+        end
 
-            if !likelihood_only
-                pred[:, t]                   = z
-                vpred[:, :, t]               = P
-                yprederror[nonmissing, t]    = dy
-                ystdprederror[nonmissing, t] = dy ./ sqrt(diag(V))
-            end
+        ## Update
+        z = z + P'*ZZ_t'*ddy            # z_{t|t} = z_{t|t-1} + P_{t|t-1}'*ZZ'*(1/V_{t|t-1})dy
+        P = P - P'*ZZ_t'/V*ZZ_t*P       # P_{t|t} = P_{t|t-1} - P_{t|t-1}'*ZZ'*(1/V_{t|t-1})*ZZ*P_{t|t-1}
 
-            ## Compute marginal log-likelihood, log P(y_t|y_1,...y_{t-1},θ)
-            ## log P(y_1,...,y_T|θ) ∝ log P(y_1|θ) + log P(y_2|y_1,θ) + ... + P(y_T|y_1,...,y_{T-1},θ)
-            if t > n_presample_periods
-                log_likelihood += -log(det(V))/2 - first(dy'*ddy/2) - Ny_t*log(2*pi)/2
-            end
+        if !likelihood_only
+            filt[:, t]     = z
+            vfilt[:, :, t] = P
+        end
 
-            ## Update
-            z = z + P'*ZZ_t'*ddy            # z_{t|t} = z_{t|t-1} + P_{t|t-1}'*ZZ'*(1/V_{t|t-1})dy
-            P = P - P'*ZZ_t'/V*ZZ_t*P       # P_{t|t} = P_{t|t-1} - P_{t|t-1}'*ZZ'*(1/V_{t|t-1})*ZZ*P_{t|t-1}
-
-            if !likelihood_only
-                filt[:, t]     = z
-                vfilt[:, :, t] = P
-            end
-
-        end # of loop through this regime's periods
-
-    end # of loop through regimes
+    end # of loop through periods
 
     if !likelihood_only && n_presample_periods > 0
         mainsample_periods = n_presample_periods+1:T
 
-        # If we choose to discard presample periods, then we reassign `z0`
+        # If we choose                                                                                                                                      to discard presample periods, then we reassign `z0`
         # and `P0` to be their values at the end of the presample/beginning
         # of the main sample
         z0 = filt[:,     n_presample_periods]
@@ -239,6 +236,6 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
 
         return log_likelihood, pred, vpred, filt, vfilt, yprederror, ystdprederror, rmse, rmsd, z0, P0
     else
-        return log_likelihood
+        return log_likelihood, z, P
     end
 end
