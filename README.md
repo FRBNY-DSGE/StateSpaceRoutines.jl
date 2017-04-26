@@ -1,5 +1,7 @@
 # State-Space Routines
 
+[![Build Status](https://travis-ci.org/FRBNY-DSGE/DSGE.jl.svg)](https://travis-ci.org/FRBNY-DSGE/StateSpaceRoutines.jl)
+
 This package implements some common routines for state-space models with the
 following representation:
 
