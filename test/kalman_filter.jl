@@ -22,8 +22,8 @@ h5open("$path/reference/kalman_filter_out.h5", "r") do h5
     @test_approx_eq read(h5, "rmsd")           out[11]
     @test_approx_eq z0                         out[12]
     @test_approx_eq P0                         out[13]
+    @test_approx_eq read(h5, "marginal_loglh") out[14]
 end
-
 
 # Method with initial conditions omitted
 out = kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, EE)
@@ -42,6 +42,7 @@ h5open("$path/reference/kalman_filter_out.h5", "r") do h5
     @test_approx_eq read(h5, "rmsd")           out[11]
     @test_approx_eq z0                         out[12]
     @test_approx_eq P0                         out[13]
+    @test_approx_eq read(h5, "marginal_loglh") out[14]
 end
 
 
