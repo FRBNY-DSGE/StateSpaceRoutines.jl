@@ -87,6 +87,7 @@ where:
   presample state vector if `n_presample_periods > 0`
 - `P0`: `Nz` x `Nz` initial state covariance matrix. This may have reassigned to
   the last presample state covariance if `n_presample_periods > 0`
+- `marginal_loglh`: a vector of the marginal log likelihoods from t = 1 to T
 
 ### Notes
 
@@ -134,6 +135,7 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
         ystdprederror = zeros(S, Ny, T)
         rmse  = zeros(S, 1, Ny)
         rmsd  = zeros(S, 1, Ny)
+        marginal_loglh = zeros(T - n_presample_periods)
     end
 
     # Iterate through regimes
@@ -144,7 +146,7 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
 
         if allout
             L, z, P, pred[:,ts], vpred[:,:,ts], filt[:,ts], vfilt[:,:,ts],
-            yprederror[:,ts], ystdprederror[:,ts], _, _, z0_, P0_ =
+            yprederror[:,ts], ystdprederror[:,ts], _, _, z0_, P0_, marginal_loglh[ts] =
                 kalman_filter(regime_data, TTTs[i], RRRs[i], CCCs[i], QQs[i], ZZs[i], DDs[i], EEs[i], z, P;
                               allout = true, n_presample_periods = T0)
 
@@ -168,7 +170,8 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
         rmse = sqrt(mean((yprederror.^2)', 1))
         rmsd = sqrt(mean((ystdprederror.^2)', 1))
 
-        return log_likelihood, z, P, pred, vpred, filt, vfilt, yprederror, ystdprederror, rmse, rmsd, z0, P0
+        return log_likelihood, z, P, pred, vpred, filt, vfilt, yprederror, ystdprederror, rmse, rmsd, z0, P0,
+        marginal_loglh
     else
         return log_likelihood, z, P
     end
@@ -202,14 +205,14 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
     P = P0
 
     # Initialize outputs
-    log_likelihood = zero(S)
+    marginal_loglh = zeros(T - n_presample_periods)
     if allout
-        pred          = zeros(S, Nz, T)
-        vpred         = zeros(S, Nz, Nz, T)
-        filt          = zeros(S, Nz, T)
-        vfilt         = zeros(S, Nz, Nz, T)
-        yprederror    = NaN*zeros(S, Ny, T)
-        ystdprederror = NaN*zeros(S, Ny, T)
+        pred                = zeros(S, Nz, T)
+        vpred               = zeros(S, Nz, Nz, T)
+        filt                = zeros(S, Nz, T)
+        vfilt               = zeros(S, Nz, Nz, T)
+        yprederror          = NaN*zeros(S, Ny, T)
+        ystdprederror       = NaN*zeros(S, Ny, T)
     end
 
     V = RRR*QQ*RRR' # V = Var(z_t) = Var(Rϵ_t)
@@ -243,7 +246,7 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
         ## Compute marginal log-likelihood, log P(y_t|y_1,...y_{t-1},θ)
         ## log P(y_1,...,y_T|θ) ∝ log P(y_1|θ) + log P(y_2|y_1,θ) + ... + P(y_T|y_1,...,y_{T-1},θ)
         if t > n_presample_periods
-            log_likelihood += -log(det(V))/2 - first(dy'*ddy/2) - Ny_t*log(2*pi)/2
+            marginal_loglh[t - n_presample_periods] = -log(det(V))/2 - first(dy'*ddy/2) - Ny_t*log(2*pi)/2
         end
 
         ## Update
@@ -257,6 +260,8 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
 
     end # of loop through periods
 
+    log_likelihood = sum(marginal_loglh)
+
     if allout && n_presample_periods > 0
         mainsample_periods = n_presample_periods+1:T
 
@@ -266,19 +271,20 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
         z0 = filt[:,     n_presample_periods]
         P0 = vfilt[:, :, n_presample_periods]
 
-        pred          = pred[:,     mainsample_periods]
-        vpred         = vpred[:, :, mainsample_periods]
-        filt          = filt[:,     mainsample_periods]
-        vfilt         = vfilt[:, :, mainsample_periods]
-        yprederror    = yprederror[:,  mainsample_periods]
-        ystdprederror = ystdprederror[:, mainsample_periods]
+        pred            = pred[:,     mainsample_periods]
+        vpred           = vpred[:, :, mainsample_periods]
+        filt            = filt[:,     mainsample_periods]
+        vfilt           = vfilt[:, :, mainsample_periods]
+        yprederror      = yprederror[:,  mainsample_periods]
+        ystdprederror   = ystdprederror[:, mainsample_periods]
     end
 
     if allout
         rmse = sqrt(mean((yprederror.^2)', 1))
         rmsd = sqrt(mean((ystdprederror.^2)', 1))
 
-        return log_likelihood, z, P, pred, vpred, filt, vfilt, yprederror, ystdprederror, rmse, rmsd, z0, P0
+        return log_likelihood, z, P, pred, vpred, filt, vfilt, yprederror, ystdprederror,
+        rmse, rmsd, z0, P0, marginal_loglh
     else
         return log_likelihood, z, P
     end
