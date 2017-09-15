@@ -13,6 +13,7 @@ tempered_particle_filter{S<:AbstractFloat}(t::Tuning, data::Array{S}, Φ::Functi
 Executes tempered particle filter.
 
 ### Inputs
+
 - `data`: (`n_observables` x `hist_periods`) size `Matrix{S}` of data for observables.
 - `Φ`: The state transition function: s_t = Φ(s_t-1, ϵ_t)
 - `Ψ`: The measurement equation: y_t = Ψ(s_t, u_t)
@@ -21,6 +22,7 @@ Executes tempered particle filter.
 - `s_init`: (`n_observables` x `n_particles`) initial state vector
 
 ### Keyword Arguments
+
 - `verbose`: Indicates desired nuance of outputs. Default to `:low`.
 - `include_presample`: Indicates whether to include presample in periods in the returned
    outputs. Defaults to `true`.
@@ -47,6 +49,7 @@ fixed schedule inputted directly into the tpf function.
 - `parallel`: Whether or not to run the algorithm with parallelized mutation and resampling steps.
 
 ### Outputs
+
 - `sum(lik)`: The tempered particle filter approximated log-likelihood
 - `lik`: (`hist_periods` x 1) vector returning log-likelihood per period t
 - `times`: (`hist_periods` x 1) vector returning elapsed runtime per period t

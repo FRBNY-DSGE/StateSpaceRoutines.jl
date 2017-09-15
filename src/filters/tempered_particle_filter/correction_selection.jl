@@ -54,36 +54,3 @@ function correction_selection!(φ_new::Float64, φ_old::Float64, y_t::Vector{Flo
     return loglik, id
 end
 
-"""
-```
-incremental_weight(φ_new::Float64, φ_old::Float64, y_t::Vector{Float64}, p_error::Vector{Float64},
-HH::Matrix{Float64}; initialize::Bool=false)
-```
-### Inputs
-- `φ_new::Float64`: current φ
-- `φ_old::Float64`: φ value before last
-- `y_t::Vector{Float64}`: Vector of observables for time t
-- `p_error::Vector{Float64}`: A single particle's error: y_t - Ψ(s_t)
-- `HH::Matrix{Float64}`: Measurement error covariance matrix
-
-### Keyword Arguments
-- `initialize::Bool`: Flag indicating whether one is solving for incremental weights during
-    the initialization of weights; default is `false`.
-
-### Output
-- Returns the incremental weight of single particle
-"""
-@inline function incremental_weight(φ_new::Float64, φ_old::Float64, y_t::Vector{Float64},
-                                    p_error::Vector{Float64}, HH::Matrix{Float64}; initialize::Bool = false)
-
-    # Initialization step (using 2π instead of φ_old)
-    if initialize
-        return (φ_new/(2*pi))^(length(y_t)/2) * (det(HH)^(-1/2)) *
-            exp(-1/2 * p_error' * φ_new * inv(HH) * p_error)[1]
-
-    # Non-initialization step (tempering and final iteration)
-    else
-        return (φ_new/φ_old)^(length(y_t)/2) *
-            exp(-1/2 * p_error' * (φ_new - φ_old) * inv(HH) * p_error)[1]
-    end
-end

@@ -19,9 +19,8 @@ module StateSpaceRoutines
     const VERBOSITY = Dict(:none => 0, :low => 1, :high => 2)
 
     include("filters/kalman_filter.jl")
-    include("filters/tempered_particle_filter/resample.jl")
+    include("filters/tempered_particle_filter/util.jl")
     include("filters/tempered_particle_filter/correction_selection.jl")
-    include("filters/tempered_particle_filter/solve_inefficiency.jl")
     include("filters/tempered_particle_filter/mutation.jl")
     include("filters/tempered_particle_filter/tempered_particle_filter.jl")
 
