@@ -17,6 +17,7 @@ Cov(ϵ_t, η_t) = 0
 The provided algorithms are:
 
 - Kalman filter (`kalman_filter`)
+- Tempered particle filter (`tempered_particle_filter`): ["Tempered Particle Filtering"](https://federalreserve.gov/econresdata/feds/2016/files/201607pap.pdf) (2016)
 - Kalman smoothers:
   + `hamilton_smoother`: James Hamilton, [_Time Series Analysis_](https://www.amazon.com/Time-Analysis-James-Douglas-Hamilton/dp/0691042896) (1994)
   + `koopman_smoother`: S.J. Koopman, ["Disturbance Smoother for State Space Models"](https://www.jstor.org/stable/2336762) (_Biometrika_, 1993)
@@ -29,6 +30,8 @@ The provided algorithms are:
 
 ```
 kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0 = Vector(), P0 = Matrix(); allout = true, n_presample_periods = 0)
+tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; verbose, fixed_sched, r_star, c, accept_rate, target, xtol,
+resampling_method, N_MH, n_particles, n_presample_periods, adaptive, allout, parallel)
 
 hamilton_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0; n_presample_periods = 0)
 koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, z0, P0, pred, vpred; n_presample_periods = 0)
@@ -38,6 +41,11 @@ durbin_koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0; n_presample
 
 For more information, see the documentation for each function (e.g. by entering
 `?kalman_filter` in the REPL).
+
+
+
+
+
 
 
 ## Regime-Switching Methods
@@ -67,3 +75,8 @@ koopman_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, z0, P0, 
 carter_kohn_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, EEs, z0, P0; n_presample_periods = 0, draw_states = true)
 durbin_koopman_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, EEs, z0, P0; n_presample_periods = 0, draw_states = true)
 ```
+
+
+
+
+
