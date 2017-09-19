@@ -1,6 +1,6 @@
 """
 ```
-tempered_particle_filter{S<:AbstractFloat}(t::Tuning, data::Array{S}, Φ::Function,
+tempered_particle_filter{S<:AbstractFloat}(data::Array{S}, Φ::Function,
                          Ψ::Function, F_ϵ::Distribution, F_u::Distribution, s_init::Matrix{S};
                          verbose::Symbol = :high, include_presample::Bool = true,
                          fixed_sched::Vector{S} = zeros(0), r_star::S = 2.,]
