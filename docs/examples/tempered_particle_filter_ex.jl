@@ -1,4 +1,5 @@
 using DSGE, StateSpaceRoutines
+using QuantEcon: solve_discrete_lyapunov
 using DataFrames
 
 # Setup the model and data
@@ -38,7 +39,9 @@ tuning = Dict(:r_star => 2., :c => 0.3, :accept_rate => 0.4, :target => 0.4,
 
 # Generation of the initial state draws
 
-s0 = zeros(n_states_augmented(m))
-s_init = initialize_state_draws(s0, F_ϵ, Φ, tuning[:n_particles])
-
+n_states = n_states_augmented(m)
+s0 = zeros(n_states)
+P0 = solve_discrete_lyapunov(TTT, RRR*QQ*RRR')
+U, E, V = svd(P0)
+s_init = s0 .+ U*diagm(sqrt(E))*randn(n_states, tuning[:n_particles])
 tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning...)
