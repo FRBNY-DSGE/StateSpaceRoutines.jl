@@ -205,7 +205,7 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
     P = P0
 
     # Initialize outputs
-    marginal_loglh = zeros(T - n_presample_periods)
+    marginal_loglh = zeros(T)
     if allout
         pred                = zeros(S, Nz, T)
         vpred               = zeros(S, Nz, Nz, T)
@@ -246,7 +246,7 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
         ## Compute marginal log-likelihood, log P(y_t|y_1,...y_{t-1},θ)
         ## log P(y_1,...,y_T|θ) ∝ log P(y_1|θ) + log P(y_2|y_1,θ) + ... + P(y_T|y_1,...,y_{T-1},θ)
         if t > n_presample_periods
-            marginal_loglh[t - n_presample_periods] = -log(det(V))/2 - first(dy'*ddy/2) - Ny_t*log(2*pi)/2
+            marginal_loglh[t] = -log(det(V))/2 - first(dy'*ddy/2) - Ny_t*log(2*pi)/2
         end
 
         ## Update
@@ -260,24 +260,28 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
 
     end # of loop through periods
 
-    log_likelihood = sum(marginal_loglh)
-
-    if allout && n_presample_periods > 0
+    if n_presample_periods > 0
         mainsample_periods = n_presample_periods+1:T
 
-        # If we choose to discard presample periods, then we reassign `z0`
-        # and `P0` to be their values at the end of the presample/beginning
-        # of the main sample
-        z0 = filt[:,     n_presample_periods]
-        P0 = vfilt[:, :, n_presample_periods]
+        marginal_loglh = marginal_loglh[mainsample_periods]
 
-        pred            = pred[:,     mainsample_periods]
-        vpred           = vpred[:, :, mainsample_periods]
-        filt            = filt[:,     mainsample_periods]
-        vfilt           = vfilt[:, :, mainsample_periods]
-        yprederror      = yprederror[:,  mainsample_periods]
-        ystdprederror   = ystdprederror[:, mainsample_periods]
+        if allout
+            # If we choose to discard presample periods, then we reassign `z0`
+            # and `P0` to be their values at the end of the presample/beginning
+            # of the main sample
+            z0 = filt[:,     n_presample_periods]
+            P0 = vfilt[:, :, n_presample_periods]
+
+            pred            = pred[:,     mainsample_periods]
+            vpred           = vpred[:, :, mainsample_periods]
+            filt            = filt[:,     mainsample_periods]
+            vfilt           = vfilt[:, :, mainsample_periods]
+            yprederror      = yprederror[:,  mainsample_periods]
+            ystdprederror   = ystdprederror[:, mainsample_periods]
+        end
     end
+
+    log_likelihood = sum(marginal_loglh)
 
     if allout
         rmse = sqrt(mean((yprederror.^2)', 1))
