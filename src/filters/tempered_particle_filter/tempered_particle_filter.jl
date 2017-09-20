@@ -215,7 +215,7 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
                 end
                 out = @sync @parallel (hcat) for i = 1:n_particles
                     mutation(Φ, Ψ, F_ϵ, F_u, φ_new, y_t, s_t_nontempered[:,i],
-                             s_lag_tempered[:,i], ε[:,i], c, N_MH)
+                             s_lag_tempered[:,i], ϵ[:,i], c, N_MH)
                     end
                 for i = 1:n_particles
                     s_t_nontempered[:,i] = out[i][1]
