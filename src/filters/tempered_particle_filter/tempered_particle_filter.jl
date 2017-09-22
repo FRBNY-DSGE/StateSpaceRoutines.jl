@@ -1,6 +1,5 @@
-"""
-```
-tempered_particle_filter{S<:AbstractFloat}(t::Tuning, data::Array{S}, Φ::Function,
+"""```
+tempered_particle_filter{S<:AbstractFloat}(data::Array{S}, Φ::Function,
                          Ψ::Function, F_ϵ::Distribution, F_u::Distribution, s_init::Matrix{S};
                          verbose::Symbol = :high, include_presample::Bool = true,
                          fixed_sched::Vector{S} = zeros(0), r_star::S = 2.,]
@@ -8,7 +7,8 @@ tempered_particle_filter{S<:AbstractFloat}(t::Tuning, data::Array{S}, Φ::Functi
                          xtol = 0., resampling_method::Symbol = :systematic,
                          N_MH::Int = 1, n_particles::Int = 1000,
                          n_presample_periods::Int = 0, adaptive::bool = true,
-                         allout::Bool = true, parallel::Bool = false)
+                         allout::Bool = true, parallel::Bool = false,
+                         testing = false)
 ```
 Executes tempered particle filter.
 
@@ -61,7 +61,8 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
                                                     r_star::S = 2., c::S = 0.3, accept_rate::S = 0.4, target::S = 0.4,
                                                     xtol::S = 0., resampling_method = :systematic, N_MH::Int = 1,
                                                     n_particles::Int = 1000, n_presample_periods::Int = 0,
-                                                    adaptive::Bool = true, allout::Bool = true, parallel::Bool = false)
+                                                    adaptive::Bool = true, allout::Bool = true, parallel::Bool = false,
+                                                    testing::Bool = false)
     #--------------------------------------------------------------
     # Setup
     #--------------------------------------------------------------
@@ -77,22 +78,56 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
     end
 
     # Initialization of constants and output vectors
-    n_observables = size(data, 1)
-    n_states      = size(s_init, 1)
-    T             = size(data, 2)
-    lik           = zeros(T)
-    times         = zeros(T)
+    n_observables, T = size(data)
+    n_states         = size(s_init, 1)
+    lik              = zeros(T)
+    times            = zeros(T)
 
     # Ensuring Φ, Ψ broadcast to matrices
-    Φ_bcast(s_t1::Matrix{S}, ϵ_t1::Matrix{S}) = hcat([Φ(s_t1[:,i], ϵ_t1[:,i]) for i in 1:size(s_t1, 2)]...)
-    Ψ_bcast(s_t1::Matrix{S}, u_t1::Matrix{S}) = hcat([Ψ(s_t1[:,i], u_t1[:,i]) for i in 1:size(s_t1, 2)]...)
+    function Φ_bcast(s_t1::Matrix{S}, ϵ_t1::Matrix{S})
+        s_t = similar(s_t1)
+        for i in 1:n_particles
+            s_t[:, i] = Φ(s_t1[:, i], ϵ_t1[:, i])
+        end
+        return s_t
+    end
 
+    function Ψ_bcast(s_t::Matrix{S}, u_t::Matrix{S})
+        y_t = similar(u_t)
+        for i in 1:n_particles
+            y_t[:, i] = Ψ(s_t[:, i], u_t[:, i])
+        end
+        return y_t
+    end
+
+    # Temporarily commented out because the parallel implementation is slower than the serial
+    # function Φ_bcast(s_t1::Matrix{S}, ϵ_t1::Matrix{S})
+        # s_t = @sync @parallel (hcat) for i in 1:n_particles
+            # Φ(s_t1[:, i], ϵ_t1[:, i])
+        # end
+    # end
+
+    # function Ψ_bcast(s_t::Matrix{S}, u_t::Matrix{S})
+        # y_t = @sync @parallel (hcat) for i in 1:n_particles
+            # Ψ(s_t[:, i], u_t[:, i])
+        # end
+    # end
     #--------------------------------------------------------------
     # Main Algorithm: Tempered Particle Filter
     #--------------------------------------------------------------
 
     # Draw initial particles from the distribution of s₀: N(s₀, P₀)
     s_lag_tempered = s_init
+
+    if testing && !adaptive
+        path = dirname(@__FILE__)
+        file = h5open("$path/../../../test/reference/tempered_particle_filter_args.h5", "r")
+        ϵ = read(file, "eps")
+        all_ϵ_mutation = read(file, "eps_mutation")
+        all_ids = read(file, "all_ids")
+        test_ind = 1
+        close(file)
+    end
 
     for t = 1:T
 
@@ -108,14 +143,19 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
         y_t = data[:,t]
 
         # Remove rows/columns of series with NaN values
-        nonmissing          = !isnan(y_t)
+        nonmissing          = .!isnan.(y_t)
         y_t                 = y_t[nonmissing]
         n_observables_t     = length(y_t)
+        Ψ_t                 = (x, ϵ) -> Ψ(x, ϵ)[nonmissing]
         Ψ_bcast_t           = (x, ϵ) -> Ψ_bcast(x, ϵ)[nonmissing, :]
         HH_t                = F_u.Σ.mat[nonmissing, nonmissing]
+        inv_HH_t            = inv(HH_t)
+        det_HH_t            = det(HH_t)
 
         # Draw random shock ϵ
-        ϵ = rand(F_ϵ, n_particles)
+        if !testing || adaptive
+            ϵ = rand(F_ϵ, n_particles)
+        end
 
         # Forecast forward one time step
         s_t_nontempered = Φ_bcast(s_lag_tempered, ϵ)
@@ -125,8 +165,8 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
 
         # Solve for initial tempering parameter φ_1
         if adaptive
-            init_Ineff_func(φ) = solve_inefficiency(φ, 2.0*pi, y_t, p_error, HH_t;
-                                                    initialize = true) - r_star
+            init_Ineff_func(φ) = solve_inefficiency(φ, 0.0, y_t, p_error, inv_HH_t, det_HH_t;
+                                                    parallel = false, initialize = true) - r_star
             φ_1 = fzero(init_Ineff_func, 1e-30, 1.0, xtol = xtol)
         else
             φ_1 = fixed_sched[1]
@@ -138,9 +178,14 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
         end
 
         # Correct and resample particles
-        loglik, id = correction_selection!(φ_1, 0.0, y_t, p_error, HH_t, n_particles,
-                                           initialize = true, parallel = parallel,
-                                           resampling_method = resampling_method)
+        if testing && !adaptive
+            loglik, _ = correction_selection!(φ_1, 0.0, y_t, p_error, HH_t, n_particles, initialize = true,
+                                               parallel = false, resampling_method = resampling_method)
+            id = all_ids[:, test_ind]
+        else
+            loglik, id = correction_selection!(φ_1, 0.0, y_t, p_error, HH_t, n_particles, initialize = true,
+                                               parallel = false, resampling_method = resampling_method)
+        end
 
         # Update likelihood
         lik[t] += loglik
@@ -165,13 +210,14 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
             p_error = y_t .- Ψ_bcast_t(s_t_nontempered, zeros(n_observables_t, n_particles))
 
             # Define inefficiency function
-            init_ineff_func(φ) = solve_inefficiency(φ, φ_old, y_t, p_error, HH_t) - r_star
+            init_ineff_func(φ) = solve_inefficiency(φ, φ_old, y_t, p_error, inv_HH_t, det_HH_t;
+                                                    parallel = false, initialize = false) - r_star
             fphi_interval = [init_ineff_func(φ_old) init_ineff_func(1.0)]
 
             # The below boolean checks that a solution exists within interval
-            if prod(sign(fphi_interval)) == -1 && adaptive
-                φ_new = fzero(init_ineff_func, φ_old, 1., xtol=xtol)
-            elseif prod(sign(fphi_interval)) != -1 && adaptive
+            if prod(sign.(fphi_interval)) == -1 && adaptive
+                φ_new = fzero(init_ineff_func, φ_old, 1., xtol = xtol)
+            elseif prod(sign.(fphi_interval)) != -1 && adaptive
                 φ_new = 1.
             else # fixed φ
                 φ_new = fixed_sched[count]
@@ -182,8 +228,14 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
             end
 
             # Correct and resample particles
-            loglik, id = correction_selection!(φ_new, φ_old, y_t, p_error, HH_t, n_particles;
-                                              parallel = parallel)
+            if testing && !adaptive
+                loglik, _ = correction_selection!(φ_1, 0.0, y_t, p_error, HH_t, n_particles, initialize = true,
+                                                   parallel = false, resampling_method = resampling_method)
+                id = all_ids[:, test_ind + 1]
+            else
+                loglik, id = correction_selection!(φ_new, φ_old, y_t, p_error, HH_t, n_particles;
+                                                  parallel = false, resampling_method = resampling_method)
+            end
 
             # Update likelihood
             lik[t] += loglik
@@ -195,7 +247,9 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
             p_error         = p_error[:,id]
 
             # Update value for c
-            c = update_c!(c, accept_rate, target)
+            if !testing || adaptive
+                c = update_c!(c, accept_rate, target)
+            end
 
             if VERBOSITY[verbose] >= VERBOSITY[:high]
                 @show c
@@ -208,35 +262,21 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
                 print("Mutation ")
             end
 
-            if parallel
-                if VERBOSITY[verbose] >= VERBOSITY[:high]
-                    tic()
-                    print("(in parallel) ")
-                end
-                out = @sync @parallel (hcat) for i = 1:n_particles
-                    mutation(Φ, Ψ, F_ϵ, F_u, φ_new, y_t, s_t_nontempered[:,i],
-                             s_lag_tempered[:,i], ε[:,i], c, N_MH)
-                    end
-                for i = 1:n_particles
-                    s_t_nontempered[:,i] = out[i][1]
-                    ϵ[:,i] = out[i][2]
-                    accept_vec[i] = out[i][3]
-                end
+            if testing
+                ϵ_mutation = all_ϵ_mutation[:,:,test_ind]
+                test_ind += 1
+                s_t_nontempered, ϵ, accept_rate = mutation(Φ, Ψ_t, F_ϵ, F_u, φ_new, y_t,
+                                                           s_t_nontempered, s_lag_tempered, ϵ, c, N_MH;
+                                                           parallel = parallel, ϵ_testing = ϵ_mutation)
             else
-                if VERBOSITY[verbose] >= VERBOSITY[:high]
-                    tic()
-                    print("(not parallel) ")
-                end
-                for i = 1:n_particles
-                    s_t_nontempered[:,i], ϵ[:,i], accept_vec[i]  = mutation(Φ, Ψ, F_ϵ, F_u, φ_new, y_t,
-                                                                            s_t_nontempered[:,i], s_lag_tempered[:,i],
-                                                                            ϵ[:,i], c, N_MH)
-                end
+                s_t_nontempered, ϵ, accept_rate = mutation(Φ, Ψ_t, F_ϵ, F_u, φ_new, y_t,
+                                                           s_t_nontempered, s_lag_tempered, ϵ, c, N_MH;
+                                                           parallel = parallel)
             end
 
-            if VERBOSITY[verbose] >= VERBOSITY[:high]
-                toc()
-            end
+            # if VERBOSITY[verbose] >= VERBOSITY[:high]
+                # toc()
+            # end
 
             # Calculate average acceptance rate
             accept_rate = mean(accept_vec)

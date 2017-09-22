@@ -26,7 +26,7 @@ error vectors, reset error vectors to 1,and calculate new log likelihood.
 function correction_selection!(φ_new::Float64, φ_old::Float64, y_t::Vector{Float64},
                                p_error::Matrix{Float64}, HH::Matrix{Float64}, n_particles::Int;
                                initialize::Bool = false, parallel::Bool = false,
-                               resampling_method::Symbol = :systematic)
+                               resampling_method::Symbol = :multinomial)
     # Initialize vector
     incremental_weights = zeros(n_particles)
 
