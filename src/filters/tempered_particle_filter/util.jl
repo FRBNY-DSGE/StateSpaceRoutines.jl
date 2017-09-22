@@ -58,7 +58,7 @@ end
 """
 ```
 solve_inefficiency{S<:AbstractFloat}(φ_new::S, φ_old::S, y_t::Vector{S}, p_error::Matrix{S},
-HH::Matrix{S}; initialize::Bool=false)
+inv_HH::Matrix{S}, det_HH::S; initialize::Bool=false)
 ```
 Returns the value of the ineffeciency function InEff(φₙ), where:
 
@@ -79,7 +79,8 @@ Where ∑ is over j=1...M particles, and incremental weight is:
 - `φ_old`: φₙ₋₁
 - `y_t`: vector of observables for time t
 - `p_error`: (`n_states` x `n_particles`) matrix of particles' errors yₜ - Ψ(sₜʲ'ⁿ⁻¹) in columns
-- `HH`: measurement error covariance matrix, ∑ᵤ
+- `inv_HH`: The inverse of the measurement error covariance matrix, ∑ᵤ
+- `det_HH`: The determinant of the measurement error covariance matrix, ∑ᵤ
 
 ### Keyword Arguments
 
@@ -90,26 +91,39 @@ Where ∑ is over j=1...M particles, and incremental weight is:
 
 """
 function solve_inefficiency{S<:AbstractFloat}(φ_new::S, φ_old::S, y_t::Vector{S},
-                                              p_error::Matrix{S}, HH::Matrix{S}; initialize::Bool=false)
+                                              p_error::Matrix{S}, inv_HH::Matrix{S},
+                                              det_HH::S; initialize::Bool = false,
+                                              parallel::Bool = false)
 
     n_particles = size(p_error, 2)
     n_obs       = length(y_t)
-    w           = zeros(n_particles)
-    inv_HH      = inv(HH)
-    det_HH      = det(HH)
 
     # Inefficiency function during initialization
     if initialize
-        for i=1:n_particles
-            w[i] = ((φ_new/(2*pi))^(n_obs/2) * (det_HH^(-1/2)) * exp(-1/2 * p_error[:,i]' *
-                                                φ_new * inv_HH * p_error[:,i]))[1]
+        c = (φ_new/(2*pi))^(n_obs/2) * (det_HH^(-1/2))
+        if parallel
+            w = @parallel (vcat) for i = 1:n_particles
+                c*exp(-1/2 * φ_new * dot(p_error[:,i], inv_HH * p_error[:,i]))
+            end
+        else
+            w = zeros(n_particles)
+            for i = 1:n_particles
+                w[i] = c*exp(-1/2 * φ_new * dot(p_error[:,i], inv_HH * p_error[:,i]))
+            end
         end
 
     # Inefficiency function during tempering steps
     else
-        for i=1:n_particles
-            w[i] = (φ_new/φ_old)^(n_obs/2) * exp(-1/2 * p_error[:,i]' *
-                                                 (φ_new-φ_old) * inv_HH * p_error[:,i])[1]
+        c = (φ_new/φ_old)^(n_obs/2)
+        if parallel
+            w = @parallel (vcat) for i = 1:n_particles
+                c*exp(-1/2 * (φ_new-φ_old) * dot(p_error[:,i], inv_HH * p_error[:,i]))
+            end
+        else
+            w = zeros(n_particles)
+            for i = 1:n_particles
+                w[i] = c*exp(-1/2 * (φ_new-φ_old) * dot(p_error[:,i], inv_HH * p_error[:,i]))
+            end
         end
     end
     W = w/mean(w)
@@ -173,15 +187,13 @@ Reindexing and reweighting samples from a degenerate distribution
 - `vec(indx)`: id
         the newly assigned indices of parameter draws.
 """
-function resample(weights::AbstractArray; method::Symbol = :systematic,
+function resample(weights::AbstractArray; method::Symbol = :multinomial,
                   parallel::Bool = false, testing::Bool = false)
     if method == :systematic
         n_parts = length(weights)
-        weights = weights./sum(weights)
         # Stores cumulative weights until given index
-        cumulative_weights = cumsum(weights)
-        weights = weights'
-        uu = zeros(n_parts, 1)
+        cumulative_weights = cumsum(weights./sum(weights))
+        uu = Vector{Float64}(n_parts)
 
         # Random part of algorithm - choose offset of first index by some u~U[0,1)
         rand_offset = rand()
@@ -191,37 +203,23 @@ function resample(weights::AbstractArray; method::Symbol = :systematic,
             uu[j] = (j - 1) + rand_offset
         end
 
-        # Initialize output vector
-        indx = zeros(n_parts, 1)
-
         # Function solves where an individual "spoke" lands
-        function subsys(i)
-            u = uu[i]/n_parts
-            j = 1
-            while j <= n_parts
-                if (u < cumulative_weights[j])
-                    break
-                end
-                j += 1
-            end
-            indx[i] = j
+        function subsys(i::Int)
+            findfirst(j -> cumulative_weights[j] > uu[i]/n_parts, 1:length(cumulative_weights))
         end
 
         # Map function if parallel
         if parallel
-            parindx =
+            indx =
             @sync @parallel (vcat) for j in 1:n_parts
                 subsys(j)
             end
         else
-            parindx = [subsys(j) for j = 1:n_parts]'
+            indx = [subsys(j) for j = 1:n_parts]
         end
 
-        # Transpose and round output indices
-        indx = parindx'
-        indx = round(Int, indx)
+        return indx
 
-        return vec(indx)
     elseif method == :multinomial
         n_parts = length(weights)
         weights = Weights(weights./sum(weights))
