@@ -1,8 +1,11 @@
 using Base.Test, HDF5
-using StateSpaceRoutines
+using StateSpaceRoutines, DSGE
+using DataFrames
+using QuantEcon: solve_discrete_lyapunov
 
 my_tests = [
             "kalman_filter"
+            "tempered_particle_filter"
             "smoothers"
             ]
 
