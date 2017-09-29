@@ -26,3 +26,4 @@ solving the discrete-time Lyapunov equation for the variance-covariance matrix o
 - When executing the filter, the default return value is the approximated log-likelihood value; however, if the
 keyword argument `allout` is set to be true, then the filter will also return the marginal likelihoods at each
 period as well as the amount of time it took each marginal likelihood to be calculated.
+

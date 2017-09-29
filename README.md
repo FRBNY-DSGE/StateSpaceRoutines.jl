@@ -36,6 +36,7 @@ Cov(ϵ_t, u_t) = 0
 
 
 
+
 ## Linear Estimation
 
 ### Linear State Space System
@@ -100,6 +101,17 @@ koopman_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, z0, P0, 
 carter_kohn_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, EEs, z0, P0; n_presample_periods = 0, draw_states = true)
 durbin_koopman_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, EEs, z0, P0; n_presample_periods = 0, draw_states = true)
 ```
+
+
+
+
+
+
+
+
+
+
+
 
 
 
