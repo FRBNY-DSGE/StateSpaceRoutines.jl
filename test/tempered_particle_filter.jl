@@ -27,9 +27,10 @@ F_u = Distributions.MvNormal(zeros(size(HH, 1)), HH)
 s_init = h5read("reference/tempered_particle_filter_args.h5", "s_init")
 fixed_sched = [0.2, 0.5, 1.0]
 
-loglik, lik, _ = tempered_particle_filter(data[:,1]'', Φ, Ψ, F_ϵ, F_u, s_init; r_star = 2., c = 0.3, accept_rate = 0.4,
-                         target = 0.4, xtol = 0., resampling_method = :multinomial, N_MH = 1,
-                         n_particles = 500, n_presample_periods = 0, verbose = :none,
+test_data = reshape(data[:, 1], 3, 1)
+loglik, lik, _ = tempered_particle_filter(test_data, Φ, Ψ, F_ϵ, F_u, s_init; r_star = 2., c = 0.3,
+                         accept_rate = 0.4, target = 0.4, xtol = 0., resampling_method = :multinomial,
+                         N_MH = 1, n_particles = 500, n_presample_periods = 0, verbose = :none,
                          adaptive = false, fixed_sched = fixed_sched, allout = true, parallel = false,
                          testing = true)
 
@@ -38,8 +39,8 @@ test_loglik = read(file, "log_lik")
 test_lik    = read(file, "incr_lik")
 close(file)
 
-@test_approx_eq test_loglik loglik
-@test_approx_eq test_lik lik
+@test test_loglik ≈ (loglik)
+@test test_lik ≈ lik
 
 tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; n_particles = 500, verbose = :none);
 
