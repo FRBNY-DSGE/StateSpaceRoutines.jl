@@ -167,8 +167,8 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
     end
 
     if allout
-        rmse = sqrt(mean((yprederror.^2)', 1))
-        rmsd = sqrt(mean((ystdprederror.^2)', 1))
+        rmse = sqrt.(mean((yprederror.^2)', 1))
+        rmsd = sqrt.(mean((ystdprederror.^2)', 1))
 
         return log_likelihood, z, P, pred, vpred, filt, vfilt, yprederror, ystdprederror, rmse, rmsd, z0, P0,
         marginal_loglh
@@ -180,7 +180,7 @@ end
 function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
     TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
     QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, EE::Matrix{S},
-    z0::Vector{S} = Vector{S}(), P0::Matrix{S} = Matrix{S}();
+    z0::Vector{S} = Vector{S}(), P0::Matrix{S} = Matrix{S}(0,0);
     allout::Bool = true, n_presample_periods::Int = 0)
 
     # Dimensions
@@ -192,7 +192,7 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
     # Populate initial conditions if they are empty
     if isempty(z0) || isempty(P0)
         e, _ = eig(TTT)
-        if all(abs(e) .< 1.)
+        if all(abs.(e) .< 1.)
             z0 = (UniformScaling(1) - TTT)\CCC
             P0 = solve_discrete_lyapunov(TTT, RRR*QQ*RRR')
         else
@@ -220,7 +220,7 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
     for t = 1:T
         # Index out rows of the measurement equation for which we have
         # nonmissing data in period t
-        nonmissing = !isnan(data[:, t])
+        nonmissing = .!isnan.(data[:, t])
         y_t  = data[nonmissing, t]
         ZZ_t = ZZ[nonmissing, :]
         DD_t = DD[nonmissing]
@@ -240,7 +240,7 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
             pred[:, t]                   = z
             vpred[:, :, t]               = P
             yprederror[nonmissing, t]    = dy
-            ystdprederror[nonmissing, t] = dy ./ sqrt(diag(V))
+            ystdprederror[nonmissing, t] = dy ./ sqrt.(diag(V))
         end
 
         ## Compute marginal log-likelihood, log P(y_t|y_1,...y_{t-1},θ)
@@ -284,8 +284,8 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
     log_likelihood = sum(marginal_loglh)
 
     if allout
-        rmse = sqrt(mean((yprederror.^2)', 1))
-        rmsd = sqrt(mean((ystdprederror.^2)', 1))
+        rmse = sqrt.(mean((yprederror.^2)', 1))
+        rmsd = sqrt.(mean((ystdprederror.^2)', 1))
 
         return log_likelihood, z, P, pred, vpred, filt, vfilt, yprederror, ystdprederror,
         rmse, rmsd, z0, P0, marginal_loglh

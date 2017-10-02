@@ -24,7 +24,7 @@ states[:durbin_koopman], shocks[:durbin_koopman] = durbin_koopman_smoother(data,
 
 # Check that last-period smoothed states equal last-period filtered states
 for smoother in [:hamilton, :koopman, :carter_kohn, :durbin_koopman]
-    @test_approx_eq filt[:, end] states[smoother][:, end]
+    @test filt[:, end] ≈ states[smoother][:, end]
 end
 
 # Compare to expected output
@@ -33,8 +33,8 @@ exp_states, exp_shocks = h5open("$path/reference/smoothers_out.h5", "r") do file
 end
 
 for smoother in [:hamilton, :koopman, :carter_kohn, :durbin_koopman]
-    @test_approx_eq exp_states states[smoother]
-    @test_approx_eq exp_shocks shocks[smoother]
+    @test exp_states ≈ states[smoother]
+    @test exp_shocks ≈ shocks[smoother]
 end
 
 # Make sure that simulation smoothers run with `draw_states` on
