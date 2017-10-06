@@ -17,17 +17,16 @@ update!(m, params)
 system  = compute_system(m)
 TTT     = system[:TTT]
 RRR     = system[:RRR]
+CCC     = system[:CCC]
 HH      = system[:EE]
 DD      = system[:DD]
 ZZ      = system[:ZZ]
 QQ      = system[:QQ]
-U, E, V = svd(QQ)
-sqrtS2  = RRR*U*diagm(sqrt(E))
 
-Φ(s_t::Vector{Float64}, ϵ_t::Vector{Float64}) = TTT*s_t + sqrtS2*ϵ_t
+Φ(s_t::Vector{Float64}, ϵ_t::Vector{Float64}) = TTT*s_t + RRR*ϵ_t + CCC
 Ψ(s_t::Vector{Float64}, u_t::Vector{Float64}) = ZZ*s_t + DD + u_t
 
-F_ϵ = Distributions.MvNormal(zeros(size(QQ, 1)), eye(size(QQ, 1)))
+F_ϵ = Distributions.MvNormal(zeros(size(QQ, 1)), QQ)
 F_u = Distributions.MvNormal(zeros(size(HH, 1)), HH)
 
 # Tuning of the tempered particle filter algorithm
@@ -43,5 +42,5 @@ n_states = n_states_augmented(m)
 s0 = zeros(n_states)
 P0 = solve_discrete_lyapunov(TTT, RRR*QQ*RRR')
 U, E, V = svd(P0)
-s_init = s0 .+ U*diagm(sqrt(E))*randn(n_states, tuning[:n_particles])
+s_init = s0 .+ U*diagm(sqrt.(E))*randn(n_states, tuning[:n_particles])
 tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning...)

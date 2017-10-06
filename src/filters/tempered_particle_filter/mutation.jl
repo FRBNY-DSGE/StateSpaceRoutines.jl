@@ -58,7 +58,14 @@ function mutation{S<:AbstractFloat}(Φ::Function, Ψ::Function, F_ϵ::Distributi
     # Metropolis-Hastings Steps
     #------------------------------------------------------------------------
     # Generate new draw of ε from a N(ε_init, c²I) distribution, c tuning parameter, I identity
-    ϵ_new = !testing ? ϵ_init + c^2 * randn(n_states, n_particles) : ϵ_testing
+    if !testing
+        ϵ_new = similar(ϵ_init)
+        for i in 1:n_particles
+            ϵ_new[:,i] = rand(MvNormal(ϵ_init[:,i], c*F_ϵ.Σ))
+        end
+    else
+        ϵ_new = ϵ_testing
+    end
 
     if parallel
         out = @sync @parallel (hcat) for i = 1:n_particles
