@@ -102,8 +102,8 @@ function durbin_koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{
     # Draw initial state α_0+ and sequence of shocks η+
     if draw_states
         U, eig, _ = svd(P0)
-        α_plus_t  = U * diagm(sqrt(eig)) * randn(Nz)
-        η_plus    = sqrt(QQs[1]) * randn(Ne, T)
+        α_plus_t  = U * diagm(sqrt.(eig)) * randn(Nz)
+        η_plus    = sqrt.(QQs[1]) * randn(Ne, T)
     else
         α_plus_t  = zeros(S, Nz)
         η_plus    = zeros(S, Ne, T)
@@ -131,7 +131,7 @@ function durbin_koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{
     end
 
     # Replace fake data with NaNs wherever actual data has NaNs
-    y_plus[isnan(data)] = NaN
+    y_plus[isnan.(data)] = NaN
 
     # Compute y* = y - y+
     y_star = data - y_plus

@@ -1,5 +1,4 @@
-julia 0.5
-DSGE
+julia 0.6
 Distributions
 Roots
 QuantEcon

@@ -1,4 +1,5 @@
-"""```
+"""
+```
 tempered_particle_filter{S<:AbstractFloat}(data::Array{S}, Φ::Function,
                          Ψ::Function, F_ϵ::Distribution, F_u::Distribution, s_init::Matrix{S};
                          verbose::Symbol = :high, include_presample::Bool = true,
@@ -273,10 +274,6 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
                                                            s_t_nontempered, s_lag_tempered, ϵ, c, N_MH;
                                                            parallel = parallel)
             end
-
-            # if VERBOSITY[verbose] >= VERBOSITY[:high]
-                # toc()
-            # end
 
             # Calculate average acceptance rate
             accept_rate = mean(accept_vec)

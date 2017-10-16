@@ -237,7 +237,7 @@ function koopman_disturbance_smoother{S<:AbstractFloat}(regime_indices::Vector{R
         for t in reverse(regime_periods)
             # If an element of the vector y_t is missing (NaN) for the observation t, the
             # corresponding row is ditched from the measurement equation
-            nonmissing = !isnan(data[:, t])
+            nonmissing = .!isnan.(data[:, t])
             y_t  = data[nonmissing, t]
             ZZ_t = ZZ[nonmissing, :]
             DD_t = DD[nonmissing]

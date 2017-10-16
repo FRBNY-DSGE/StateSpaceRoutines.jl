@@ -1,6 +1,5 @@
 using Base.Test, HDF5
-using StateSpaceRoutines, DSGE
-using DataFrames
+using StateSpaceRoutines
 using QuantEcon: solve_discrete_lyapunov
 
 my_tests = [

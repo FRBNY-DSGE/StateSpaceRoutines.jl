@@ -2,17 +2,7 @@
 
 [![Build Status](https://travis-ci.org/FRBNY-DSGE/DSGE.jl.svg)](https://travis-ci.org/FRBNY-DSGE/StateSpaceRoutines.jl)
 
-This package implements some common routines for state-space models with the
-following representation:
-
-```
-z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t    (transition equation)
-y_t     = DD  + ZZ*z_t  + η_t        (measurement equation)
-
-ϵ_t ∼ N(0, QQ)
-η_t ∼ N(0, EE)
-Cov(ϵ_t, η_t) = 0
-```
+This package implements some common routines for state-space models.
 
 The provided algorithms are:
 
@@ -25,12 +15,45 @@ The provided algorithms are:
   + `carter_kohn_smoother`: C.K. Carter and R. Kohn, ["On Gibbs Sampling for State Space Models"](https://www.jstor.org/stable/2337125) (_Biometrika_, 1994)
   + `durbin_koopman_smoother`: J. Durbin and S.J. Koopman, ["A Simple and Efficient Simulation Smoother for State Space Time Series Analysis"](https://www.jstor.org/stable/4140605) (_Biometrika_, 2002)
 
+## Nonlinear Estimation
 
-## Time-Invariant Methods
+The tempered particle filter is a particle filtering method which can approximate the log-likelihood value implied by a general (potentially non-linear) state space system with the following representation:
+
+### General State Space System
+```
+z_{t+1} = Φ(z_t, ϵ_t)        (transition equation)
+y_t     = Ψ(z_t) + u_t       (measurement equation)
+
+ϵ_t ∼ F_ϵ(∙; θ)
+u_t ∼ N(0, HH), where HH is the variance matrix of the i.i.d measurement error
+Cov(ϵ_t, u_t) = 0
+```
+- The documentation and code are located in [src/filters/tempered_particle_filter](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/doc/src/filters/tempered_particle_filter).
+- The example is located in [docs/examples/tempered_particle_filter](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/doc/docs/examples/tempered_particle_filter)
+
+
+
+
+
+
+
+## Linear Estimation
+
+### Linear State Space System
+```
+z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t    (transition equation)
+y_t     = DD  + ZZ*z_t  + η_t        (measurement equation)
+
+ϵ_t ∼ N(0, QQ)
+η_t ∼ N(0, EE)
+Cov(ϵ_t, η_t) = 0
+```
+
+
+### Time-Invariant Methods
 
 ```
 kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0 = Vector(), P0 = Matrix(); allout = true, n_presample_periods = 0)
-tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; verbose, fixed_sched, r_star, c, accept_rate, target, xtol,
 resampling_method, N_MH, n_particles, n_presample_periods, adaptive, allout, parallel)
 
 hamilton_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0; n_presample_periods = 0)
@@ -48,7 +71,10 @@ For more information, see the documentation for each function (e.g. by entering
 
 
 
-## Regime-Switching Methods
+
+
+
+### Regime-Switching Methods
 
 All of the provided algorithms can handle time-varying state-space systems. To
 do this, define `regime_indices`, a `Vector{Range{Int64}}` of length
@@ -75,6 +101,17 @@ koopman_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, z0, P0, 
 carter_kohn_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, EEs, z0, P0; n_presample_periods = 0, draw_states = true)
 durbin_koopman_smoother(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, EEs, z0, P0; n_presample_periods = 0, draw_states = true)
 ```
+
+
+
+
+
+
+
+
+
+
+
 
 
 
