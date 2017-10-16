@@ -71,7 +71,7 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
     # Ensuring the fixed φ schedule is bounded properly
     if !adaptive
         try
-            @assert fixed_sched[1] > 0. && fixed_sched[1] < 1.
+            @assert fixed_sched[1] > 0.
             @assert fixed_sched[end] == 1.
         catch
             throw("Invalid fixed φ schedule. It must be a range from [a,1] s.t. a > 0.")
