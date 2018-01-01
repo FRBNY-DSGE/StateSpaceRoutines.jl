@@ -28,8 +28,8 @@ y_t     = Ψ(z_t) + u_t       (measurement equation)
 u_t ∼ N(0, HH), where HH is the variance matrix of the i.i.d measurement error
 Cov(ϵ_t, u_t) = 0
 ```
-- The documentation and code are located in [src/filters/tempered_particle_filter](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/doc/src/filters/tempered_particle_filter).
-- The example is located in [docs/examples/tempered_particle_filter](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/doc/docs/examples/tempered_particle_filter)
+- The documentation and code are located in [src/filters/tempered_particle_filter](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/master/src/filters/tempered_particle_filter).
+- The example is located in [docs/examples/tempered_particle_filter](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/master/docs/examples/tempered_particle_filter)
 
 
 
