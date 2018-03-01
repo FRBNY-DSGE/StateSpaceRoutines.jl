@@ -122,17 +122,20 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
     Nz = size(TTTs[1], 1) # number of states
     Ny = size(ZZs[1],  1) # number of observables
 
+    @assert first(regime_indices[1]) == 1
+    @assert last(regime_indices[end]) == T
+
     # Initialize outputs
     z = z0
     P = P0
     log_likelihood = zero(S)
     if allout
-        pred  = zeros(S, Nz, T)
-        vpred = zeros(S, Nz, Nz, T)
-        filt  = zeros(S, Nz, T)
-        vfilt = zeros(S, Nz, Nz, T)
-        yprederror    = zeros(S, Ny, T)
-        ystdprederror = zeros(S, Ny, T)
+        pred  = zeros(S, Nz, T - n_presample_periods)
+        vpred = zeros(S, Nz, Nz, T - n_presample_periods)
+        filt  = zeros(S, Nz, T - n_presample_periods)
+        vfilt = zeros(S, Nz, Nz, T - n_presample_periods)
+        yprederror    = zeros(S, Ny, T - n_presample_periods)
+        ystdprederror = zeros(S, Ny, T - n_presample_periods)
         rmse  = zeros(S, 1, Ny)
         rmsd  = zeros(S, 1, Ny)
         marginal_loglh = zeros(T - n_presample_periods)
@@ -140,9 +143,14 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
 
     # Iterate through regimes
     for i = 1:length(regime_indices)
-        ts = regime_indices[i]
-        regime_data = data[:, ts]
-        T0 = i == 1 ? n_presample_periods : 0
+        regime_data = data[:, regime_indices[i]]
+        if i == 1
+            T0 = n_presample_periods
+            ts = 1:(last(regime_indices[i]) - n_presample_periods)
+        else
+            T0 = 0
+            ts = regime_indices[i] - n_presample_periods
+        end
 
         if allout
             L, z, P, pred[:,ts], vpred[:,:,ts], filt[:,ts], vfilt[:,:,ts],
