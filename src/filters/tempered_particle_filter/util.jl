@@ -90,79 +90,54 @@ Where ∑ is over j=1...M particles, and incremental weight is:
     w̃ₜʲ(φ₁) = (φ₁/2π)^(d/2)|∑ᵤ|^(1/2) exp{-1/2 [yₜ-Ψ(sₜʲ'ⁿ⁻¹)]' φ₁ ∑ᵤ⁻¹ [yₜ-Ψ(sₜʲ'ⁿ⁻¹)]}
 
 """
-function solve_inefficiency{S<:AbstractFloat}(φ_new::S, φ_old::S, y_t::Vector{S},
-                                              p_error::Matrix{S}, inv_HH::Matrix{S},
-                                              det_HH::S; initialize::Bool = false,
-                                              parallel::Bool = false)
+function solve_inefficiency{S<:AbstractFloat}(φ_new::S, coeff_terms::Vector{Float64}, exp_1_terms::Vector{Float64},
+                                              exp_2_terms::Vector{Float64}, n_obs::Int64; parallel::Bool = false)
 
-    n_particles = size(p_error, 2)
-    n_obs       = length(y_t)
+    n_particles = length(coeff_terms)
 
-    # Inefficiency function during initialization
-    if initialize
-        c = (φ_new/(2*pi))^(n_obs/2) * (det_HH^(-1/2))
-        if parallel
-            w = @parallel (vcat) for i = 1:n_particles
-                c*exp(-1/2 * φ_new * dot(p_error[:,i], inv_HH * p_error[:,i]))
-            end
-        else
-            w = zeros(n_particles)
-            for i = 1:n_particles
-                w[i] = c*exp(-1/2 * φ_new * dot(p_error[:,i], inv_HH * p_error[:,i]))
-            end
+    if parallel
+        w = @parallel (vcat) for i = 1:nparticles
+            incremental_weight(φ_new, coeff_terms[i], exp_1_terms[i], exp_2_terms[i], n_obs)
         end
-
-    # Inefficiency function during tempering steps
     else
-        c = (φ_new/φ_old)^(n_obs/2)
-        if parallel
-            w = @parallel (vcat) for i = 1:n_particles
-                c*exp(-1/2 * (φ_new-φ_old) * dot(p_error[:,i], inv_HH * p_error[:,i]))
-            end
-        else
-            w = zeros(n_particles)
-            for i = 1:n_particles
-                w[i] = c*exp(-1/2 * (φ_new-φ_old) * dot(p_error[:,i], inv_HH * p_error[:,i]))
-            end
+        w = Vector{Float64}(n_particles)
+        for i = 1:n_particles
+            w[i] = incremental_weight(φ_new, coeff_terms[i], exp_1_terms[i], exp_2_terms[i], n_obs)
         end
     end
+
     W = w/mean(w)
     return sum(W.^2)/n_particles
 end
 
-"""
-```
-incremental_weight(φ_new::Float64, φ_old::Float64, y_t::Vector{Float64}, p_error::Vector{Float64},
-HH::Matrix{Float64}; initialize::Bool=false)
-```
+function incremental_weight(φ_new::Float64, coeff_term::Float64, log_e_term_1::Float64,
+                            log_e_term_2::Float64, n_obs::Int64)
+    return φ_new^(n_obs/2)*coeff_term * exp(log_e_term_1) * exp(φ_new*log_e_term_2)
+end
 
-### Inputs
-
-- `φ_new::Float64`: current φ
-- `φ_old::Float64`: φ value before last
-- `y_t::Vector{Float64}`: Vector of observables for time t
-- `p_error::Vector{Float64}`: A single particle's error: y_t - Ψ(s_t)
-- `HH::Matrix{Float64}`: Measurement error covariance matrix
-
-### Keyword Arguments
-- `initialize::Bool`: Flag indicating whether one is solving for incremental weights during
-    the initialization of weights; default is `false`.
-
-### Output
-- Returns the incremental weight of single particle
-"""
-@inline function incremental_weight(φ_new::Float64, φ_old::Float64, y_t::Vector{Float64},
-                                    p_error::Vector{Float64}, HH::Matrix{Float64}; initialize::Bool = false)
+# The outputs of the weight_kernel function are meant to make calculating
+# the incremental weight much more efficient to speed up the adaptive φ finding
+# that way we're not doing the same matrix multiplication step (dot(p_error, inv_HH*p_error))
+# for every iteration of the root-solving algorithm
+# Also, the exponential terms are logged first and then exponentiated in the
+# incremental_weight calculation so the problem is well-conditioned (i.e. not exponentiating
+# very large negative numbers)
+function weight_kernel(φ_old::Float64, y_t::Vector{Float64},
+                       p_error::Vector{Float64}, det_HH::Float64, inv_HH::Matrix{Float64};
+                       initialize::Bool = false)
 
     # Initialization step (using 2π instead of φ_old)
     if initialize
-        return (φ_new/(2*pi))^(length(y_t)/2) * (det(HH)^(-1/2)) *
-            exp(-1/2 * p_error' * φ_new * inv(HH) * p_error)[1]
-
+        coeff_term = (2*pi)^(-length(y_t)/2) * det_HH^(-1/2)
+        log_e_term_1   = 0.
+        log_e_term_2   = -1/2 * dot(p_error, inv_HH * p_error)
+        return coeff_term, log_e_term_1, log_e_term_2
     # Non-initialization step (tempering and final iteration)
     else
-        return (φ_new/φ_old)^(length(y_t)/2) *
-            exp(-1/2 * p_error' * (φ_new - φ_old) * inv(HH) * p_error)[1]
+        coeff_term = (φ_old)^(-length(y_t)/2)
+        log_e_term_1   = -1/2 * (-φ_old) * dot(p_error, inv_HH * p_error)
+        log_e_term_2   = -1/2 * dot(p_error, inv_HH * p_error)
+        return coeff_term, log_e_term_1, log_e_term_2
     end
 end
 
@@ -228,4 +203,32 @@ function resample(weights::AbstractArray; method::Symbol = :multinomial,
     else
         throw("Invalid resampler. Set tuning field :resampling_method to either :systematic or :multinomial")
     end
+end
+
+function bisection(f::Function, a::Number, b::Number; tol::AbstractFloat=1e-1, maxiter::Integer=1000)
+    fa = f(a)
+    fa * f(b) <= 0 || throw("No real root in [a,b]")
+    i = 0
+    c = 0
+    while b-a > tol
+        i += 1
+        i != maxiter || throw("Max iteration exceeded")
+        c = (a+b)/2
+        fc = f(c)
+        if fc ≈ 0
+            break
+        elseif sign(fa) == sign(fc)
+            a = c
+            fa = fc # Root is in the right half of [a,b]
+        else
+            b = c # Root is in the left half of [a,b]
+        end
+    end
+    return c
+end
+
+function fast_mvnormal_pdf(x::Vector{Float64}, μ::Vector{Float64}, detΣ::Float64, invΣ::Matrix{Float64})
+    coeff_term = (2*pi)^(-length(x)/2) * detΣ^(-1/2)
+    exp_term   = exp(-(1/2) * dot((x - μ), invΣ*(x - μ)))
+    return coeff_term*exp_term
 end
