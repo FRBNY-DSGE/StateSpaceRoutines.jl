@@ -96,7 +96,7 @@ function solve_inefficiency{S<:AbstractFloat}(φ_new::S, coeff_terms::Vector{Flo
     n_particles = length(coeff_terms)
 
     if parallel
-        w = @parallel (vcat) for i = 1:nparticles
+        w = @parallel (vcat) for i = 1:n_particles
             incremental_weight(φ_new, coeff_terms[i], exp_1_terms[i], exp_2_terms[i], n_obs)
         end
     else
