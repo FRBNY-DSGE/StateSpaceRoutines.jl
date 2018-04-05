@@ -61,12 +61,14 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
                                                     r_star::S = 2., c::S = 0.3, accept_rate::S = 0.4, target::S = 0.4,
                                                     tol::Float64 = 1e-3, resampling_method = :multinomial,
                                                     N_MH::Int = 1, n_particles::Int = 1000,
-                                                    n_presample_periods::Int = 0, adaptive::Bool = true,
+                                                    n_presample_periods::Int = 0,
                                                     allout::Bool = true, parallel::Bool = false,
                                                     testing::Bool = false)
     #--------------------------------------------------------------
     # Setup
     #--------------------------------------------------------------
+
+    adaptive = isempty(fixed_sched)
 
     # Ensuring the fixed φ schedule is bounded properly
     if !adaptive
@@ -138,9 +140,7 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
 
         #####################################
         # Draw random shock ϵ
-        if !testing || adaptive
-            ϵ = rand(F_ϵ, n_particles)
-        end
+        ϵ = rand(F_ϵ, n_particles)
 
         # Forecast forward one time step
         s_t_nontempered = Φ_bcast(s_lag_tempered, ϵ)
@@ -157,7 +157,8 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
 
         if adaptive
             init_Ineff_func(φ) = solve_inefficiency(φ, coeff_terms, log_e_1_terms,
-                                                    log_e_2_terms, n_obs_t) - r_star
+                                                    log_e_2_terms, n_obs_t,
+                                                    parallel = false) - r_star
 
             φ_1 = bisection(init_Ineff_func, 1e-30, 1.0, tol = tol)
             # φ_1 = fzero(init_Ineff_func, 1e-30, 1., xtol = 0.)
@@ -199,7 +200,8 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
             end
 
             # Define inefficiency function
-            init_ineff_func(φ) = solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t) - r_star
+            init_ineff_func(φ) = solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
+                                                    parallel = false) - r_star
             fphi_interval = [init_ineff_func(φ_old) init_ineff_func(1.0)]
 
             # The below boolean checks that a solution exists within interval
