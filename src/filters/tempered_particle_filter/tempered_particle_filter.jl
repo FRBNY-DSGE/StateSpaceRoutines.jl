@@ -80,10 +80,11 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
     end
 
     # Initialization of constants and output vectors
-    n_obs, T = size(data)
-    n_states         = size(s_init, 1)
-    lik              = zeros(T)
-    times            = zeros(T)
+    n_obs, T  = size(data)
+    n_shocks  = length(F_ϵ)
+    n_states  = size(s_init, 1)
+    lik       = zeros(T)
+    times     = zeros(T)
 
     # Ensuring Φ, Ψ broadcast to matrices
     function Φ_bcast(s_t1::Matrix{S}, ϵ_t1::Matrix{S})
@@ -139,20 +140,40 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
         det_HH_t            = det(HH_t)
 
         #####################################
-        # Draw random shock ϵ
-        ϵ = rand(F_ϵ, n_particles)
+        if parallel
+            ϵ = Matrix{Float64}(n_shocks, n_particles)
+            s_t_nontempered = similar(s_lag_tempered)
+            out = @parallel (vcat) for i in 1:n_particles
+                ε = rand(F_ϵ)
+                s_t_non = Φ(s_lag_tempered[:, i], ε)
+                p_err   = y_t - Ψ_t(s_t_non, zeros(n_obs_t))
+                coeff_term, log_e_1_term, log_e_2_term = weight_kernel(0., y_t, p_err, det_HH_t, inv_HH_t,
+                                                                       initialize = true)
+                ε, s_t_non, coeff_term, log_e_1_term, log_e_2_term
+            end
+            for i in 1:n_particles
+                ϵ[:, i] = out[i][1]
+                s_t_nontempered[:, i] = out[i][2]
+                coeff_terms[i] = out[i][3]
+                log_e_1_terms[i] = out[i][4]
+                log_e_2_terms[i] = out[i][5]
+            end
+        else
+            # Draw random shock ϵ
+            ϵ = rand(F_ϵ, n_particles)
 
-        # Forecast forward one time step
-        s_t_nontempered = Φ_bcast(s_lag_tempered, ϵ)
+            # Forecast forward one time step
+            s_t_nontempered = Φ_bcast(s_lag_tempered, ϵ)
 
-        # Error for each particle
-        p_error = y_t .- Ψ_bcast_t(s_t_nontempered, zeros(n_obs_t, n_particles))
+            # Error for each particle
+            p_error = y_t .- Ψ_bcast_t(s_t_nontempered, zeros(n_obs_t, n_particles))
 
-        # Solve for initial tempering parameter φ_1
-        for i in 1:n_particles
-            coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] = weight_kernel(0., y_t, p_error[:, i],
-                                                                               det_HH_t, inv_HH_t,
-                                                                               initialize = true)
+            # Solve for initial tempering parameter φ_1
+            for i in 1:n_particles
+                coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] = weight_kernel(0., y_t, p_error[:, i],
+                                                                                   det_HH_t, inv_HH_t,
+                                                                                   initialize = true)
+            end
         end
 
         if adaptive

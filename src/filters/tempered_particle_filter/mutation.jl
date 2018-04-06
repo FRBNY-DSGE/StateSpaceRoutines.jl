@@ -56,14 +56,10 @@ function mutation{S<:AbstractFloat}(Φ::Function, Ψ::Function, QQ::Matrix{Float
     # Metropolis-Hastings Steps
     #------------------------------------------------------------------------
     # Generate new draw of ε from a N(ε_init, c²I) distribution, c tuning parameter, I identity
-    ϵ_new = similar(ϵ_init)
-    for i in 1:n_particles
-        ϵ_new[:,i] = rand(MvNormal(ϵ_init[:,i], c*QQ))
-    end
-
     if parallel
         out = @sync @parallel (hcat) for i = 1:n_particles
-            mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ_init[:,i], ϵ_new[:,i], φ_new, det_HH, inv_HH,
+            ϵ_new = rand(MvNormal(ϵ_init[:,i], c^2*QQ))
+            mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ_init[:,i], ϵ_new, φ_new, det_HH, inv_HH,
                     n_obs, n_states, N_MH; testing = testing)
         end
         for i = 1:n_particles
@@ -72,6 +68,10 @@ function mutation{S<:AbstractFloat}(Φ::Function, Ψ::Function, QQ::Matrix{Float
             accept_vec[i] = out[i][3]
         end
     else
+        ϵ_new = similar(ϵ_init)
+        for i in 1:n_particles
+            ϵ_new[:,i] = rand(MvNormal(ϵ_init[:,i], c^2*QQ))
+        end
         for i = 1:n_particles
             s_out[:,i], ϵ_out[:,i], accept_vec[i] = mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ_init[:,i],
                                                             ϵ_new[:,i], φ_new, det_HH, inv_HH, n_obs, n_states,
