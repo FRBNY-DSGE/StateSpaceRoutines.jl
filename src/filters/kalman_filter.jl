@@ -25,7 +25,7 @@ Cov(ϵ_t, η_t) = 0
 
 ### Inputs
 
-- `data`: `Ny` x `T` matrix containing data `y(1), ... , y(T)`
+- `data`: `Ny` x `Nt` matrix containing data `y_1, ... , y_T`
 - `s_0`: optional `Ns` x 1 initial state vector
 - `P_0`: optional `Ns` x `Ns` initial state covariance matrix
 
@@ -54,7 +54,7 @@ Cov(ϵ_t, η_t) = 0
 
 where:
 
-- `T`: number of time periods for which we have data
+- `Nt`: number of time periods for which we have data
 - `Ns`: number of states
 - `Ne`: number of shocks
 - `Ny`: number of observables
@@ -71,23 +71,23 @@ where:
 - `log_likelihood`: log likelihood of the state-space model
 - `s_T`: `Ns` x 1 final filtered state `z_{T|T}`
 - `P_T`: `Ns` x `Ns` final filtered state covariance matrix `P_{T|T}`
-- `pred`: `Ns` x `T` matrix of one-step predicted state vectors `z_{t|t-1}`
-- `vpred`: `Ns` x `Ns` x `T` array of mean squared errors `P_{t|t-1}` of
+- `pred`: `Ns` x `Nt` matrix of one-step predicted state vectors `z_{t|t-1}`
+- `vpred`: `Ns` x `Ns` x `Nt` array of mean squared errors `P_{t|t-1}` of
   predicted state vectors
-- `filt`: `Ns` x `T` matrix of filtered state vectors `z_{t|t}`
-- `vfilt`: `Ns` x `Ns` x `T` matrix containing mean squared errors `P_{t|t}` of
+- `filt`: `Ns` x `Nt` matrix of filtered state vectors `z_{t|t}`
+- `vfilt`: `Ns` x `Ns` x `Nt` matrix containing mean squared errors `P_{t|t}` of
   filtered state vectors
-- `yprederror`: `Ny` x `T` matrix of observable prediction errors
+- `yprederror`: `Ny` x `Nt` matrix of observable prediction errors
   `y_t - y_{t|t-1}`
-- `ystdprederror`: `Ny` x `T` matrix of standardized observable prediction errors
+- `ystdprederror`: `Ny` x `Nt` matrix of standardized observable prediction errors
   `V_{t|t-1} \ (y_t - y_{t|t-1})`, where `y_t - y_{t|t-1} ∼ N(0, V_{t|t-1}`
-- `rmse`: 1 x `T` row vector of root mean squared prediction errors
-- `rmsd`: 1 x `T` row vector of root mean squared standardized prediction errors
+- `rmse`: 1 x `Nt` row vector of root mean squared prediction errors
+- `rmsd`: 1 x `Nt` row vector of root mean squared standardized prediction errors
 - `s_0`: `Ns` x 1 initial state vector. This may have reassigned to the last
   presample state vector if `n_presample_periods > 0`
 - `P_0`: `Ns` x `Ns` initial state covariance matrix. This may have reassigned to
   the last presample state covariance if `n_presample_periods > 0`
-- `marginal_loglh`: a vector of the marginal log likelihoods from t = 1 to T
+- `marginal_loglh`: a vector of the marginal log likelihoods from t = 1 to Nt
 
 ### Notes
 
@@ -118,37 +118,37 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
     allout::Bool = true, n_presample_periods::Int = 0)
 
     # Dimensions
-    T  = size(data,    2) # number of periods of data
+    Nt = size(data,    2) # number of periods of data
     Ns = size(TTTs[1], 1) # number of states
     Ny = size(ZZs[1],  1) # number of observables
 
     @assert first(regime_indices[1]) == 1
-    @assert last(regime_indices[end]) == T
+    @assert last(regime_indices[end]) == Nt
 
     # Initialize outputs
     z = s_0
     P = P_0
     log_likelihood = zero(S)
     if allout
-        pred  = zeros(S, Ns, T - n_presample_periods)
-        vpred = zeros(S, Ns, Ns, T - n_presample_periods)
-        filt  = zeros(S, Ns, T - n_presample_periods)
-        vfilt = zeros(S, Ns, Ns, T - n_presample_periods)
-        yprederror    = zeros(S, Ny, T - n_presample_periods)
-        ystdprederror = zeros(S, Ny, T - n_presample_periods)
+        pred  = zeros(S, Ns, Nt - n_presample_periods)
+        vpred = zeros(S, Ns, Ns, Nt - n_presample_periods)
+        filt  = zeros(S, Ns, Nt - n_presample_periods)
+        vfilt = zeros(S, Ns, Ns, Nt - n_presample_periods)
+        yprederror    = zeros(S, Ny, Nt - n_presample_periods)
+        ystdprederror = zeros(S, Ny, Nt - n_presample_periods)
         rmse  = zeros(S, 1, Ny)
         rmsd  = zeros(S, 1, Ny)
-        marginal_loglh = zeros(T - n_presample_periods)
+        marginal_loglh = zeros(Nt - n_presample_periods)
     end
 
     # Iterate through regimes
     for i = 1:length(regime_indices)
         regime_data = data[:, regime_indices[i]]
         if i == 1
-            T0 = n_presample_periods
+            Nt0 = n_presample_periods
             ts = 1:(last(regime_indices[i]) - n_presample_periods)
         else
-            T0 = 0
+            Nt0 = 0
             ts = regime_indices[i] - n_presample_periods
         end
 
@@ -156,7 +156,7 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
             L, z, P, pred[:,ts], vpred[:,:,ts], filt[:,ts], vfilt[:,:,ts],
             yprederror[:,ts], ystdprederror[:,ts], _, _, s_0_, P_0_, marginal_loglh[ts] =
                 kalman_filter(regime_data, TTTs[i], RRRs[i], CCCs[i], QQs[i], ZZs[i], DDs[i], EEs[i], z, P;
-                              allout = true, n_presample_periods = T0)
+                              allout = true, n_presample_periods = Nt0)
 
             # If `n_presample_periods > 0`, then `s_0_` and `P_0_` are returned as
             # the filtered values at the end of the presample/beginning of the
@@ -169,7 +169,7 @@ function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
             end
         else
             L, z, P = kalman_filter(regime_data, TTTs[i], RRRs[i], CCCs[i], QQs[i], ZZs[i], DDs[i], EEs[i], z, P,
-                                    allout = false, n_presample_periods = T0)
+                                    allout = false, n_presample_periods = Nt0)
         end
         log_likelihood += L
     end
@@ -192,7 +192,7 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
     allout::Bool = true, n_presample_periods::Int = 0)
 
     # Dimensions
-    T  = size(data, 2) # number of periods of data
+    Nt = size(data, 2) # number of periods of data
     Ns = size(TTT,  1) # number of states
     Ne = size(RRR,  2) # number of shocks
     Ny = size(ZZ,   1) # number of observables
@@ -213,19 +213,19 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
     P = P_0
 
     # Initialize outputs
-    marginal_loglh = zeros(T)
+    marginal_loglh = zeros(Nt)
     if allout
-        pred                = zeros(S, Ns, T)
-        vpred               = zeros(S, Ns, Ns, T)
-        filt                = zeros(S, Ns, T)
-        vfilt               = zeros(S, Ns, Ns, T)
-        yprederror          = NaN*zeros(S, Ny, T)
-        ystdprederror       = NaN*zeros(S, Ny, T)
+        pred                = zeros(S, Ns, Nt)
+        vpred               = zeros(S, Ns, Ns, Nt)
+        filt                = zeros(S, Ns, Nt)
+        vfilt               = zeros(S, Ns, Ns, Nt)
+        yprederror          = NaN*zeros(S, Ny, Nt)
+        ystdprederror       = NaN*zeros(S, Ny, Nt)
     end
 
     V = RRR*QQ*RRR' # V = Var(z_t) = Var(Rϵ_t)
 
-    for t = 1:T
+    for t = 1:Nt
         # Index out rows of the measurement equation for which we have
         # nonmissing data in period t
         nonmissing = .!isnan.(data[:, t])
@@ -269,7 +269,7 @@ function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
     end # of loop through periods
 
     if n_presample_periods > 0
-        mainsample_periods = n_presample_periods+1:T
+        mainsample_periods = n_presample_periods+1:Nt
 
         marginal_loglh = marginal_loglh[mainsample_periods]
 
