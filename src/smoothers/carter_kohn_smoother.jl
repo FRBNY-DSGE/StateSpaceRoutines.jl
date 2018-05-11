@@ -98,8 +98,9 @@ function carter_kohn_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int
         augment_states_with_shocks(regime_indices, TTTs, RRRs, CCCs, QQs, ZZs, z0, P0)
 
     # Kalman filter stacked states and shocks
-    _, _, _, pred, vpred, filt, vfilt, _ =
-        kalman_filter(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, EEs, z0, P0)
+    fo = kalman_filter(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, EEs, z0, P0)
+    pred, vpred = fo.s_pred, fo.P_pred
+    filt, vfilt = fo.s_filt, fo.P_filt
 
     # Smooth the states recursively, starting at t = T-1 and going backwards
     augmented_smoothed_states = copy(filt)
