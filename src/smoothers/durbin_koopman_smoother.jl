@@ -1,10 +1,10 @@
 """
 ```
-durbin_koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, z0, P0;
-    n_presample_periods = 0, draw_states = true)
+durbin_koopman_smoother(y, T, R, C, Q, Z, D, E, s_0, P_0;
+    Nt0 = 0, draw_states = true)
 
-durbin_koopman_smoother(regime_indices, data, TTTs, RRRs, CCCs,
-    QQs, ZZs, DDs, z0, P0; n_presample_periods = 0, draw_states = true)
+durbin_koopman_smoother(regime_indices, y, Ts, Rs, Cs, Qs,
+    Zs, Ds, Es, s_0, P_0; Nt0 = 0, draw_states = true)
 ```
 
 This program is a simulation smoother based on Durbin and Koopman's
@@ -27,139 +27,133 @@ erratic Moore-Penrose pseudoinverse).
 The state space is given by:
 
 ```
-z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t    (transition equation)
-y_t     = DD  + ZZ*z_t  + η_t        (measurement equation)
+s_{t+1} = C + T*s_t + R*ϵ_t    (transition equation)
+y_t     = D + Z*s_t + η_t      (measurement equation)
 
-ϵ_t ∼ N(0, QQ)
-η_t ∼ N(0, EE)
+ϵ_t ∼ N(0, Q)
+η_t ∼ N(0, E)
 Cov(ϵ_t, η_t) = 0
 ```
 
 ### Inputs
 
-- `data`: `Ny` x `T` matrix containing data `y(1), ... , y(T)`
-- `z0`: `Nz` x 1 initial state vector
-- `P0`: `Nz` x `Nz` initial state covariance matrix
-- `pred`: `Nz` x `T` matrix of one-step predicted state vectors `z_{t|t-1}`
+- `y`: `Ny` x `Nt` matrix containing data `y_1, ... , y_T`
+- `s_0`: `Ns` x 1 initial state vector
+- `P_0`: `Ns` x `Ns` initial state covariance matrix
+- `pred`: `Ns` x `Nt` matrix of one-step predicted state vectors `s_{t|t-1}`
   (from the Kalman filter)
-- `vpred`: `Nz` x `Nz` x `T` array of mean squared errors `P_{t|t-1}` of
+- `vpred`: `Ns` x `Ns` x `Nt` array of mean squared errors `P_{t|t-1}` of
   predicted state vectors
 
-**Method 1 only:** state-space system matrices `TTT`, `RRR`, `CCC`, `QQ`, `ZZ`,
-`DD`, `EE`. See `?kalman_filter`
+**Method 1 only:** state-space system matrices `T`, `R`, `C`, `Q`, `Z`,
+`D`, `E`. See `?kalman_filter`
 
-**Method 2 only:** `regime_indices` and system matrices for each regime `TTTs`,
-`RRRs`, `CCCs`, `QQs`, `ZZs`, `DDs`, `EEs`. See `?kalman_filter`
+**Method 2 only:** `regime_indices` and system matrices for each regime `Ts`,
+`Rs`, `Cs`, `Qs`, `Zs`, `Ds`, `Es`. See `?kalman_filter`
 
 where:
 
-- `T`: number of periods for which we have data
-- `Nz`: number of states
+- `Nt`: number of periods for which we have data
+- `Ns`: number of states
 - `Ne`: number of shocks
 - `Ny`: number of observables
 
 ### Keyword Arguments
 
-- `n_presample_periods`: if greater than 0, the returned smoothed states and
-  shocks matrices will be shorter by that number of columns (taken from the
-  beginning)
+- `Nt0`: if greater than 0, the returned smoothed states and shocks matrices
+  will be shorter by that number of columns (taken from the beginning)
 - `draw_states`: indicates whether to draw smoothed states from the distribution
-  `N(z_{t|T}, P_{t|T})` or to use the mean `z_{t|T}` (reducing to the Koopman
-  smoother). Defaults to `true`
+  `N(s_{t|T}, P_{t|T})` or to use the mean `s_{t|T}` (reducing to the Koopman
+  smoother)
 
 ### Outputs
 
-- `smoothed_states`: `Nz` x `T` matrix of smoothed states `z_{t|T}`
-- `smoothed_shocks`: `Ne` x `T` matrix of smoothed shocks `ϵ_{t|T}`
+- `s_smth`: `Ns` x `Nt` matrix of smoothed states `s_{t|T}`
+- `ϵ_smth`: `Ne` x `Nt` matrix of smoothed shocks `ϵ_{t|T}`
 """
-function durbin_koopman_smoother{S<:AbstractFloat}(data::Matrix{S},
-    TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
-    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, EE::Matrix{S},
-    z0::Vector{S}, P0::Matrix{S};
-    n_presample_periods::Int = 0, draw_states::Bool = true)
+function durbin_koopman_smoother(y::Matrix{S},
+    T::Matrix{S}, R::Matrix{S}, C::Vector{S},
+    Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
+    s_0::Vector{S}, P_0::Matrix{S};
+    Nt0::Int = 0, draw_states::Bool = true) where {S<:AbstractFloat}
 
-    T = size(data, 2)
-    regime_indices = Range{Int64}[1:T]
-
-    durbin_koopman_smoother(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR], Vector{S}[CCC],
-        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[EE], z0, P0;
-        n_presample_periods = n_presample_periods, draw_states = draw_states)
+    Nt = size(y, 2)
+    durbin_koopman_smoother(Range{Int}[1:Nt], y, Matrix{S}[T], Matrix{S}[R], Vector{S}[C],
+        Matrix{S}[Q], Matrix{S}[Z], Vector{S}[D], Matrix{S}[E], s_0, P_0;
+        Nt0 = Nt0, draw_states = draw_states)
 end
 
-function durbin_koopman_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
-    data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}}, CCCs::Vector{Vector{S}},
-    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}}, EEs::Vector{Matrix{S}},
-    z0::Vector{S}, P0::Matrix{S};
-    n_presample_periods::Int = 0, draw_states::Bool = true)
+function durbin_koopman_smoother(regime_indices::Vector{Range{Int}}, y::Matrix{S},
+    Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
+    Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
+    s_0::Vector{S}, P_0::Matrix{S};
+    Nt0::Int = 0, draw_states::Bool = true) where {S<:AbstractFloat}
 
     # Dimensions
     n_regimes = length(regime_indices)
-    T  = size(data,    2) # number of periods of data
-    Nz = size(TTTs[1], 1) # number of states
-    Ne = size(RRRs[1], 2) # number of shocks
-    Ny = size(ZZs[1],  1) # number of observables
+    Nt = size(y,     2) # number of periods of data
+    Ns = size(Ts[1], 1) # number of states
+    Ne = size(Rs[1], 2) # number of shocks
+    Ny = size(Zs[1], 1) # number of observables
 
-    # Draw initial state α_0+ and sequence of shocks η+
+    # Draw initial state s_0+ and sequence of shocks ϵ+
     if draw_states
-        U, eig, _ = svd(P0)
-        α_plus_t  = U * diagm(sqrt.(eig)) * randn(Nz)
-        η_plus    = sqrt.(QQs[1]) * randn(Ne, T)
+        U, eig, _ = svd(P_0)
+        s_plus_t  = U * diagm(sqrt.(eig)) * randn(Ns)
+        ϵ_plus    = sqrt.(Qs[1]) * randn(Ne, Nt)
     else
-        α_plus_t  = zeros(S, Nz)
-        η_plus    = zeros(S, Ne, T)
+        s_plus_t  = zeros(S, Ns)
+        ϵ_plus    = zeros(S, Ne, Nt)
     end
 
-    # Produce "fake" states and observables (α+ and y+) by
+    # Produce "fake" states and observables (s+ and y+) by
     # iterating the state-space system forward
-    α_plus       = zeros(S, Nz, T)
-    y_plus       = zeros(S, Ny, T)
+    s_plus = zeros(S, Ns, Nt)
+    y_plus = zeros(S, Ny, Nt)
 
     for i = 1:n_regimes
-        regime_periods = regime_indices[i]
-
         # Get state-space system matrices for this regime
-        TTT, RRR, CCC = TTTs[i], RRRs[i], CCCs[i]
-        QQ,  ZZ,  DD  = QQs[i],  ZZs[i],  DDs[i]
+        T, R, C = Ts[i], Rs[i], Cs[i]
+        Z, D    = Zs[i], Ds[i]
 
-        for t in regime_periods
-            η_plus_t = η_plus[:, t]
-            α_plus_t = TTT*α_plus_t + RRR*η_plus_t + CCC
+        for t in regime_indices[i]
+            ϵ_plus_t = ϵ_plus[:, t]
+            s_plus_t = T*s_plus_t + R*ϵ_plus_t + C
 
-            α_plus[:, t] = α_plus_t
-            y_plus[:, t] = ZZ*α_plus_t + DD
+            s_plus[:, t] = s_plus_t
+            y_plus[:, t] = Z*s_plus_t + D
         end
     end
 
-    # Replace fake data with NaNs wherever actual data has NaNs
-    y_plus[isnan.(data)] = NaN
+    # Replace y+ with NaNs wherever y has NaNs
+    y_plus[isnan.(y)] = NaN
 
     # Compute y* = y - y+
-    y_star = data - y_plus
+    y_star = y - y_plus
 
-    # Run the Kalman filter
-    # Note that we pass in `zeros(size(D))` instead of `D` because the
-    # measurement equation for `data_star` has no constant term
-    fo = kalman_filter(regime_indices, y_star, TTTs, RRRs, CCCs,
-                       QQs, ZZs, fill(zeros(Ny), n_regimes), EEs,
-                       z0, P0)
-    pred, vpred = fo.s_pred, fo.P_pred
+    # Run the Kalman filter on y*
+    # Note that we pass in `zeros(Ny)` instead of `D` because the
+    # measurement equation for y* has no constant term
+    Ds_star = fill(zeros(Ny), n_regimes)
+    _, s_pred, P_pred, _, _, _, _, _, _ =
+        kalman_filter(regime_indices, y_star, Ts, Rs, Cs, Qs,
+                      Zs, Ds_star, Es, s_0, P_0; outputs = [:pred])
 
-    # Kalman smooth
-    α_hat_star, η_hat_star = koopman_smoother(regime_indices, y_star, TTTs, RRRs, CCCs,
-                                 QQs, ZZs, fill(zeros(Ny), n_regimes), EEs,
-                                 z0, P0, pred, vpred)
+    # Kalman smooth y*
+    s_star, ϵ_star = koopman_smoother(regime_indices, y_star, Ts, Rs, Cs, Qs,
+                                      Zs, Ds_star, Es, s_0, P_0, s_pred, P_pred)
 
-    # Compute draw (states and shocks)
-    smoothed_states = α_plus + α_hat_star
-    smoothed_shocks = η_plus + η_hat_star
+    # Compute smoothed states and shocks
+    s_smth = s_plus + s_star
+    ϵ_smth = ϵ_plus + ϵ_star
 
     # Trim the presample if needed
-    if n_presample_periods > 0
-        mainsample_periods = n_presample_periods+1:T
+    if Nt0 > 0
+        insample = Nt0+1:Nt
 
-        smoothed_states = smoothed_states[:, mainsample_periods]
-        smoothed_shocks = smoothed_shocks[:, mainsample_periods]
+        s_smth = s_smth[:, insample]
+        ϵ_smth = ϵ_smth[:, insample]
     end
 
-    return smoothed_states, smoothed_shocks
+    return s_smth, ϵ_smth
 end
