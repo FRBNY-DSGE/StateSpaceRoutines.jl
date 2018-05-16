@@ -96,29 +96,32 @@ function durbin_koopman_smoother(regime_indices::Vector{Range{Int}}, y::Matrix{S
     Ne = size(Rs[1], 2) # number of shocks
     Ny = size(Zs[1], 1) # number of observables
 
-    # Draw initial state s_0+ and sequence of shocks ϵ+
-    if draw_states
+    # Draw initial state s_0+
+    s_plus_t = if draw_states
         U, eig, _ = svd(P_0)
-        s_plus_t  = U * diagm(sqrt.(eig)) * randn(Ns)
-        ϵ_plus    = sqrt.(Qs[1]) * randn(Ne, Nt)
+        U * diagm(sqrt.(eig)) * randn(Ns)
     else
-        s_plus_t  = zeros(S, Ns)
-        ϵ_plus    = zeros(S, Ne, Nt)
+        zeros(S, Ns)
     end
 
     # Produce "fake" states and observables (s+ and y+) by
-    # iterating the state-space system forward
+    # iterating the state-space system forward, drawing shocks ϵ+
     s_plus = zeros(S, Ns, Nt)
+    ϵ_plus = zeros(S, Ne, Nt)
     y_plus = zeros(S, Ny, Nt)
 
     for i = 1:n_regimes
         # Get state-space system matrices for this regime
-        T, R, C = Ts[i], Rs[i], Cs[i]
-        Z, D    = Zs[i], Ds[i]
+        T, R, C, Q = Ts[i], Rs[i], Cs[i], Qs[i]
+        Z, D       = Zs[i], Ds[i]
 
         for t in regime_indices[i]
-            ϵ_plus_t = ϵ_plus[:, t]
-            s_plus_t = T*s_plus_t + R*ϵ_plus_t + C
+            s_plus_t = if draw_states
+                ϵ_plus[:, t] = sqrt.(Qs[i]) * randn(Ne)
+                T*s_plus_t + R*ϵ_plus[:, t] + C
+            else
+                T*s_plus_t + C
+            end
 
             s_plus[:, t] = s_plus_t
             y_plus[:, t] = Z*s_plus_t + D
