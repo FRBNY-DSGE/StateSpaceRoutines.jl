@@ -85,11 +85,11 @@ This function implements the Kalman filter for the following state-space model:
 
 ```
 s_{t+1} = C + T*s_t + R*ϵ_t    (transition equation)
-y_t     = D + Z*s_t + η_t      (measurement equation)
+y_t     = D + Z*s_t + u_t      (measurement equation)
 
 ϵ_t ∼ N(0, Q)
-η_t ∼ N(0, E)
-Cov(ϵ_t, η_t) = 0
+u_t ∼ N(0, E)
+Cov(ϵ_t, u_t) = 0
 ```
 
 ### Inputs
