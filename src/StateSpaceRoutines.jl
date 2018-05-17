@@ -10,7 +10,7 @@ module StateSpaceRoutines
     export
 
         # filters/kalman_filter.jl
-        kalman_filter,
+        init_stationary_states, kalman_filter,
 
         # filters/tempered_particle_filter
         tempered_particle_filter, initialize_state_draws, correction_selection!,

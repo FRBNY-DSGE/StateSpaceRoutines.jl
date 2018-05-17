@@ -18,13 +18,28 @@ end
 
 """
 ```
-KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0)
-
-KalmanFilter(T, R, C, Q, Z, D, E)
+KalmanFilter(T, R, C, Q, Z, D, E, [s_0, P_0])
 ```
 
-If the initial state `s_0` and state covariance matrix `P_0` are not provided,
-they are computed under the stationarity condition:
+Outer constructor for the `KalmanFilter` type.
+"""
+function KalmanFilter(T::Matrix{S}, R::Matrix{S}, C::Vector{S}, Q::Matrix{S},
+                      Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
+                      s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0)) where {S<:AbstractFloat}
+    if isempty(s_0) || isempty(P_0)
+        s_0, P_0 = init_stationary_states(T, R, C, Q)
+    end
+
+    return KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0, NaN)
+end
+
+"""
+```
+init_stationary_states(T, R, C, Q)
+```
+
+Compute the initial state `s_0` and state covariance matrix `P_0` under the
+stationarity condition:
 
 ```
 s_0  = (I - T)\C
@@ -42,22 +57,18 @@ All eigenvalues of `T` are inside the unit circle when the state space model
 is stationary. When the preceding formula cannot be applied, the initial state
 vector estimate is set to `C` and its covariance matrix is given by `1e6 * I`.
 """
-function KalmanFilter(T::Matrix{S}, R::Matrix{S}, C::Vector{S}, Q::Matrix{S},
-                  Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
-                  s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0)) where {S<:AbstractFloat}
-    if isempty(s_0) || isempty(P_0)
-        e, _ = eig(T)
-        if all(abs.(e) .< 1)
-            s_0 = (UniformScaling(1) - T)\C
-            P_0 = solve_discrete_lyapunov(T, R*Q*R')
-        else
-            Ns = size(T, 1)
-            s_0 = C
-            P_0 = 1e6 * eye(Ns)
-        end
+function init_stationary_states(T::Matrix{S}, R::Matrix{S}, C::Vector{S},
+                                Q::Matrix{S}) where {S<:AbstractFloat}
+    e, _ = eig(T)
+    if all(abs.(e) .< 1)
+        s_0 = (UniformScaling(1) - T)\C
+        P_0 = solve_discrete_lyapunov(T, R*Q*R')
+    else
+        Ns = size(T, 1)
+        s_0 = C
+        P_0 = 1e6 * eye(Ns)
     end
-
-    return KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0, NaN)
+    return s_0, P_0
 end
 
 """
@@ -143,8 +154,8 @@ where:
 
 ### Notes
 
-When `s_0` and `P_0` are omitted, they are computed using the stationarity
-condition (see `?KalmanFilter`).
+When `s_0` and `P_0` are omitted, they are computed using
+`init_stationary_states`.
 """
 function kalman_filter(regime_indices::Vector{Range{Int}}, y::Matrix{S},
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}},
