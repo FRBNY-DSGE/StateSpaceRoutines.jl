@@ -1,10 +1,9 @@
 """
 ```
-hamilton_smoother(y, T, R, C, Q, Z, D, E, s_0, P_0;
-    Nt0 = 0)
+hamilton_smoother(y, T, R, C, Q, Z, D, E, s_0, P_0; Nt0 = 0)
 
-hamilton_smoother(regime_indices, y, Ts, Rs, Cs,
-    Qs, Zs, Ds, Es, s_0, P_0; Nt0 = 0)
+hamilton_smoother(regime_indices, y, Ts, Rs, Cs, Qs,
+    Zs, Ds, Es, s_0, P_0; Nt0 = 0)
 ```
 
 This is a Kalman smoothing program based on the treatment in James Hamilton's
@@ -59,8 +58,7 @@ where:
 function hamilton_smoother(y::Matrix{S},
     T::Matrix{S}, R::Matrix{S}, C::Vector{S},
     Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
-    s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0);
-    Nt0::Int = 0) where {S<:AbstractFloat}
+    s_0::Vector{S}, P_0::Matrix{S}; Nt0::Int = 0) where {S<:AbstractFloat}
 
     Nt = size(y, 2)
     hamilton_smoother(Range{Int}[1:Nt], y, Matrix{S}[T], Matrix{S}[R], Vector{S}[C],
@@ -70,8 +68,7 @@ end
 function hamilton_smoother(regime_indices::Vector{Range{Int}}, y::Matrix{S},
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
     Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
-    s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0);
-    Nt0::Int = 0) where {S<:AbstractFloat}
+    s_0::Vector{S}, P_0::Matrix{S}; Nt0::Int = 0) where {S<:AbstractFloat}
 
     # Dimensions
     Nt = size(y,     2) # number of periods of data
