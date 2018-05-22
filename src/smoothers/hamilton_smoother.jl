@@ -106,7 +106,7 @@ function hamilton_smoother(regime_indices::Vector{Range{Int}}, y::Matrix{S},
 
     # Trim the presample if needed
     if Nt0 > 0
-        insample = Nt0+1:T
+        insample = Nt0+1:Nt
         s_smth = s_smth[:, insample]
         ϵ_smth = ϵ_smth[:, insample]
     end

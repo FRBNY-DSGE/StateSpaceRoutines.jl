@@ -355,19 +355,16 @@ function remove_presample!(Nt0::Int, loglh::Vector{S},
                            s_filt::Matrix{S}, P_filt::Array{S, 3};
                            outputs::Vector{Symbol} = [:loglh, :pred, :filt]) where {S<:AbstractFloat}
     if Nt0 > 0
-        Nt = length(loglh)
-        insample = (Nt0+1):Nt
-
         if :loglh in outputs
-            loglh  = loglh[insample]
+            loglh  = loglh[(Nt0+1):end]
         end
         if :pred in outputs
-            s_pred = s_pred[:,    insample]
-            P_pred = P_pred[:, :, insample]
+            s_pred = s_pred[:,    (Nt0+1):end]
+            P_pred = P_pred[:, :, (Nt0+1):end]
         end
         if :filt in outputs
-            s_filt = s_filt[:,    insample]
-            P_filt = P_filt[:, :, insample]
+            s_filt = s_filt[:,    (Nt0+1):end]
+            P_filt = P_filt[:, :, (Nt0+1):end]
         end
     end
     return loglh, s_pred, P_pred, s_filt, P_filt
