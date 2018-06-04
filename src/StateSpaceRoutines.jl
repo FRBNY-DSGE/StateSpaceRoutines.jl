@@ -23,6 +23,9 @@ module StateSpaceRoutines
 
     include("filters/kalman_filter.jl")
     include("filters/tempered_particle_filter/util.jl")
+    include("filters/tempered_particle_filter/helpers.jl")
+    include("filters/tempered_particle_filter/initialization.jl")
+    include("filters/tempered_particle_filter/resample.jl")
     include("filters/tempered_particle_filter/correction_selection.jl")
     include("filters/tempered_particle_filter/mutation.jl")
     include("filters/tempered_particle_filter/tempered_particle_filter.jl")
