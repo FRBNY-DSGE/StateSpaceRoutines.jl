@@ -57,16 +57,13 @@ function mutation{S<:AbstractFloat}(Φ::Function, Ψ::Function, QQ::Matrix{Float
     #------------------------------------------------------------------------
     # Generate new draw of ε from a N(ε_init, c²I) distribution, c tuning parameter, I identity
     if parallel
-        out = @sync @parallel (hcat) for i = 1:n_particles
+        s_out, ϵ_out, accept_vec = @sync @parallel (vector_reduce) for i = 1:n_particles
             ϵ_new = rand(MvNormal(ϵ_init[:,i], c^2*QQ))
-            mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ_init[:,i], ϵ_new, φ_new, det_HH, inv_HH,
-                    n_obs, n_states, N_MH; testing = testing)
+            s, ϵ, accept = mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ_init[:,i], ϵ_new,
+                                   φ_new, det_HH, inv_HH, n_obs, n_states, N_MH; testing = testing)
+            vector_reshape(s, ϵ, accept)
         end
-        for i = 1:n_particles
-            s_out[:,i]    = out[i][1]
-            ϵ_out[:,i]    = out[i][2]
-            accept_vec[i] = out[i][3]
-        end
+        accept_vec = squeeze(accept_vec, 1)
     else
         ϵ_new = similar(ϵ_init)
         for i in 1:n_particles
