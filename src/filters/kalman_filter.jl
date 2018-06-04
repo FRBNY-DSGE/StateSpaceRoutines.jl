@@ -3,293 +3,372 @@ This code is loosely based on a routine originally copyright Federal Reserve Ban
 and written by Iskander Karibzhanov.
 =#
 
+mutable struct KalmanFilter{S<:AbstractFloat}
+    T::Matrix{S}
+    R::Matrix{S}
+    C::Vector{S}
+    Q::Matrix{S}
+    Z::Matrix{S}
+    D::Vector{S}
+    E::Matrix{S}
+    s_t::Vector{S} # s_{t|t-1} or s_{t|t}
+    P_t::Matrix{S} # P_{t|t-1} or P_{t|t}
+    loglh_t::S     # P(y_t | y_{1:t})
+end
+
 """
 ```
-kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0 = Vector(), P0 = Matrix();
-    allout = true, n_presample_periods = 0)
+KalmanFilter(T, R, C, Q, Z, D, E, [s_0, P_0])
+```
 
-kalman_filter(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs,
-    EEs, z0 = Vector(), P0 = Matrix(); allout = true, n_presample_periods = 0)
+Outer constructor for the `KalmanFilter` type.
+"""
+function KalmanFilter(T::Matrix{S}, R::Matrix{S}, C::Vector{S}, Q::Matrix{S},
+                      Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
+                      s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0)) where {S<:AbstractFloat}
+    if isempty(s_0) || isempty(P_0)
+        s_0, P_0 = init_stationary_states(T, R, C, Q)
+    end
+
+    return KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0, NaN)
+end
+
+"""
+```
+init_stationary_states(T, R, C, Q)
+```
+
+Compute the initial state `s_0` and state covariance matrix `P_0` under the
+stationarity condition:
+
+```
+s_0  = (I - T)\C
+P_0 = reshape(I - kron(T, T))\vec(R*Q*R'), Ns, Ns)
+```
+
+where:
+
+- `kron(T, T)` is a matrix of dimension `Ns^2` x `Ns^2`, the Kronecker
+  product of `T`
+- `vec(R*Q*R')` is the `Ns^2` x 1 column vector constructed by stacking the
+  `Ns` columns of `R*Q*R'`
+
+All eigenvalues of `T` are inside the unit circle when the state space model
+is stationary. When the preceding formula cannot be applied, the initial state
+vector estimate is set to `C` and its covariance matrix is given by `1e6 * I`.
+"""
+function init_stationary_states(T::Matrix{S}, R::Matrix{S}, C::Vector{S},
+                                Q::Matrix{S}) where {S<:AbstractFloat}
+    e, _ = eig(T)
+    if all(abs.(e) .< 1)
+        s_0 = (UniformScaling(1) - T)\C
+        P_0 = solve_discrete_lyapunov(T, R*Q*R')
+    else
+        Ns = size(T, 1)
+        s_0 = C
+        P_0 = 1e6 * eye(Ns)
+    end
+    return s_0, P_0
+end
+
+"""
+```
+kalman_filter(y, T, R, C, Q, Z, D, E, s_0 = Vector(), P_0 = Matrix();
+    outputs = [:loglh, :pred, :filt], Nt0 = 0)
+
+kalman_filter(regime_indices, y, Ts, Rs, Cs, Qs, Zs, Ds, Es,
+    s_0 = Vector(), P_0 = Matrix(); outputs = [:loglh, :pred, :filt],
+    Nt0 = 0)
 ```
 
 This function implements the Kalman filter for the following state-space model:
 
 ```
-z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t    (transition equation)
-y_t     = DD  + ZZ*z_t  + η_t        (measurement equation)
+s_{t+1} = C + T*s_t + R*ϵ_t    (transition equation)
+y_t     = D + Z*s_t + u_t      (measurement equation)
 
-ϵ_t ∼ N(0, QQ)
-η_t ∼ N(0, EE)
-Cov(ϵ_t, η_t) = 0
+ϵ_t ∼ N(0, Q)
+u_t ∼ N(0, E)
+Cov(ϵ_t, u_t) = 0
 ```
 
 ### Inputs
 
-- `data`: `Ny` x `T` matrix containing data `y(1), ... , y(T)`
-- `z0`: optional `Nz` x 1 initial state vector
-- `P0`: optional `Nz` x `Nz` initial state covariance matrix
+- `y`: `Ny` x `Nt` matrix containing data `y_1, ... , y_T`
+- `s_0`: optional `Ns` x 1 initial state vector
+- `P_0`: optional `Ns` x `Ns` initial state covariance matrix
 
 **Method 1 only:**
 
-- `TTT`: `Nz` x `Nz` state transition matrix
-- `RRR`: `Nz` x `Ne` matrix in the transition equation mapping shocks to states
-- `CCC`: `Nz` x 1 constant vector in the transition equation
-- `QQ`: `Ne` x `Ne` matrix of shock covariances
-- `ZZ`: `Ny` x `Nz` matrix in the measurement equation mapping states to
+- `T`: `Ns` x `Ns` state transition matrix
+- `R`: `Ns` x `Ne` matrix in the transition equation mapping shocks to states
+- `C`: `Ns` x 1 constant vector in the transition equation
+- `Q`: `Ne` x `Ne` matrix of shock covariances
+- `Z`: `Ny` x `Ns` matrix in the measurement equation mapping states to
   observables
-- `DD`: `Ny` x 1 constant vector in the measurement equation
-- `EE`: `Ny` x `Ny` matrix of measurement error covariances
+- `D`: `Ny` x 1 constant vector in the measurement equation
+- `E`: `Ny` x `Ny` matrix of measurement error covariances
 
 **Method 2 only:**
 
-- `regime_indices`: `Vector{Range{Int64}}` of length `n_regimes`, where
+- `regime_indices`: `Vector{Range{Int}}` of length `n_regimes`, where
   `regime_indices[i]` indicates the time periods `t` in regime `i`
-- `TTTs`: `Vector{Matrix{S}}` of `TTT` matrices for each regime
-- `RRRs`
-- `CCCs`
-- `QQs`
-- `ZZs`
-- `DDs`
-- `EEs`
+- `Ts`: `Vector{Matrix{S}}` of `T` matrices for each regime
+- `Rs`
+- `Cs`
+- `Qs`
+- `Zs`
+- `Ds`
+- `Es`
 
 where:
 
-- `T`: number of time periods for which we have data
-- `Nz`: number of states
+- `Nt`: number of time periods for which we have data
+- `Ns`: number of states
 - `Ne`: number of shocks
 - `Ny`: number of observables
 
 ### Keyword Arguments
 
-- `allout`: indicates whether we want to return all values. If `!allout`, then
-  we return only the likelihood, `z_{T|T}`, and `P_{T|T}`.
-- `n_presample_periods`: if greater than 0, the first `n_presample_periods` will
-  be omitted from the likelihood calculation and all return values
+- `outputs`: some subset of `[:loglh, :pred, :filt]` specifying which outputs to
+  compute and return. There will always be the same number of return values,
+  but, for example, `s_pred` and `P_pred` will be returned as empty arrays if
+  `:pred` is not in `outputs`
+- `Nt0`: number of presample periods to omit from all return values
 
 ### Outputs
 
-- `log_likelihood`: log likelihood of the state-space model
-- `zend`: `Nz` x 1 final filtered state `z_{T|T}`
-- `Pend`: `Nz` x `Nz` final filtered state covariance matrix `P_{T|T}`
-- `pred`: `Nz` x `T` matrix of one-step predicted state vectors `z_{t|t-1}`
-- `vpred`: `Nz` x `Nz` x `T` array of mean squared errors `P_{t|t-1}` of
+- `loglh`: length `Nt` vector of conditional log-likelihoods P(y_t | y_{1:t-1})
+- `s_pred`: `Ns` x `Nt` matrix of one-step predicted state vectors s_{t|t-1}
+- `P_pred`: `Ns` x `Ns` x `Nt` array of mean squared errors P_{t|t-1} of
   predicted state vectors
-- `filt`: `Nz` x `T` matrix of filtered state vectors `z_{t|t}`
-- `vfilt`: `Nz` x `Nz` x `T` matrix containing mean squared errors `P_{t|t}` of
+- `s_filt`: `Ns` x `Nt` matrix of filtered state vectors s_{t|t}
+- `P_filt`: `Ns` x `Ns` x `Nt` matrix containing mean squared errors P_{t|t} of
   filtered state vectors
-- `yprederror`: `Ny` x `T` matrix of observable prediction errors
-  `y_t - y_{t|t-1}`
-- `ystdprederror`: `Ny` x `T` matrix of standardized observable prediction errors
-  `V_{t|t-1} \ (y_t - y_{t|t-1})`, where `y_t - y_{t|t-1} ∼ N(0, V_{t|t-1}`
-- `rmse`: 1 x `T` row vector of root mean squared prediction errors
-- `rmsd`: 1 x `T` row vector of root mean squared standardized prediction errors
-- `z0`: `Nz` x 1 initial state vector. This may have reassigned to the last
-  presample state vector if `n_presample_periods > 0`
-- `P0`: `Nz` x `Nz` initial state covariance matrix. This may have reassigned to
-  the last presample state covariance if `n_presample_periods > 0`
-- `marginal_loglh`: a vector of the marginal log likelihoods from t = 1 to T
+- `s_0`: `Ns` x 1 initial state vector. This may have been reassigned to the
+  last presample state vector if `Nt0 > 0`
+- `P_0`: `Ns` x `Ns` initial state covariance matrix. This may have been
+  reassigned to the last presample state covariance if `Nt0 > 0`
+- `s_T`: `Ns` x 1 final filtered state `s_{T|T}`
+- `P_T`: `Ns` x `Ns` final filtered state covariance matrix `P_{T|T}`
 
 ### Notes
 
-When `z0` and `P0` are omitted, the initial state vector and its covariance
-matrix of the time invariant Kalman filters are computed under the stationarity
-condition:
-
-```
-z0  = (I - TTT)\CCC
-P0 = reshape(I - kron(TTT, TTT))\vec(RRR*QQ*RRR'), Nz, Nz)
-```
-
-where:
-
-- `kron(TTT, TTT)` is a matrix of dimension `Nz^2` x `Nz^2`, the Kronecker
-  product of `TTT`
-- `vec(RRR*QQ*RRR')` is the `Nz^2` x 1 column vector constructed by stacking the
-  `Nz` columns of `RRR*QQ*RRR'`
-
-All eigenvalues of `TTT` are inside the unit circle when the state space model
-is stationary.  When the preceding formula cannot be applied, the initial state
-vector estimate is set to `CCC` and its covariance matrix is given by `1e6 * I`.
+When `s_0` and `P_0` are omitted, they are computed using
+`init_stationary_states`.
 """
-function kalman_filter{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
-    data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}}, CCCs::Vector{Vector{S}},
-    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}}, EEs::Vector{Matrix{S}},
-    z0::Vector{S} = Vector{S}(), P0::Matrix{S} = Matrix{S}();
-    allout::Bool = true, n_presample_periods::Int = 0)
+function kalman_filter(regime_indices::Vector{Range{Int}}, y::Matrix{S},
+    Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}},
+    Qs::Vector{Matrix{S}}, Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
+    s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0);
+    outputs::Vector{Symbol} = [:loglh, :pred, :filt],
+    Nt0::Int = 0) where {S<:AbstractFloat}
+
+    # Determine outputs
+    return_loglh = :loglh in outputs
+    return_pred  = :pred  in outputs
+    return_filt  = :filt  in outputs
 
     # Dimensions
-    T  = size(data,    2) # number of periods of data
-    Nz = size(TTTs[1], 1) # number of states
-    Ny = size(ZZs[1],  1) # number of observables
+    Ns = size(Ts[1], 1) # number of states
+    Nt = size(y, 2)     # number of periods of data
 
-    # Initialize outputs
-    z = z0
-    P = P0
-    log_likelihood = zero(S)
-    if allout
-        pred  = zeros(S, Nz, T)
-        vpred = zeros(S, Nz, Nz, T)
-        filt  = zeros(S, Nz, T)
-        vfilt = zeros(S, Nz, Nz, T)
-        yprederror    = zeros(S, Ny, T)
-        ystdprederror = zeros(S, Ny, T)
-        rmse  = zeros(S, 1, Ny)
-        rmsd  = zeros(S, 1, Ny)
-        marginal_loglh = zeros(T - n_presample_periods)
-    end
+    @assert first(regime_indices[1]) == 1
+    @assert last(regime_indices[end]) == Nt
+
+    # Initialize inputs and outputs
+    k = KalmanFilter(Ts[1], Rs[1], Cs[1], Qs[1], Zs[1], Ds[1], Es[1], s_0, P_0)
+
+    mynan = convert(S, NaN)
+    s_pred = return_pred  ? fill(mynan, Ns, Nt)     : Matrix{S}(0, 0)
+    P_pred = return_pred  ? fill(mynan, Ns, Ns, Nt) : Array{S, 3}(0, 0, 0)
+    s_filt = return_filt  ? fill(mynan, Ns, Nt)     : Matrix{S}(0, 0)
+    P_filt = return_filt  ? fill(mynan, Ns, Ns, Nt) : Array{S, 3}(0, 0, 0)
+    loglh  = return_loglh ? fill(mynan, Nt)         : Vector{S}(0)
+
+    # Populate s_0 and P_0
+    s_0 = k.s_t
+    P_0 = k.P_t
 
     # Iterate through regimes
+    s_t = s_0
+    P_t = P_0
+
     for i = 1:length(regime_indices)
         ts = regime_indices[i]
-        regime_data = data[:, ts]
-        T0 = i == 1 ? n_presample_periods : 0
-
-        if allout
-            L, z, P, pred[:,ts], vpred[:,:,ts], filt[:,ts], vfilt[:,:,ts],
-            yprederror[:,ts], ystdprederror[:,ts], _, _, z0_, P0_, marginal_loglh[ts] =
-                kalman_filter(regime_data, TTTs[i], RRRs[i], CCCs[i], QQs[i], ZZs[i], DDs[i], EEs[i], z, P;
-                              allout = true, n_presample_periods = T0)
-
-            # If `n_presample_periods > 0`, then `z0_` and `P0_` are returned as
-            # the filtered values at the end of the presample/beginning of the
-            # main sample (i.e. not the same the `z0` and `P0` passed into this
-            # method, which are from the beginning of the presample). If we are
-            # in the first regime, we want to reassign `z0` and `P0`
-            # accordingly.
-            if i == 1
-                z0, P0 = z0_, P0_
-            end
-        else
-            L, z, P = kalman_filter(regime_data, TTTs[i], RRRs[i], CCCs[i], QQs[i], ZZs[i], DDs[i], EEs[i], z, P,
-                                    allout = false, n_presample_periods = T0)
+        loglh_i, s_pred_i, P_pred_i, s_filt_i, P_filt_i, s_0, P_0, s_t, P_t =
+            kalman_filter(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i], Zs[i], Ds[i], Es[i],
+                              s_t, P_t; outputs = outputs, Nt0 = 0)
+        if return_loglh
+            loglh[ts] = loglh_i
         end
-        log_likelihood += L
+        if return_pred
+            s_pred[:,    ts] = s_pred_i
+            P_pred[:, :, ts] = P_pred_i
+        end
+        if return_filt
+            s_filt[:,    ts] = s_filt_i
+            P_filt[:, :, ts] = P_filt_i
+        end
     end
 
-    if allout
-        rmse = sqrt.(mean((yprederror.^2)', 1))
-        rmsd = sqrt.(mean((ystdprederror.^2)', 1))
+    # Populate s_T and P_T
+    s_T, P_T = s_t, P_t
 
-        return log_likelihood, z, P, pred, vpred, filt, vfilt, yprederror, ystdprederror, rmse, rmsd, z0, P0,
-        marginal_loglh
-    else
-        return log_likelihood, z, P
-    end
+    # Remove presample periods
+    loglh, s_pred, P_pred, s_filt, P_filt =
+        remove_presample!(Nt0, loglh, s_pred, P_pred, s_filt, P_filt; outputs = outputs)
+
+    return loglh, s_pred, P_pred, s_filt, P_filt, s_0, P_0, s_T, P_T
 end
 
-function kalman_filter{S<:AbstractFloat}(data::Matrix{S},
-    TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
-    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, EE::Matrix{S},
-    z0::Vector{S} = Vector{S}(), P0::Matrix{S} = Matrix{S}(0,0);
-    allout::Bool = true, n_presample_periods::Int = 0)
+function kalman_filter(y::Matrix{S},
+    T::Matrix{S}, R::Matrix{S}, C::Vector{S},
+    Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
+    s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0);
+    outputs::Vector{Symbol} = [:loglh, :pred, :filt],
+    Nt0::Int = 0) where {S<:AbstractFloat}
+
+    # Determine outputs
+    return_loglh = :loglh in outputs
+    return_pred  = :pred  in outputs
+    return_filt  = :filt  in outputs
 
     # Dimensions
-    T  = size(data, 2) # number of periods of data
-    Nz = size(TTT,  1) # number of states
-    Ne = size(RRR,  2) # number of shocks
-    Ny = size(ZZ,   1) # number of observables
+    Ns = size(T, 1) # number of states
+    Nt = size(y, 2) # number of periods of data
 
-    # Populate initial conditions if they are empty
-    if isempty(z0) || isempty(P0)
-        e, _ = eig(TTT)
-        if all(abs.(e) .< 1.)
-            z0 = (UniformScaling(1) - TTT)\CCC
-            P0 = solve_discrete_lyapunov(TTT, RRR*QQ*RRR')
-        else
-            z0 = CCC
-            P0 = 1e6 * eye(Nz)
+    # Initialize inputs and outputs
+    k = KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0)
+
+    mynan = convert(S, NaN)
+    loglh  = return_loglh ? fill(mynan, Nt)         : Vector{S}(0)
+    s_pred = return_pred  ? fill(mynan, Ns, Nt)     : Matrix{S}(0, 0)
+    P_pred = return_pred  ? fill(mynan, Ns, Ns, Nt) : Array{S, 3}(0, 0, 0)
+    s_filt = return_filt  ? fill(mynan, Ns, Nt)     : Matrix{S}(0, 0)
+    P_filt = return_filt  ? fill(mynan, Ns, Ns, Nt) : Array{S, 3}(0, 0, 0)
+
+    # Populate initial states
+    s_0 = k.s_t
+    P_0 = k.P_t
+
+    # Loop through periods t
+    for t = 1:Nt
+        # Forecast
+        forecast!(k)
+        if return_pred
+            s_pred[:,    t] = k.s_t
+            P_pred[:, :, t] = k.P_t
+        end
+
+        # Update and compute log-likelihood
+        update!(k, y[:, t]; return_loglh = return_loglh)
+        if return_filt
+            s_filt[:,    t] = k.s_t
+            P_filt[:, :, t] = k.P_t
+        end
+        if return_loglh
+            loglh[t]        = k.loglh_t
+        end
+
+        # Update s_0 and P_0 if Nt0 > 0
+        if t == Nt0
+            s_0 = k.s_t
+            P_0 = k.P_t
         end
     end
 
-    z = z0
-    P = P0
+    # Populate final states
+    s_T = k.s_t
+    P_T = k.P_t
 
-    # Initialize outputs
-    marginal_loglh = zeros(T)
-    if allout
-        pred                = zeros(S, Nz, T)
-        vpred               = zeros(S, Nz, Nz, T)
-        filt                = zeros(S, Nz, T)
-        vfilt               = zeros(S, Nz, Nz, T)
-        yprederror          = NaN*zeros(S, Ny, T)
-        ystdprederror       = NaN*zeros(S, Ny, T)
+    # Remove presample periods
+    loglh, s_pred, P_pred, s_filt, P_filt =
+        remove_presample!(Nt0, loglh, s_pred, P_pred, s_filt, P_filt; outputs = outputs)
+
+    return loglh, s_pred, P_pred, s_filt, P_filt, s_0, P_0, s_T, P_T
+end
+
+"""
+```
+forecast!(k::KalmanFilter)
+```
+
+Compute the one-step-ahead states s_{t|t-1} and state covariances P_{t|t-1} and
+assign to `k`.
+"""
+function forecast!(k::KalmanFilter{S}) where {S<:AbstractFloat}
+    T, R, C, Q = k.T, k.R, k.C, k.Q
+    s_filt, P_filt = k.s_t, k.P_t
+
+    k.s_t = T*s_filt + C         # s_{t|t-1} = T*s_{t-1|t-1} + C
+    k.P_t = T*P_filt*T' + R*Q*R' # P_{t|t-1} = Var s_{t|t-1} = T*P_{t-1|t-1}*T' + R*Q*R'
+    return nothing
+end
+
+"""
+```
+update!(k::KalmanFilter{S}, y_obs)
+```
+
+Compute the filtered states s_{t|t} and state covariances P_{t|t}, and the
+log-likelihood P(y_t | y_{1:t-1}) and assign to `k`.
+"""
+function update!(k::KalmanFilter{S}, y_obs::Vector{S};
+                 return_loglh::Bool = true) where {S<:AbstractFloat}
+    # Keep rows of measurement equation corresponding to non-NaN observables
+    nonnan = .!isnan.(y_obs)
+    y_obs = y_obs[nonnan]
+    Z = k.Z[nonnan, :]
+    D = k.D[nonnan]
+    E = k.E[nonnan, nonnan]
+    Ny = length(y_obs)
+
+    s_pred = k.s_t
+    P_pred = k.P_t
+
+    y_pred = Z*s_pred + D         # y_{t|t-1} = Z*s_{t|t-1} + D
+    V_pred = Z*P_pred*Z' + E      # V_{t|t-1} = Var y_{t|t-1} = Z*P_{t|t-1}*Z' + E
+    V_pred = (V_pred + V_pred')/2
+    V_pred_inv = inv(V_pred)
+    dy = y_obs - y_pred           # dy = y_t - y_{t|t-1} = prediction error
+    PZV = P_pred'*Z'*V_pred_inv
+
+    k.s_t = s_pred + PZV*dy       # s_{t|t} = s_{t|t-1} + P_{t|t-1}'*Z'/V_{t|t-1}*dy
+    k.P_t = P_pred - PZV*Z*P_pred # P_{t|t} = P_{t|t-1} - P_{t|t-1}'*Z'/V_{t|t-1}*Z*P_{t|t-1}
+
+    if return_loglh
+        k.loglh_t = -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2 # p(y_t | y_{1:t-1})
     end
+    return nothing
+end
 
-    V = RRR*QQ*RRR' # V = Var(z_t) = Var(Rϵ_t)
+"""
+```
+remove_presample!(Nt0, loglh, s_pred, P_pred, s_filt, P_filt)
+```
 
-    for t = 1:T
-        # Index out rows of the measurement equation for which we have
-        # nonmissing data in period t
-        nonmissing = .!isnan.(data[:, t])
-        y_t  = data[nonmissing, t]
-        ZZ_t = ZZ[nonmissing, :]
-        DD_t = DD[nonmissing]
-        EE_t = EE[nonmissing, nonmissing]
-        Ny_t = length(y_t)
+Remove the first `Nt0` periods from all other input arguments and return.
+"""
+function remove_presample!(Nt0::Int, loglh::Vector{S},
+                           s_pred::Matrix{S}, P_pred::Array{S, 3},
+                           s_filt::Matrix{S}, P_filt::Array{S, 3};
+                           outputs::Vector{Symbol} = [:loglh, :pred, :filt]) where {S<:AbstractFloat}
+    if Nt0 > 0
+        Nt = length(loglh)
+        insample = (Nt0+1):Nt
 
-        ## Forecast
-        z = TTT*z + CCC                 # z_{t|t-1} = TTT*z_{t-1|t-1} + CCC
-        P = TTT*P*TTT' + RRR*QQ*RRR'    # P_{t|t-1} = Var s_{t|t-1} = TTT*P_{t-1|t-1}*TTT' + RRR*QQ*RRR'
-        V = ZZ_t*P*ZZ_t' + EE_t         # V_{t|t-1} = Var y_{t|t-1} = ZZ*P_{t|t-1}*ZZ' + EE
-        V = (V+V')/2
-
-        dy = y_t - ZZ_t*z - DD_t        # dy  = y_t - y_{t|t-1} = prediction error
-        ddy = V\dy                      # ddy = (1/V_{t|t-1})dy = weighted prediction error
-
-        if allout
-            pred[:, t]                   = z
-            vpred[:, :, t]               = P
-            yprederror[nonmissing, t]    = dy
-            ystdprederror[nonmissing, t] = dy ./ sqrt.(diag(V))
+        if :loglh in outputs
+            loglh  = loglh[insample]
         end
-
-        ## Compute marginal log-likelihood, log P(y_t|y_1,...y_{t-1},θ)
-        ## log P(y_1,...,y_T|θ) ∝ log P(y_1|θ) + log P(y_2|y_1,θ) + ... + P(y_T|y_1,...,y_{T-1},θ)
-        if t > n_presample_periods
-            marginal_loglh[t] = -log(det(V))/2 - first(dy'*ddy/2) - Ny_t*log(2*pi)/2
+        if :pred in outputs
+            s_pred = s_pred[:,    insample]
+            P_pred = P_pred[:, :, insample]
         end
-
-        ## Update
-        z = z + P'*ZZ_t'*ddy            # z_{t|t} = z_{t|t-1} + P_{t|t-1}'*ZZ'*(1/V_{t|t-1})dy
-        P = P - P'*ZZ_t'/V*ZZ_t*P       # P_{t|t} = P_{t|t-1} - P_{t|t-1}'*ZZ'*(1/V_{t|t-1})*ZZ*P_{t|t-1}
-
-        if allout
-            filt[:, t]     = z
-            vfilt[:, :, t] = P
-        end
-
-    end # of loop through periods
-
-    if n_presample_periods > 0
-        mainsample_periods = n_presample_periods+1:T
-
-        marginal_loglh = marginal_loglh[mainsample_periods]
-
-        if allout
-            # If we choose to discard presample periods, then we reassign `z0`
-            # and `P0` to be their values at the end of the presample/beginning
-            # of the main sample
-            z0 = filt[:,     n_presample_periods]
-            P0 = vfilt[:, :, n_presample_periods]
-
-            pred            = pred[:,     mainsample_periods]
-            vpred           = vpred[:, :, mainsample_periods]
-            filt            = filt[:,     mainsample_periods]
-            vfilt           = vfilt[:, :, mainsample_periods]
-            yprederror      = yprederror[:,  mainsample_periods]
-            ystdprederror   = ystdprederror[:, mainsample_periods]
+        if :filt in outputs
+            s_filt = s_filt[:,    insample]
+            P_filt = P_filt[:, :, insample]
         end
     end
-
-    log_likelihood = sum(marginal_loglh)
-
-    if allout
-        rmse = sqrt.(mean((yprederror.^2)', 1))
-        rmsd = sqrt.(mean((ystdprederror.^2)', 1))
-
-        return log_likelihood, z, P, pred, vpred, filt, vfilt, yprederror, ystdprederror,
-        rmse, rmsd, z0, P0, marginal_loglh
-    else
-        return log_likelihood, z, P
-    end
+    return loglh, s_pred, P_pred, s_filt, P_filt
 end

@@ -2,9 +2,9 @@ language: julia
 os:
     - osx
     - linux
+sudo: required
 julia:
-    - 0.5.0
-    - 0.5.1
+    - 0.6
 notifications:
     email: false
 script:

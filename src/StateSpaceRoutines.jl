@@ -5,12 +5,12 @@ module StateSpaceRoutines
     using QuantEcon: solve_discrete_lyapunov
     using Distributions: Distribution, MvNormal, pdf, Weights, sample
     using Roots: fzero
-    using HDF5, JLD
+    using HDF5
 
     export
 
         # filters/kalman_filter.jl
-        kalman_filter,
+        init_stationary_states, kalman_filter,
 
         # filters/tempered_particle_filter
         tempered_particle_filter, initialize_state_draws, correction_selection!,

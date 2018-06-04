@@ -1,14 +1,13 @@
 """
 ```
-carter_kohn_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0;
-    n_presample_periods = 0, draw_states = true)
+carter_kohn_smoother(y, T, R, C, Q, Z, D, E, s_0, P_0;
+    Nt0 = 0, draw_states = true)
 
-carter_kohn_smoother(regime_indices, data, TTTs, RRRs, CCCs,
-    QQs, ZZs, DDs, EEs, z0, P0; n_presample_periods = 0,
-    draw_states = true)
+carter_kohn_smoother(regime_indices, y, Ts, Rs, Cs, Qs,
+    Zs, Ds, Es, s_0, P_0; Nt0 = 0, draw_states = true)
 ```
 This program is a simulation smoother based on Carter and Kohn's \"On Gibbs
-Sampling for State Space Models\" (Biometrika, 1994).  It recursively samples
+Sampling for State Space Models\" (Biometrika, 1994). It recursively samples
 from the conditional distribution of time-t states given the full set of
 observables and states from time t+1 to time T. Unlike the Durbin-Koopman
 simulation smoother, this one does rely on inverting potentially singular
@@ -21,118 +20,100 @@ smoothed states and shocks are indexed out of the augmented state vectors.
 The original state space (before augmenting with shocks) is given by:
 
 ```
-z_{t+1} = CCC + TTT*z_t + RRR*ϵ_t    (transition equation)
-y_t     = DD  + ZZ*z_t  + η_t        (measurement equation)
+s_{t+1} = C + T*s_t + R*ϵ_t    (transition equation)
+y_t     = D + Z*s_t + u_t      (measurement equation)
 
-ϵ_t ∼ N(0, QQ)
-η_t ∼ N(0, EE)
-Cov(ϵ_t, η_t) = 0
+ϵ_t ∼ N(0, Q)
+u_t ∼ N(0, E)
+Cov(ϵ_t, u_t) = 0
 ```
 
 ### Inputs
 
-- `data`: `Ny` x `T` matrix containing data `y(1), ... , y(T)`
-- `z0`: `Nz` x 1 initial state vector
-- `P0`: `Nz` x `Nz` initial state covariance matrix
-- `pred`: `Nz` x `T` matrix of one-step predicted state vectors `z_{t|t-1}`
-  (from the Kalman filter)
-- `vpred`: `Nz` x `Nz` x `T` array of mean squared errors `P_{t|t-1}` of
-  predicted state vectors
+- `y`: `Ny` x `Nt` matrix containing data `y_1, ... , y_T`
+- `s_0`: `Ns` x 1 initial state vector
+- `P_0`: `Ns` x `Ns` initial state covariance matrix
 
-**Method 1 only:** state-space system matrices `TTT`, `RRR`, `CCC`, `QQ`, `ZZ`,
-`DD`, `EE`. See `?kalman_filter`
-
-**Method 2 only:** `regime_indices` and system matrices for each regime `TTTs`,
-`RRRs`, `CCCs`, `QQs`, `ZZs`, `DDs`, `EEs`. See `?kalman_filter`
+**Method 1 only:** state-space system matrices `T`, `R`, `C`, `Q`, `Z`,
+`D`, `E`. See `?kalman_filter`
+pp
+**Method 2 only:** `regime_indices` and system matrices for each regime `Ts`,
+`Rs`, `Cs`, `Qs`, `Zs`, `Ds`, `Es`. See `?kalman_filter`
 
 where:
 
-- `T`: number of periods for which we have data
-- `Nz`: number of states
+- `Nt`: number of periods for which we have data
+- `Ns`: number of states
 - `Ne`: number of shocks
 - `Ny`: number of observables
 
 ### Keyword Arguments
 
-- `n_presample_periods`: if greater than 0, the returned smoothed states and
-  shocks matrices will be shorter by that number of columns (taken from the
-  beginning)
+- `Nt0`: if greater than 0, the returned smoothed states and shocks matrices
+  will be shorter by that number of columns (taken from the beginning)
 - `draw_states`: indicates whether to draw smoothed states from the distribution
-  `N(z_{t|T}, P_{t|T})` or to use the mean `z_{t|T}` (reducing to the Hamilton
-  smoother). Defaults to `true`
+  `N(s_{t|T}, P_{t|T})` or to use the mean `s_{t|T}` (reducing to the Hamilton
+  smoother)
 
 ### Outputs
 
-- `smoothed_states`: `Nz` x `T` matrix of smoothed states `z_{t|T}`
-- `smoothed_shocks`: `Ne` x `T` matrix of smoothed shocks `ϵ_{t|T}`
+- `s_smth`: `Ns` x `Nt` matrix of smoothed states `s_{t|T}`
+- `ϵ_smth`: `Ne` x `Nt` matrix of smoothed shocks `ϵ_{t|T}`
 """
-function carter_kohn_smoother{S<:AbstractFloat}(data::Matrix{S},
-    TTT::Matrix{S}, RRR::Matrix{S}, CCC::Vector{S},
-    QQ::Matrix{S}, ZZ::Matrix{S}, DD::Vector{S}, EE::Matrix{S},
-    z0::Vector{S}, P0::Matrix{S};
-    n_presample_periods::Int = 0, draw_states::Bool = true)
+function carter_kohn_smoother(y::Matrix{S},
+    T::Matrix{S}, R::Matrix{S}, C::Vector{S},
+    Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
+    s_0::Vector{S}, P_0::Matrix{S};
+    Nt0::Int = 0, draw_states::Bool = true) where {S<:AbstractFloat}
 
-    T = size(data, 2)
-    regime_indices = Range{Int64}[1:T]
-
-    carter_kohn_smoother(regime_indices, data, Matrix{S}[TTT], Matrix{S}[RRR], Vector{S}[CCC],
-        Matrix{S}[QQ], Matrix{S}[ZZ], Vector{S}[DD], Matrix{S}[EE], z0, P0;
-        n_presample_periods = n_presample_periods,
-        draw_states = draw_states)
+    Nt = size(y, 2)
+    carter_kohn_smoother(Range{Int}[1:Nt], y, Matrix{S}[T], Matrix{S}[R], Vector{S}[C],
+        Matrix{S}[Q], Matrix{S}[Z], Vector{S}[D], Matrix{S}[E], s_0, P_0;
+        Nt0 = Nt0, draw_states = draw_states)
 end
 
-function carter_kohn_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
-    data::Matrix{S}, TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}}, CCCs::Vector{Vector{S}},
-    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, DDs::Vector{Vector{S}}, EEs::Vector{Matrix{S}},
-    z0::Vector{S} = Vector{S}(), P0::Matrix{S} = Matrix{S}();
-    n_presample_periods::Int = 0, draw_states::Bool = true)
+function carter_kohn_smoother(regime_indices::Vector{Range{Int}}, y::Matrix{S},
+    Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
+    Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
+    s_0::Vector{S}, P_0::Matrix{S};
+    Nt0::Int = 0, draw_states::Bool = true) where {S<:AbstractFloat}
 
     # Dimensions
-    n_regimes = length(regime_indices)
-    T  = size(data,    2) # number of periods of data
-    Nz = size(TTTs[1], 1) # number of states
-    Ne = size(RRRs[1], 2) # number of shocks
+    Nt = size(y,     2) # number of periods of data
+    Ns = size(Ts[1], 1) # number of states
+    Ne = size(Rs[1], 2) # number of shocks
 
     # Augment state space with shocks
-    TTTs, RRRs, CCCs, ZZs, z0, P0 =
-        augment_states_with_shocks(regime_indices, TTTs, RRRs, CCCs, QQs, ZZs, z0, P0)
+    Ts, Rs, Cs, Zs, s_0, P_0 =
+        augment_states_with_shocks(regime_indices, Ts, Rs, Cs, Qs, Zs, s_0, P_0)
 
-    # Kalman filter stacked states and shocks
-    _, _, _, pred, vpred, filt, vfilt, _ =
-        kalman_filter(regime_indices, data, TTTs, RRRs, CCCs, QQs, ZZs, DDs, EEs, z0, P0)
+    # Kalman filter stacked states and shocks stil_t
+    _, stil_pred, Ptil_pred, stil_filt, Ptil_filt, _, _, _, _ =
+        kalman_filter(regime_indices, y, Ts, Rs, Cs, Qs, Zs, Ds, Es, s_0, P_0,
+                      outputs = [:pred, :filt])
 
-    # Smooth the states recursively, starting at t = T-1 and going backwards
-    augmented_smoothed_states = copy(filt)
+    # Smooth the stacked states and shocks recursively, starting at t = T-1 and
+    # going backwards
+    stil_smth = copy(stil_filt)
 
-    zend = filt[:, T]
-    Pend = vfilt[:, :, T]
-
-    augmented_smoothed_states[:, T] = if draw_states
-        U, eig, _ = svd(Pend)
-        zend + U*diagm(sqrt.(eig))*randn(Nz+Ne)
-    else
-        zend
-    end
-
-    for i = n_regimes:-1:1
-        regime_periods = regime_indices[i]
-
-        # The smoothed state in t = T is the same as the filtered state
-        if i == n_regimes
-            regime_periods = regime_periods[1:end-1]
-        end
-
+    for i = length(regime_indices):-1:1
         # Get state-space system matrices for this regime
-        TTT = TTTs[i]
+        T = Ts[i]
 
-        for t in reverse(regime_periods)
-            J = vfilt[:, :, t] * TTT' * pinv(vpred[:, :, t+1])
-            μ = filt[:, t] + J*(augmented_smoothed_states[:, t+1] - pred[:, t+1])
-            Σ = vfilt[:, :, t] - J*TTT*vfilt[:, :, t]
+        for t in reverse(regime_indices[i])
+            if t == Nt
+                μ = stil_filt[:, end]
+                Σ = Ptil_filt[:, :, end]
+            else
+                J = Ptil_filt[:, :, t] * T' * pinv(Ptil_pred[:, :, t+1])
+                μ = stil_filt[:, t] + J*(stil_smth[:, t+1] - stil_pred[:, t+1]) # stil_{t|T}
+                Σ = Ptil_filt[:, :, t] - J*T*Ptil_filt[:, :, t]                 # Ptil_{t|T}
+            end
 
-            augmented_smoothed_states[:, t] = if draw_states
+            # Draw stil_t ∼ N(stil_{t|T}, Ptil_{t|T})
+            stil_smth[:, t] = if draw_states
                 U, eig, _ = svd(Σ)
-                μ + U*diagm(sqrt.(eig))*randn(Nz+Ne)
+                μ + U * diagm(sqrt.(eig)) * randn(Ns+Ne)
             else
                 μ
             end
@@ -140,16 +121,15 @@ function carter_kohn_smoother{S<:AbstractFloat}(regime_indices::Vector{Range{Int
     end
 
     # Index out states and shocks
-    smoothed_states = augmented_smoothed_states[1:Nz, :]
-    smoothed_shocks = augmented_smoothed_states[Nz+1:end, :]
+    s_smth = stil_smth[1:Ns,     :] # s_{t|T}
+    ϵ_smth = stil_smth[Ns+1:end, :] # ϵ_{t|T}
 
     # Trim the presample if needed
-    if n_presample_periods > 0
-        mainsample_periods = n_presample_periods+1:T
-
-        smoothed_states = smoothed_states[:, mainsample_periods]
-        smoothed_shocks = smoothed_shocks[:, mainsample_periods]
+    if Nt0 > 0
+        insample = Nt0+1:Nt
+        s_smth = s_smth[:, insample]
+        ϵ_smth = ϵ_smth[:, insample]
     end
 
-    return smoothed_states, smoothed_shocks
+    return s_smth, ϵ_smth
 end

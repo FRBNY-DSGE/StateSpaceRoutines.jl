@@ -1,48 +1,39 @@
 path = dirname(@__FILE__)
 
 # Initialize arguments to function
-h5 = h5open("$path/reference/kalman_filter_args.h5", "r")
-for arg in ["data", "TTT", "RRR", "CCC", "QQ", "ZZ", "DD", "EE", "z0", "P0"]
-    eval(parse("$arg = read(h5, \"$arg\")"))
-end
-close(h5)
+file = h5open("$path/reference/kalman_filter_args.h5", "r")
+y = read(file, "data")
+T, R, C    = read(file, "TTT"), read(file, "RRR"), read(file, "CCC")
+Q, Z, D, E = read(file, "QQ"), read(file, "ZZ"), read(file, "DD"), read(file, "EE")
+s_0, P_0   = read(file, "z0"), read(file, "P0")
+close(file)
 
 # Method with all arguments provided
-out = kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0)
+out = kalman_filter(y, T, R, C, Q, Z, D, E, s_0, P_0)
 
 h5open("$path/reference/kalman_filter_out.h5", "r") do h5
-    @test read(h5, "log_likelihood") ≈ out[1]
-    @test read(h5, "pred")           ≈ out[4]
-    @test read(h5, "vpred")          ≈ out[5]
-    @test read(h5, "filt")           ≈ out[6]
-    @test read(h5, "vfilt")          ≈ out[7]
-    @test read(h5, "yprederror")     ≈ out[8]
-    @test read(h5, "ystdprederror")  ≈ out[9]
-    @test read(h5, "rmse")           ≈ out[10]
-    @test read(h5, "rmsd")           ≈ out[11]
-    @test z0                         ≈ out[12]
-    @test P0                         ≈ out[13]
-    @test read(h5, "marginal_loglh") ≈ out[14]
+    @test read(h5, "log_likelihood") ≈ sum(out[1])
+    @test read(h5, "marginal_loglh") ≈ out[1]
+    @test read(h5, "pred")           ≈ out[2]
+    @test read(h5, "vpred")          ≈ out[3]
+    @test read(h5, "filt")           ≈ out[4]
+    @test read(h5, "vfilt")          ≈ out[5]
+    @test s_0                        ≈ out[6]
+    @test P_0                        ≈ out[7]
 end
 
 # Method with initial conditions omitted
-out = kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, EE)
+out = kalman_filter(y, T, R, C, Q, Z, D, E)
 
-# Pend, vpred, and vfilt matrix entries are especially large, averaging 1e5, so
-# we allow greater ϵ
 h5open("$path/reference/kalman_filter_out.h5", "r") do h5
-    @test read(h5, "log_likelihood") ≈ out[1]
-    @test read(h5, "pred")           ≈ out[4]
-    @test read(h5, "vpred")          ≈ out[5]
-    @test read(h5, "filt")           ≈ out[6]
-    @test read(h5, "vfilt")          ≈ out[7]
-    @test read(h5, "yprederror")     ≈ out[8]
-    @test read(h5, "ystdprederror")  ≈ out[9]
-    @test read(h5, "rmse")           ≈ out[10]
-    @test read(h5, "rmsd")           ≈ out[11]
-    @test z0                         ≈ out[12]
-    @test P0                         ≈ out[13]
-    @test read(h5, "marginal_loglh") ≈ out[14]
+    @test read(h5, "log_likelihood") ≈ sum(out[1])
+    @test read(h5, "marginal_loglh") ≈ out[1]
+    @test read(h5, "pred")           ≈ out[2]
+    @test read(h5, "vpred")          ≈ out[3]
+    @test read(h5, "filt")           ≈ out[4]
+    @test read(h5, "vfilt")          ≈ out[5]
+    @test s_0                        ≈ out[6]
+    @test P_0                        ≈ out[7]
 end
 
 
