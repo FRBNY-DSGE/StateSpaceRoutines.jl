@@ -5,7 +5,7 @@
 implied by a general (potentially non-linear) state space system. The filter was introduced by Ed Herbst and
 Frank Schorfheide in a recent paper (cited in the [README](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/doc)
 in the root directory of the StateSpaceRoutines repository).
-- An example of the tempered particle filter can be found [here](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/doc/docs/examples/tempered_particle_filter).
+- An example of the tempered particle filter can be found [here](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/blob/master/docs/examples/tempered_particle_filter/tempered_particle_filter_ex.jl).
 
 ## Inputs to the function
 - The inputs for `tempered_particle_filter` are as follows:
