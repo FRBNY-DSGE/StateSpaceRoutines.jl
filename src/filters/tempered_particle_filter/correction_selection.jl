@@ -24,8 +24,8 @@
 # - `id`: vector of indices corresponding to resampled particles
 # """
 
-function correction(φ_new::Float64, coeff_terms::Vector{Float64}, log_e_1_terms::Vector{Float64},
-                    log_e_2_terms::Vector{Float64}, n_obs::Int64)
+function correction(φ_new::Float64, coeff_terms::AbstractVector{Float64}, log_e_1_terms::AbstractVector{Float64},
+                    log_e_2_terms::AbstractVector{Float64}, n_obs::Int64)
     n_particles = length(coeff_terms)
     incremental_weights = Vector{Float64}(n_particles)
     for i = 1:n_particles
@@ -41,7 +41,7 @@ function correction(φ_new::Float64, coeff_terms::Vector{Float64}, log_e_1_terms
 end
 
 function selection(normalized_weights::Vector{Float64}, s_lag_tempered::Matrix{Float64},
-                   s_t_nontempered::Matrix{Float64}, ϵ::Matrix{Float64};
+                   s_t_nontempered::AbstractMatrix{Float64}, ϵ::AbstractMatrix{Float64};
                    resampling_method::Symbol = :multinomial)
     # Resampling
     id = resample(normalized_weights, method = resampling_method)

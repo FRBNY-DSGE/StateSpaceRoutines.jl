@@ -33,8 +33,8 @@ Where ∑ is over j=1...M particles, and incremental weight is:
     w̃ₜʲ(φ₁) = (φ₁/2π)^(d/2)|∑ᵤ|^(1/2) exp{-1/2 [yₜ-Ψ(sₜʲ'ⁿ⁻¹)]' φ₁ ∑ᵤ⁻¹ [yₜ-Ψ(sₜʲ'ⁿ⁻¹)]}
 
 """
-function solve_inefficiency{S<:AbstractFloat}(φ_new::S, coeff_terms::Vector{Float64}, exp_1_terms::Vector{Float64},
-                                              exp_2_terms::Vector{Float64}, n_obs::Int64; parallel::Bool = false)
+function solve_inefficiency{S<:AbstractFloat}(φ_new::S, coeff_terms::AbstractVector{Float64}, exp_1_terms::AbstractVector{Float64},
+                                              exp_2_terms::AbstractVector{Float64}, n_obs::Int64; parallel::Bool = false)
 
     n_particles = length(coeff_terms)
 

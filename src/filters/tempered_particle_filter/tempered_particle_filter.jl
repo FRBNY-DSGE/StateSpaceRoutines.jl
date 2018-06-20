@@ -112,9 +112,15 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
 
     # Vectors of the 3 component terms that are used to calculate the weights
     # Inputs saved in these vectors to conserve memory/avoid unnecessary re-computation
-    coeff_terms = Vector{Float64}(n_particles)
-    log_e_1_terms = Vector{Float64}(n_particles)
-    log_e_2_terms = Vector{Float64}(n_particles)
+    if parallel
+        coeff_terms   = SharedVector{Float64}(n_particles)
+        log_e_1_terms = SharedVector{Float64}(n_particles)
+        log_e_2_terms = SharedVector{Float64}(n_particles)
+    else
+        coeff_terms   = Vector{Float64}(n_particles)
+        log_e_1_terms = Vector{Float64}(n_particles)
+        log_e_2_terms = Vector{Float64}(n_particles)
+    end
 
     for t = 1:T
 
@@ -141,20 +147,15 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
 
         #####################################
         if parallel
-            ϵ = Matrix{Float64}(n_shocks, n_particles)
-            s_t_nontempered = similar(s_lag_tempered)
-            ϵ, s_t_nontempered, coeff_terms, log_e_1_terms, log_e_2_terms =
-            @parallel (vector_reduce) for i in 1:n_particles
-                ε = rand(F_ϵ)
-                s_t_non = Φ(s_lag_tempered[:, i], ε)
+            ϵ = SharedMatrix{Float64}(n_shocks, n_particles)
+            s_t_nontempered = SharedMatrix{Float64}(n_states, n_particles)
+            @sync @parallel for i in 1:n_particles
+                ϵ[:, i] = rand(F_ϵ)
+                s_t_non = Φ(s_lag_tempered[:, i], ϵ[:, i])
                 p_err   = y_t - Ψ_t(s_t_non, zeros(n_obs_t))
-                coeff_term, log_e_1_term, log_e_2_term = weight_kernel(0., y_t, p_err, det_HH_t, inv_HH_t,
-                                                                       initialize = true)
-                vector_reshape(ε, s_t_non, coeff_term, log_e_1_term, log_e_2_term)
+                coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] =
+                    weight_kernel(0., y_t, p_err, det_HH_t, inv_HH_t, initialize = true)
             end
-            coeff_terms = squeeze(coeff_terms, 1)
-            log_e_1_terms = squeeze(log_e_1_terms, 1)
-            log_e_2_terms = squeeze(log_e_2_terms, 1)
         else
             # Draw random shock ϵ
             ϵ = rand(F_ϵ, n_particles)
@@ -211,10 +212,18 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
             # Get error for all particles
             p_error = y_t .- Ψ_bcast_t(s_t_nontempered, zeros(n_obs_t, n_particles))
 
-            for i in 1:n_particles
-                coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] = weight_kernel(φ_old, y_t, p_error[:, i],
-                                                                                   det_HH_t, inv_HH_t,
-                                                                                   initialize = false)
+            if parallel
+                @sync @parallel for i in 1:n_particles
+                    coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] = weight_kernel(φ_old, y_t, p_error[:, i],
+                                                                                       det_HH_t, inv_HH_t,
+                                                                                       initialize = false)
+                end
+            else
+                for i in 1:n_particles
+                    coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] = weight_kernel(φ_old, y_t, p_error[:, i],
+                                                                                       det_HH_t, inv_HH_t,
+                                                                                       initialize = false)
+                end
             end
 
             # Define inefficiency function
