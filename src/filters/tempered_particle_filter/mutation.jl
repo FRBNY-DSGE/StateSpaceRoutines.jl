@@ -60,20 +60,11 @@ function mutation{S<:AbstractFloat}(Φ::Function, Ψ::Function, QQ::Matrix{Float
     #------------------------------------------------------------------------
 
     # Generate new draw of ε from a N(ε_init, c²I) distribution, c tuning parameter, I identity
-    if parallel
-        @sync @parallel for i in 1:n_particles
-            ϵ_new = rand(MvNormal(ϵ_init[:,i], c^2*QQ))
-            s_out[:,i], ϵ_out[:,i], accept_vec[i] =
-                mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ_init[:,i], ϵ_new,
-                        φ_new, det_HH, inv_HH, n_obs, n_shocks, N_MH; testing = testing)
-        end
-    else
-        for i in 1:n_particles
-            ϵ_new = rand(MvNormal(ϵ_init[:,i], c^2*QQ))
-            s_out[:,i], ϵ_out[:,i], accept_vec[i] =
-                mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ_init[:,i], ϵ_new,
-                        φ_new, det_HH, inv_HH, n_obs, n_shocks, N_MH; testing = testing)
-        end
+    @mypar parallel for i in 1:n_particles
+        ϵ_new = rand(MvNormal(ϵ_init[:,i], c^2*QQ))
+        s_out[:,i], ϵ_out[:,i], accept_vec[i] =
+            mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ_init[:,i], ϵ_new,
+                    φ_new, det_HH, inv_HH, n_obs, n_shocks, N_MH; testing = testing)
     end
 
     # Calculate acceptance rate

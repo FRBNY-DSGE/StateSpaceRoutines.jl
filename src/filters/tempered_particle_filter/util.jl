@@ -1,3 +1,7 @@
+macro mypar(parallel, ex)
+    return :( $(esc(parallel)) ? (@sync @parallel $(esc(ex))) : $(esc(ex)) )
+end
+
 """
 ```
 update_c!(c_in::Float64, accept_in::Float64, target_in::Float64)
