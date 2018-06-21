@@ -35,21 +35,16 @@ Where ∑ is over j=1...M particles, and incremental weight is:
 """
 function solve_inefficiency{S<:AbstractFloat}(φ_new::S, coeff_terms::AbstractVector{Float64}, exp_1_terms::AbstractVector{Float64},
                                               exp_2_terms::AbstractVector{Float64}, n_obs::Int64; parallel::Bool = false)
-
+    # Compute incremental weights
     n_particles = length(coeff_terms)
-
-    if parallel
-        w = @parallel (vcat) for i = 1:n_particles
-            incremental_weight(φ_new, coeff_terms[i], exp_1_terms[i], exp_2_terms[i], n_obs)
-        end
-    else
-        w = Vector{Float64}(n_particles)
-        for i = 1:n_particles
-            w[i] = incremental_weight(φ_new, coeff_terms[i], exp_1_terms[i], exp_2_terms[i], n_obs)
-        end
+    w = Vector{Float64}(n_particles)
+    for i = 1:n_particles
+        w[i] = incremental_weight(φ_new, coeff_terms[i], exp_1_terms[i], exp_2_terms[i], n_obs)
     end
 
+    # Compute normalized weights
     W = w/mean(w)
+
     return sum(W.^2)/n_particles
 end
 

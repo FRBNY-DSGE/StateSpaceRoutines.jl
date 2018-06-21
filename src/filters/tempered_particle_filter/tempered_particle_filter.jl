@@ -171,12 +171,11 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
         end
 
         if adaptive
-            init_Ineff_func(φ) = solve_inefficiency(φ, coeff_terms, log_e_1_terms,
-                                                    log_e_2_terms, n_obs_t,
-                                                    parallel = false) - r_star
+            init_ineff_func(φ) =
+                solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t) - r_star
 
-            φ_1 = bisection(init_Ineff_func, 1e-30, 1.0, tol = tol)
-            # φ_1 = fzero(init_Ineff_func, 1e-30, 1., xtol = 0.)
+            φ_1 = bisection(init_ineff_func, 1e-30, 1.0, tol = tol)
+            # φ_1 = fzero(init_ineff_func, 1e-30, 1., xtol = 0.)
         else
             φ_1 = fixed_sched[1]
         end
@@ -223,9 +222,9 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
             end
 
             # Define inefficiency function
-            init_ineff_func(φ) = solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
-                                                    parallel = false) - r_star
-            fphi_interval = [init_ineff_func(φ_old) init_ineff_func(1.0)]
+            solve_ineff_func(φ) =
+                solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t) - r_star
+            fphi_interval = [solve_ineff_func(φ_old) solve_ineff_func(1.0)]
 
             # The below boolean checks that a solution exists within interval
             if prod(sign.(fphi_interval)) == -1 && adaptive
