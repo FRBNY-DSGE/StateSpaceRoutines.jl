@@ -17,7 +17,7 @@ Executes tempered particle filter.
 
 - `data`: (`n_observables` x `hist_periods`) size `Matrix{S}` of data for observables.
 - `Φ`: The state transition function: s_t = Φ(s_t-1, ϵ_t)
-- `Ψ`: The measurement equation: y_t = Ψ(s_t, u_t)
+- `Ψ`: The measurement equation: y_t = Ψ(s_t) + u_t
 - `F_ϵ`: The shock distribution: ϵ ~ F_ϵ
 - `F_u`: The measurement error distribution: u ~ F_u
 - `s_init`: (`n_observables` x `n_particles`) initial state vector
@@ -88,17 +88,17 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
 
     # Ensuring Φ, Ψ broadcast to matrices
     function Φ_bcast(s_t1::Matrix{S}, ϵ_t1::Matrix{S})
-        s_t = similar(s_t1)
+        s_t = zeros(n_states, n_particles)
         for i in 1:n_particles
             s_t[:, i] = Φ(s_t1[:, i], ϵ_t1[:, i])
         end
         return s_t
     end
 
-    function Ψ_bcast(s_t::Matrix{S}, u_t::Matrix{S})
-        y_t = similar(u_t)
+    function Ψ_bcast(s_t::Matrix{S})
+        y_t = zeros(n_obs, n_particles)
         for i in 1:n_particles
-            y_t[:, i] = Ψ(s_t[:, i], u_t[:, i])
+            y_t[:, i] = Ψ(s_t[:, i])
         end
         return y_t
     end
@@ -139,8 +139,8 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
         nonmissing          = isfinite.(y_t)
         y_t                 = y_t[nonmissing]
         n_obs_t             = length(y_t)
-        Ψ_t                 = (x, ϵ) -> Ψ(x, ϵ)[nonmissing]
-        Ψ_bcast_t           = (x, ϵ) -> Ψ_bcast(x, ϵ)[nonmissing, :]
+        Ψ_t                 = x -> Ψ(x)[nonmissing]
+        Ψ_bcast_t           = x -> Ψ_bcast(x)[nonmissing, :]
         HH_t                = F_u.Σ.mat[nonmissing, nonmissing]
         inv_HH_t            = inv(HH_t)
         det_HH_t            = det(HH_t)
@@ -152,7 +152,7 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
             @sync @parallel for i in 1:n_particles
                 ϵ[:, i] = rand(F_ϵ)
                 s_t_non = Φ(s_lag_tempered[:, i], ϵ[:, i])
-                p_err   = y_t - Ψ_t(s_t_non, zeros(n_obs_t))
+                p_err   = y_t - Ψ_t(s_t_non)
                 coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] =
                     weight_kernel(0., y_t, p_err, det_HH_t, inv_HH_t, initialize = true)
             end
@@ -164,7 +164,7 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
             s_t_nontempered = Φ_bcast(s_lag_tempered, ϵ)
 
             # Error for each particle
-            p_error = y_t .- Ψ_bcast_t(s_t_nontempered, zeros(n_obs_t, n_particles))
+            p_error = y_t .- Ψ_bcast_t(s_t_nontempered)
 
             # Solve for initial tempering parameter φ_1
             for i in 1:n_particles
@@ -210,7 +210,7 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
             count += 1
 
             # Get error for all particles
-            p_error = y_t .- Ψ_bcast_t(s_t_nontempered, zeros(n_obs_t, n_particles))
+            p_error = y_t .- Ψ_bcast_t(s_t_nontempered)
 
             if parallel
                 @sync @parallel for i in 1:n_particles

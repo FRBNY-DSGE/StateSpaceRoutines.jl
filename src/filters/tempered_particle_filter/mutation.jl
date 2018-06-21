@@ -55,6 +55,7 @@ function mutation{S<:AbstractFloat}(Φ::Function, Ψ::Function, QQ::Matrix{Float
     #------------------------------------------------------------------------
     # Metropolis-Hastings Steps
     #------------------------------------------------------------------------
+
     # Generate new draw of ε from a N(ε_init, c²I) distribution, c tuning parameter, I identity
     if parallel
         s_out, ϵ_out, accept_vec = @sync @parallel (vector_reduce) for i = 1:n_particles
@@ -96,24 +97,22 @@ function mh_step(Φ::Function, Ψ::Function, y_t::Vector{Float64}, s_init::Vecto
         s_new = Φ(s_init, ϵ_new)
 
         # Calculate difference between data and expected y from measurement equation
-        u_t = zeros(n_obs)
-        error_new  = y_t - Ψ(s_new, u_t)
-        error_init = y_t - Ψ(s_non, u_t)
+        error_new  = y_t - Ψ(s_new)
+        error_init = y_t - Ψ(s_non)
 
         # Calculate posteriors
-        μ_1 = u_t
+        μ_1 = zeros(n_obs)
         scaled_det_HH = det_HH/(φ_new)^n_obs
         scaled_inv_HH = inv_HH*φ_new
+        post_new_1  = fast_mvnormal_pdf(error_new, μ_1, scaled_det_HH, scaled_inv_HH)
+        post_init_1 = fast_mvnormal_pdf(error_init, μ_1, scaled_det_HH, scaled_inv_HH)
 
         μ_2 = zeros(n_states)
-        inv_ϵ_cov  = eye(n_states)
-
-        post_new_1  = fast_mvnormal_pdf(error_new, μ_1, scaled_det_HH, scaled_inv_HH)
+        inv_ϵ_cov = eye(n_states)
         post_new_2  = fast_mvnormal_pdf(ϵ_new, μ_2, 1., inv_ϵ_cov)
-        post_init_1 = fast_mvnormal_pdf(error_init, μ_1, scaled_det_HH, scaled_inv_HH)
         post_init_2 = fast_mvnormal_pdf(ϵ_init, μ_2, 1., inv_ϵ_cov)
 
-        post_new = post_new_1 * post_new_2
+        post_new  = post_new_1  * post_new_2
         post_init = post_init_1 * post_init_2
 
         # Calculate α, probability of accepting the new particle
