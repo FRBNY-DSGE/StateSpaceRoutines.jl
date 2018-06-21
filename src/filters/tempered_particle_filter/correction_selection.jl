@@ -24,14 +24,16 @@
 # - `id`: vector of indices corresponding to resampled particles
 # """
 
-function correction(φ_new::Float64, coeff_terms::AbstractVector{Float64}, log_e_1_terms::AbstractVector{Float64},
-                    log_e_2_terms::AbstractVector{Float64}, n_obs::Int64)
+function correction(φ_new::Float64, coeff_terms::AbstractVector{Float64},
+                    log_e_1_terms::AbstractVector{Float64}, log_e_2_terms::AbstractVector{Float64},
+                    n_obs::Int64)
     n_particles = length(coeff_terms)
     incremental_weights = Vector{Float64}(n_particles)
     for i = 1:n_particles
         incremental_weights[i] = incremental_weight(φ_new, coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i], n_obs)
     end
 
+    # Normalize weights
     normalized_weights = incremental_weights ./ mean(incremental_weights)
 
     # Calculate likelihood

@@ -41,13 +41,13 @@ function mutation{S<:AbstractFloat}(Φ::Function, Ψ::Function, QQ::Matrix{Float
     # Check if testing
     testing = !isempty(ϵ_testing)
 
-    # Store length of y_t, ε
+    # Sizes
     n_obs    = size(y_t, 1)
     n_states = size(s_init, 1)
     n_shocks = size(ϵ_init, 1)
     n_particles = size(ϵ_init, 2)
 
-    # Initialize acceptance counter to zero
+    # Initialize output arrays
     MyVector = parallel ? SharedVector : Vector
     MyMatrix = parallel ? SharedMatrix : Matrix
 
