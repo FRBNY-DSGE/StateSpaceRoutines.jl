@@ -83,7 +83,7 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
     times     = zeros(T)
 
     # Ensuring Φ, Ψ broadcast to matrices
-    function Φ_bcast(s_t1::Matrix{S}, ϵ_t1::Matrix{S})
+    function Φ_bcast(s_t1::AbstractMatrix{S}, ϵ_t1::AbstractMatrix{S})
         s_t = zeros(n_states, n_particles)
         for i in 1:n_particles
             s_t[:, i] = Φ(s_t1[:, i], ϵ_t1[:, i])
@@ -91,7 +91,7 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
         return s_t
     end
 
-    function Ψ_bcast(s_t::Matrix{S})
+    function Ψ_bcast(s_t::AbstractMatrix{S})
         y_t = zeros(n_obs, n_particles)
         for i in 1:n_particles
             y_t[:, i] = Ψ(s_t[:, i])
@@ -188,8 +188,8 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
         end
 
         normalized_weights, loglik = correction(φ_1, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t)
-        s_lag_tempered, s_t_nontempered, ϵ = selection(normalized_weights, s_lag_tempered,
-                                                       s_t_nontempered, ϵ; resampling_method = resampling_method)
+        selection!(normalized_weights, s_lag_tempered, s_t_nontempered, ϵ;
+                   resampling_method = resampling_method)
 
         # Update likelihood
         lik[t] += loglik
@@ -243,8 +243,8 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
 
             # Correct and resample particles
             normalized_weights, loglik = correction(φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t)
-            s_lag_tempered, s_t_nontempered, ϵ = selection(normalized_weights, s_lag_tempered,
-                                                           s_t_nontempered, ϵ; resampling_method = resampling_method)
+            selection!(normalized_weights, s_lag_tempered, s_t_nontempered, ϵ;
+                       resampling_method = resampling_method)
 
             # Update likelihood
             lik[t] += loglik

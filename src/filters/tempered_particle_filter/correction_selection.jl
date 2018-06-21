@@ -40,16 +40,16 @@ function correction(φ_new::Float64, coeff_terms::AbstractVector{Float64}, log_e
     return normalized_weights, loglik
 end
 
-function selection(normalized_weights::Vector{Float64}, s_lag_tempered::Matrix{Float64},
-                   s_t_nontempered::AbstractMatrix{Float64}, ϵ::AbstractMatrix{Float64};
-                   resampling_method::Symbol = :multinomial)
+function selection!(normalized_weights::Vector{Float64}, s_lag_tempered::Matrix{Float64},
+                    s_t_nontempered::AbstractMatrix{Float64}, ϵ::AbstractMatrix{Float64};
+                    resampling_method::Symbol = :multinomial)
     # Resampling
     id = resample(normalized_weights, method = resampling_method)
 
     # Update arrays for resampled indices
-    s_lag_tempered  = s_lag_tempered[:,id]
-    s_t_nontempered = s_t_nontempered[:,id]
-    ϵ               = ϵ[:,id]
+    s_lag_tempered  .= s_lag_tempered[:,id]
+    s_t_nontempered .= s_t_nontempered[:,id]
+    ϵ               .= ϵ[:,id]
 
-    return s_lag_tempered, s_t_nontempered, ϵ
+    return nothing
 end

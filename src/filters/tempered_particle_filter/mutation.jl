@@ -31,7 +31,8 @@ all particles, calling this method on each.
 """
 function mutation{S<:AbstractFloat}(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
                                     det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::S, y_t::Vector{S},
-                                    s_non::Matrix{S}, s_init::Matrix{S}, ϵ_init::Matrix{S}, c::S, N_MH::Int;
+                                    s_non::AbstractMatrix{S}, s_init::Matrix{S},
+                                    ϵ_init::AbstractMatrix{S}, c::S, N_MH::Int;
                                     ϵ_testing::Matrix{S} = zeros(0,0), parallel::Bool = false)
     #------------------------------------------------------------------------
     # Setup
