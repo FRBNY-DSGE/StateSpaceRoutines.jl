@@ -40,7 +40,7 @@ function correction(φ_new::Float64, coeff_terms::AbstractVector{Float64}, log_e
     return normalized_weights, loglik
 end
 
-function selection!(normalized_weights::Vector{Float64}, s_lag_tempered::Matrix{Float64},
+function selection!(normalized_weights::Vector{Float64}, s_lag_tempered::AbstractMatrix{Float64},
                     s_t_nontempered::AbstractMatrix{Float64}, ϵ::AbstractMatrix{Float64};
                     resampling_method::Symbol = :multinomial)
     # Resampling

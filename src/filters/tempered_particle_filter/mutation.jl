@@ -31,7 +31,7 @@ all particles, calling this method on each.
 """
 function mutation{S<:AbstractFloat}(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
                                     det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::S, y_t::Vector{S},
-                                    s_non::AbstractMatrix{S}, s_init::Matrix{S},
+                                    s_non::AbstractMatrix{S}, s_init::AbstractMatrix{S},
                                     ϵ_init::AbstractMatrix{S}, c::S, N_MH::Int;
                                     ϵ_testing::Matrix{S} = zeros(0,0), parallel::Bool = false)
     #------------------------------------------------------------------------
@@ -41,17 +41,19 @@ function mutation{S<:AbstractFloat}(Φ::Function, Ψ::Function, QQ::Matrix{Float
     # Check if testing
     testing = !isempty(ϵ_testing)
 
-    # Initialize s_out and ε_out
-    s_out = similar(s_init)
-    ϵ_out = similar(ϵ_init)
-
     # Store length of y_t, ε
     n_obs    = size(y_t, 1)
+    n_states = size(s_init, 1)
     n_shocks = size(ϵ_init, 1)
     n_particles = size(ϵ_init, 2)
 
     # Initialize acceptance counter to zero
-    accept_vec = zeros(Int, n_particles)
+    MyVector = parallel ? SharedVector : Vector
+    MyMatrix = parallel ? SharedMatrix : Matrix
+
+    s_out = MyMatrix{Float64}(n_states, n_particles)
+    ϵ_out = MyMatrix{Float64}(n_shocks, n_particles)
+    accept_vec = MyVector{Int}(n_particles)
 
     #------------------------------------------------------------------------
     # Metropolis-Hastings Steps
@@ -59,22 +61,18 @@ function mutation{S<:AbstractFloat}(Φ::Function, Ψ::Function, QQ::Matrix{Float
 
     # Generate new draw of ε from a N(ε_init, c²I) distribution, c tuning parameter, I identity
     if parallel
-        s_out, ϵ_out, accept_vec = @sync @parallel (vector_reduce) for i = 1:n_particles
+        @sync @parallel for i in 1:n_particles
             ϵ_new = rand(MvNormal(ϵ_init[:,i], c^2*QQ))
-            s, ϵ, accept = mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ_init[:,i], ϵ_new,
-                                   φ_new, det_HH, inv_HH, n_obs, n_shocks, N_MH; testing = testing)
-            vector_reshape(s, ϵ, accept)
+            s_out[:,i], ϵ_out[:,i], accept_vec[i] =
+                mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ_init[:,i], ϵ_new,
+                        φ_new, det_HH, inv_HH, n_obs, n_shocks, N_MH; testing = testing)
         end
-        accept_vec = squeeze(accept_vec, 1)
     else
-        ϵ_new = similar(ϵ_init)
         for i in 1:n_particles
-            ϵ_new[:,i] = rand(MvNormal(ϵ_init[:,i], c^2*QQ))
-        end
-        for i = 1:n_particles
-            s_out[:,i], ϵ_out[:,i], accept_vec[i] = mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ_init[:,i],
-                                                            ϵ_new[:,i], φ_new, det_HH, inv_HH, n_obs, n_shocks,
-                                                            N_MH; testing = testing)
+            ϵ_new = rand(MvNormal(ϵ_init[:,i], c^2*QQ))
+            s_out[:,i], ϵ_out[:,i], accept_vec[i] =
+                mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ_init[:,i], ϵ_new,
+                        φ_new, det_HH, inv_HH, n_obs, n_shocks, N_MH; testing = testing)
         end
     end
 
