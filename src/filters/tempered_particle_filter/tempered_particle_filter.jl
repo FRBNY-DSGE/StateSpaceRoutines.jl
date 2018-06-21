@@ -99,6 +99,10 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
         return y_t
     end
 
+    # Array types depend on parallelization
+    MyVector = parallel ? SharedVector : Vector
+    MyMatrix = parallel ? SharedMatrix : Matrix
+
     #--------------------------------------------------------------
     # Main Algorithm: Tempered Particle Filter
     #--------------------------------------------------------------
@@ -108,18 +112,11 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
 
     # Vectors of the 3 component terms that are used to calculate the weights
     # Inputs saved in these vectors to conserve memory/avoid unnecessary re-computation
-    if parallel
-        coeff_terms   = SharedVector{Float64}(n_particles)
-        log_e_1_terms = SharedVector{Float64}(n_particles)
-        log_e_2_terms = SharedVector{Float64}(n_particles)
-    else
-        coeff_terms   = Vector{Float64}(n_particles)
-        log_e_1_terms = Vector{Float64}(n_particles)
-        log_e_2_terms = Vector{Float64}(n_particles)
-    end
+    coeff_terms   = MyVector{Float64}(n_particles)
+    log_e_1_terms = MyVector{Float64}(n_particles)
+    log_e_2_terms = MyVector{Float64}(n_particles)
 
     for t = 1:T
-
         tic()
         if VERBOSITY[verbose] >= VERBOSITY[:low]
             println("============================================================")
