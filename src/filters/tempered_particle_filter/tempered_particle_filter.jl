@@ -267,31 +267,20 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
                                                        s_t_nontempered, s_lag_tempered, ϵ, c, N_MH;
                                                        parallel = parallel)
 
-            # if VERBOSITY[verbose] >= VERBOSITY[:high]
-                # toc()
-            # end
-
-            # Calculate average acceptance rate
-            accept_rate = mean(accept_vec)
-
-            # Update φ
+            # Update φ_old
             φ_old = φ_new
+        end # of loop over stages
+
+        if VERBOSITY[verbose] >= VERBOSITY[:low]
+            print("\n")
+            @show lik[t]
+            print("Completion of one period ")
+            times[t] = toc()
+        else
+            times[t] = toq()
         end
-
-    if VERBOSITY[verbose] >= VERBOSITY[:high]
-        println("Out of main while-loop.")
-    end
-
-    if VERBOSITY[verbose] >= VERBOSITY[:low]
-        print("\n")
-        @show lik[t]
-        print("Completion of one period ")
-        times[t] = toc()
-    else
-        times[t] = toq()
-    end
-    s_lag_tempered = s_t_nontempered
-    end
+        s_lag_tempered = s_t_nontempered
+    end # of loop over periods
 
     if VERBOSITY[verbose] >= VERBOSITY[:low]
         println("=============================================")
