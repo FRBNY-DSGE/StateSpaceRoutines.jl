@@ -19,7 +19,7 @@ function bisection(f::Function, a::Number, b::Number; xtol::AbstractFloat=1e-1, 
     fa = f(a)
     fa * f(b) <= 0 || throw("No real root in [a,b]")
     i = 0
-    c = 0
+    c = 0.0
     while b-a > xtol
         i += 1
         i != maxiter || throw("Max iteration exceeded")
