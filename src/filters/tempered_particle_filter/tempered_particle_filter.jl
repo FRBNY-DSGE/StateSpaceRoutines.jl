@@ -108,11 +108,12 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
         end
 
         #--------------------------------------------------------------
-        # Initialize Algorithm: First Tempering Step
+        # Initialization
         #--------------------------------------------------------------
-        y_t = data[:,t]
 
         # Remove rows/columns of series with NaN values
+        y_t = data[:,t]
+
         nonmissing  = isfinite.(y_t)
         y_t         = y_t[nonmissing]
         n_obs_t     = length(y_t)
@@ -121,9 +122,7 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
         inv_HH_t    = inv(HH_t)
         det_HH_t    = det(HH_t)
 
-        #####################################
-
-        # Forecast forward one time step
+        # Initialize s_t_nontempered and ϵ by drawing ϵ and forecasting
         ϵ = MyMatrix{Float64}(n_shocks, n_particles)
         s_t_nontempered = MyMatrix{Float64}(n_states, n_particles)
         @mypar parallel for i in 1:n_particles
@@ -131,50 +130,21 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
             s_t_nontempered[:, i] = Φ(s_lag_tempered[:, i], ϵ[:, i])
         end
 
-        # Compute weight kernel terms
-        @mypar parallel for i in 1:n_particles
-            p_err = y_t - Ψ_t(s_t_nontempered[:, i])
-            coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] =
-                weight_kernel(0., y_t, p_err, det_HH_t, inv_HH_t, initialize = true)
-        end
-
-        # Determine φ_1
-        φ_1 = if adaptive
-            init_ineff_func(φ) =
-                solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t) - r_star
-            findroot(init_ineff_func, 1e-30, 1.0, xtol = xtol)
-        else
-            fixed_sched[1]
-        end
-        # #####################################
-
-        if VERBOSITY[verbose] >= VERBOSITY[:high]
-            @show φ_1
-            println("------------------------------")
-        end
-
-        normalized_weights, loglik = correction(φ_1, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t)
-        selection!(normalized_weights, s_lag_tempered, s_t_nontempered, ϵ;
-                   resampling_method = resampling_method)
-
-        # Update likelihood
-        lik[t] += loglik
-
         # Tempering initialization
-        φ_old = φ_1
-        count = 1
+        φ_old = 1e-30
+        stage = 0
 
         #--------------------------------------------------------------
         # Main Algorithm
         #--------------------------------------------------------------
         while φ_old < 1
-            count += 1
+            stage += 1
 
             # Compute weight kernel terms
             @mypar parallel for i in 1:n_particles
                 p_err = y_t - Ψ_t(s_t_nontempered[:, i])
                 coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] =
-                    weight_kernel(φ_old, y_t, p_err, det_HH_t, inv_HH_t, initialize = false)
+                    weight_kernel(φ_old, y_t, p_err, det_HH_t, inv_HH_t, initialize = stage == 1)
             end
 
             # Determine φ_new
@@ -182,16 +152,21 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
                 # Compute interval
                 solve_ineff_func(φ) =
                     solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t) - r_star
-                fphi_interval = [solve_ineff_func(φ_old) solve_ineff_func(1.0)]
 
-                # Look for optimal φ within the interval
-                if prod(sign.(fphi_interval)) == -1
-                    findroot(solve_ineff_func, φ_old, 1., xtol = xtol)
+                if stage == 1
+                    findroot(solve_ineff_func, φ_old, 1.0, xtol = xtol)
                 else
-                    1.0
+                    fphi_interval = [solve_ineff_func(φ_old) solve_ineff_func(1.0)]
+
+                    # Look for optimal φ within the interval
+                    if prod(sign.(fphi_interval)) == -1
+                        findroot(solve_ineff_func, φ_old, 1.0, xtol = xtol)
+                    else
+                        1.0
+                    end
                 end
             else
-                fixed_sched[count]
+                fixed_sched[stage]
             end
 
             if VERBOSITY[verbose] >= VERBOSITY[:high]
@@ -212,9 +187,11 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
             end
 
             # Mutate particles
-            s_t_nontempered, ϵ, accept_rate = mutation(Φ, Ψ_t, F_ϵ.Σ.mat, det_HH_t, inv_HH_t, φ_new, y_t,
-                                                       s_t_nontempered, s_lag_tempered, ϵ, c, N_MH;
-                                                       parallel = parallel)
+            if stage != 1
+                s_t_nontempered, ϵ, accept_rate =
+                    mutation(Φ, Ψ_t, F_ϵ.Σ.mat, det_HH_t, inv_HH_t, φ_new, y_t,
+                             s_t_nontempered, s_lag_tempered, ϵ, c, N_MH; parallel = parallel)
+            end
 
             φ_old = φ_new
         end # of loop over stages
