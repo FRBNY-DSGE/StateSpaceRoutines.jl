@@ -1,3 +1,17 @@
+function selection!(norm_weights::Vector{Float64}, s_t1_temp::AbstractMatrix{Float64},
+                    s_t_nontemp::AbstractMatrix{Float64}, ϵ::AbstractMatrix{Float64};
+                    resampling_method::Symbol = :multinomial)
+    # Resampling
+    id = resample(norm_weights, method = resampling_method)
+
+    # Update arrays for resampled indices
+    s_t_nontemp .= s_t_nontemp[:, id]
+    s_t1_temp   .= s_t1_temp[:, id]
+    ϵ           .= ϵ[:, id]
+
+    return nothing
+end
+
 """
 ```
 resample(weights::AbstractArray; method::Symbol=:systematic,
