@@ -63,16 +63,19 @@ end
 function weight_kernel(φ_old::Float64, y_t::Vector{Float64},
                        p_error::Vector{Float64}, det_HH::Float64, inv_HH::Matrix{Float64};
                        initialize::Bool = false)
+
+    sq_error = dot(p_error, inv_HH * p_error)
+
     if initialize
         # Initialization step (using 2π instead of φ_old)
         coeff_term = (2*pi)^(-length(y_t)/2) * det_HH^(-1/2)
         log_e_term_1   = 0.
-        log_e_term_2   = -1/2 * dot(p_error, inv_HH * p_error)
+        log_e_term_2   = -1/2 * sq_error
     else
         # Non-initialization step (tempering and final iteration)
         coeff_term = (φ_old)^(-length(y_t)/2)
-        log_e_term_1   = -1/2 * (-φ_old) * dot(p_error, inv_HH * p_error)
-        log_e_term_2   = -1/2 * dot(p_error, inv_HH * p_error)
+        log_e_term_1   = -1/2 * (-φ_old) * sq_error
+        log_e_term_2   = -1/2 * sq_error
     end
     return coeff_term, log_e_term_1, log_e_term_2
 end
