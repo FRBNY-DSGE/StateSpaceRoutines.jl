@@ -24,33 +24,72 @@
 # - `id`: vector of indices corresponding to resampled particles
 # """
 
-function correction!(incremental_weights::Vector{Float64}, normalized_weights::Vector{Float64},
-                     φ_new::Float64, coeff_terms::AbstractVector{Float64},
+function next_φ!(Ψ::Function, stage::Int, φ_old::Float64, det_HH::Float64, inv_HH::Matrix{Float64},
+                 y_t::Vector{Float64}, s_t_nontemp::AbstractMatrix{Float64},
+                 coeff_terms::AbstractVector{Float64}, log_e_1_terms::AbstractVector{Float64},
+                 log_e_2_terms::AbstractVector{Float64}, r_star::Float64;
+                 adaptive::Bool = true, findroot::Function = bisection, xtol::Float64 = 1e-3,
+                 fixed_sched::Vector{Float64} = zeros(0), parallel::Bool = false)
+    # Sizes
+    n_particles = length(coeff_terms)
+    n_obs = length(y_t)
+
+    # Compute weight kernel terms
+    @mypar parallel for i in 1:n_particles
+        p_err = y_t - Ψ(s_t_nontemp[:, i])
+        coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] =
+            weight_kernel(φ_old, y_t, p_err, det_HH, inv_HH, initialize = stage == 1)
+    end
+
+    # Determine φ_new
+    φ_new = if adaptive
+        # Compute interval
+        solve_ineff_func(φ) =
+            solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs) - r_star
+
+        if stage == 1
+            findroot(solve_ineff_func, φ_old, 1.0, xtol = xtol)
+        else
+            fphi_interval = [solve_ineff_func(φ_old) solve_ineff_func(1.0)]
+
+            # Look for optimal φ within the interval
+            if prod(sign.(fphi_interval)) == -1
+                findroot(solve_ineff_func, φ_old, 1.0, xtol = xtol)
+            else
+                1.0
+            end
+        end
+    else
+        fixed_sched[stage]
+    end
+end
+
+function correction!(φ_new::Float64, coeff_terms::AbstractVector{Float64},
                      log_e_1_terms::AbstractVector{Float64}, log_e_2_terms::AbstractVector{Float64},
-                     n_obs::Int64)
+                     n_obs::Int, inc_weights::Vector{Float64}, norm_weights::Vector{Float64})
     # Compute incremental weights
-    n_particles = length(incremental_weights)
+    n_particles = length(inc_weights)
     for i = 1:n_particles
-        incremental_weights[i] =
+        inc_weights[i] =
             incremental_weight(φ_new, coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i], n_obs)
     end
 
     # Normalize weights
-    normalized_weights .= incremental_weights ./ mean(incremental_weights)
+    norm_weights .= inc_weights ./ mean(inc_weights)
 
     return nothing
 end
 
-function selection!(normalized_weights::Vector{Float64}, s_lag_tempered::AbstractMatrix{Float64},
-                    s_t_nontempered::AbstractMatrix{Float64}, ϵ::AbstractMatrix{Float64};
+function selection!(norm_weights::Vector{Float64}, s_t1_temp::AbstractMatrix{Float64},
+                    s_t_nontemp::AbstractMatrix{Float64}, ϵ::AbstractMatrix{Float64};
                     resampling_method::Symbol = :multinomial)
     # Resampling
-    id = resample(normalized_weights, method = resampling_method)
+    id = resample(norm_weights, method = resampling_method)
 
     # Update arrays for resampled indices
-    s_lag_tempered  .= s_lag_tempered[:,id]
-    s_t_nontempered .= s_t_nontempered[:,id]
-    ϵ               .= ϵ[:,id]
+    s_t_nontemp .= s_t_nontemp[:, id]
+    s_t1_temp   .= s_t1_temp[:, id]
+    ϵ           .= ϵ[:, id]
 
     return nothing
 end
