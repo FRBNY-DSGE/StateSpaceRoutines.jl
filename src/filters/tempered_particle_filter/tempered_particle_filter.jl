@@ -139,32 +139,23 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
         det_HH_t            = det(HH_t)
 
         #####################################
-        if parallel
-            ϵ = SharedMatrix{Float64}(n_shocks, n_particles)
-            s_t_nontempered = SharedMatrix{Float64}(n_states, n_particles)
-            @sync @parallel for i in 1:n_particles
-                ϵ[:, i] = rand(F_ϵ)
-                s_t_non = Φ(s_lag_tempered[:, i], ϵ[:, i])
-                p_err   = y_t - Ψ_t(s_t_non)
-                coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] =
-                    weight_kernel(0., y_t, p_err, det_HH_t, inv_HH_t, initialize = true)
-            end
-        else
-            # Draw random shock ϵ
-            ϵ = rand(F_ϵ, n_particles)
+
+        ϵ = MyMatrix{Float64}(n_shocks, n_particles)
+        s_t_nontempered = MyMatrix{Float64}(n_states, n_particles)
+
+        @mypar parallel for i in 1:n_particles
+            # Draw random shock
+            ϵ[:, i] = rand(F_ϵ)
 
             # Forecast forward one time step
-            s_t_nontempered = Φ_bcast(s_lag_tempered, ϵ)
+            s_t_nontempered[:, i] = Φ(s_lag_tempered[:, i], ϵ[:, i])
 
-            # Error for each particle
-            p_error = y_t .- Ψ_bcast_t(s_t_nontempered)
+            # Compute forecast error
+            p_err = y_t - Ψ_t(s_t_nontempered[:, i])
 
             # Solve for initial tempering parameter φ_1
-            for i in 1:n_particles
-                coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] = weight_kernel(0., y_t, p_error[:, i],
-                                                                                   det_HH_t, inv_HH_t,
-                                                                                   initialize = true)
-            end
+            coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] =
+                weight_kernel(0., y_t, p_err, det_HH_t, inv_HH_t, initialize = true)
         end
 
         if adaptive
@@ -198,24 +189,14 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
         # Main Algorithm
         #--------------------------------------------------------------
         while φ_old < 1
-
             count += 1
 
-            # Get error for all particles
-            p_error = y_t .- Ψ_bcast_t(s_t_nontempered)
+            @mypar parallel for i in 1:n_particles
+                # Compute forecast error
+                p_err = y_t - Ψ_t(s_t_nontempered[:, i])
 
-            if parallel
-                @sync @parallel for i in 1:n_particles
-                    coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] = weight_kernel(φ_old, y_t, p_error[:, i],
-                                                                                       det_HH_t, inv_HH_t,
-                                                                                       initialize = false)
-                end
-            else
-                for i in 1:n_particles
-                    coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] = weight_kernel(φ_old, y_t, p_error[:, i],
-                                                                                       det_HH_t, inv_HH_t,
-                                                                                       initialize = false)
-                end
+                coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] =
+                    weight_kernel(φ_old, y_t, p_err, det_HH_t, inv_HH_t, initialize = false)
             end
 
             # Define inefficiency function
