@@ -24,22 +24,21 @@
 # - `id`: vector of indices corresponding to resampled particles
 # """
 
-function correction(φ_new::Float64, coeff_terms::AbstractVector{Float64},
-                    log_e_1_terms::AbstractVector{Float64}, log_e_2_terms::AbstractVector{Float64},
-                    n_obs::Int64)
-    n_particles = length(coeff_terms)
-    incremental_weights = Vector{Float64}(n_particles)
+function correction!(incremental_weights::Vector{Float64}, normalized_weights::Vector{Float64},
+                     φ_new::Float64, coeff_terms::AbstractVector{Float64},
+                     log_e_1_terms::AbstractVector{Float64}, log_e_2_terms::AbstractVector{Float64},
+                     n_obs::Int64)
+    # Compute incremental weights
+    n_particles = length(incremental_weights)
     for i = 1:n_particles
-        incremental_weights[i] = incremental_weight(φ_new, coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i], n_obs)
+        incremental_weights[i] =
+            incremental_weight(φ_new, coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i], n_obs)
     end
 
     # Normalize weights
-    normalized_weights = incremental_weights ./ mean(incremental_weights)
+    normalized_weights .= incremental_weights ./ mean(incremental_weights)
 
-    # Calculate likelihood
-    loglik = log(mean(incremental_weights))
-
-    return normalized_weights, loglik
+    return nothing
 end
 
 function selection!(normalized_weights::Vector{Float64}, s_lag_tempered::AbstractMatrix{Float64},

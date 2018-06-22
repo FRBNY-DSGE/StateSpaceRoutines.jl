@@ -130,6 +130,10 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
             s_t_nontempered[:, i] = Φ(s_lag_tempered[:, i], ϵ[:, i])
         end
 
+        # Initialize weight vectors
+        incremental_weights = Vector{Float64}(n_particles)
+        normalized_weights  = Vector{Float64}(n_particles)
+
         # Tempering initialization
         φ_old = 1e-30
         stage = 0
@@ -174,11 +178,12 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
             end
 
             # Correct and resample particles using φ_new
-            normalized_weights, loglik = correction(φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t)
+            correction!(incremental_weights, normalized_weights, φ_new, coeff_terms,
+                        log_e_1_terms, log_e_2_terms, n_obs_t)
             selection!(normalized_weights, s_lag_tempered, s_t_nontempered, ϵ;
                        resampling_method = resampling_method)
 
-            lik[t] += loglik
+            lik[t] += log(mean(incremental_weights))
             c = update_c!(c, accept_rate, target)
 
             if VERBOSITY[verbose] >= VERBOSITY[:high]
