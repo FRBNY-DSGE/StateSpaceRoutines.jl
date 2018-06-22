@@ -55,15 +55,16 @@ fixed schedule inputted directly into the tpf function.
 - `times`: (`hist_periods` x 1) vector returning elapsed runtime per period t
 
 """
-function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Function, Ψ::Function,
-                                                    F_ϵ::Distribution, F_u::Distribution, s_init::Matrix{S};
-                                                    verbose::Symbol = :high, fixed_sched::Vector{S} = zeros(0),
-                                                    r_star::S = 2., c::S = 0.3, accept_rate::S = 0.4, target::S = 0.4,
-                                                    tol::Float64 = 1e-3, resampling_method = :multinomial,
-                                                    N_MH::Int = 1, n_particles::Int = 1000,
-                                                    n_presample_periods::Int = 0,
-                                                    allout::Bool = true, parallel::Bool = false,
-                                                    testing::Bool = false)
+function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
+                                  F_ϵ::Distribution, F_u::Distribution, s_init::Matrix{S};
+                                  verbose::Symbol = :high, fixed_sched::Vector{S} = zeros(0),
+                                  r_star::S = 2., c::S = 0.3, accept_rate::S = 0.4, target::S = 0.4,
+                                  xtol::Float64 = 1e-3, findroot::Function = bisection,
+                                  resampling_method = :multinomial,
+                                  N_MH::Int = 1, n_particles::Int = 1000,
+                                  n_presample_periods::Int = 0,
+                                  allout::Bool = true, parallel::Bool = false,
+                                  testing::Bool = false) where S<:AbstractFloat
     #--------------------------------------------------------------
     # Setup
     #--------------------------------------------------------------
@@ -162,8 +163,7 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
             init_ineff_func(φ) =
                 solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t) - r_star
 
-            φ_1 = bisection(init_ineff_func, 1e-30, 1.0, tol = tol)
-            # φ_1 = fzero(init_ineff_func, 1e-30, 1., xtol = 0.)
+            φ_1 = findroot(init_ineff_func, 1e-30, 1.0, xtol = xtol)
         else
             φ_1 = fixed_sched[1]
         end
@@ -206,8 +206,7 @@ function tempered_particle_filter{S<:AbstractFloat}(data::Matrix{S}, Φ::Functio
 
             # The below boolean checks that a solution exists within interval
             if prod(sign.(fphi_interval)) == -1 && adaptive
-                φ_new = bisection(init_ineff_func, φ_old, 1., tol = tol)
-                # φ_new = fzero(init_ineff_func, φ_old, 1., xtol = 0.)
+                φ_new = findroot(init_ineff_func, φ_old, 1., xtol = xtol)
             elseif prod(sign.(fphi_interval)) != -1 && adaptive
                 φ_new = 1.
             else # fixed φ

@@ -15,12 +15,12 @@ Returns the new c, in addition to storing it in the model settings.
     return c_out
 end
 
-function bisection(f::Function, a::Number, b::Number; tol::AbstractFloat=1e-1, maxiter::Integer=1000)
+function bisection(f::Function, a::Number, b::Number; xtol::AbstractFloat=1e-1, maxiter::Integer=1000)
     fa = f(a)
     fa * f(b) <= 0 || throw("No real root in [a,b]")
     i = 0
     c = 0
-    while b-a > tol
+    while b-a > xtol
         i += 1
         i != maxiter || throw("Max iteration exceeded")
         c = (a+b)/2
