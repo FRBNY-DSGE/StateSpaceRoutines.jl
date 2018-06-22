@@ -29,11 +29,11 @@ all particles, calling this method on each.
 - `accept_rate`: acceptance rate across N_MH steps
 
 """
-function mutation(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
-                  det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::Float64, y_t::Vector{Float64},
-                  s_non::AbstractMatrix{Float64}, s_init::AbstractMatrix{Float64},
-                  ϵ_init::AbstractMatrix{Float64}, c::Float64, N_MH::Int;
-                  ϵ_testing::Matrix{Float64} = zeros(0,0), parallel::Bool = false)
+function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
+                   det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::Float64, y_t::Vector{Float64},
+                   s_non::AbstractMatrix{Float64}, s_init::AbstractMatrix{Float64},
+                   ϵ::AbstractMatrix{Float64}, c::Float64, N_MH::Int;
+                   ϵ_testing::Matrix{Float64} = zeros(0,0), parallel::Bool = false)
     #------------------------------------------------------------------------
     # Setup
     #------------------------------------------------------------------------
@@ -44,15 +44,11 @@ function mutation(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
     # Sizes
     n_obs    = size(y_t, 1)
     n_states = size(s_init, 1)
-    n_shocks = size(ϵ_init, 1)
-    n_particles = size(ϵ_init, 2)
+    n_shocks = size(ϵ, 1)
+    n_particles = size(ϵ, 2)
 
-    # Initialize output arrays
+    # Initialize vector of acceptances
     MyVector = parallel ? SharedVector : Vector
-    MyMatrix = parallel ? SharedMatrix : Matrix
-
-    s_out = MyMatrix{Float64}(n_states, n_particles)
-    ϵ_out = MyMatrix{Float64}(n_shocks, n_particles)
     accept_vec = MyVector{Int}(n_particles)
 
     #------------------------------------------------------------------------
@@ -63,17 +59,16 @@ function mutation(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
 
     @mypar parallel for i in 1:n_particles
         # Generate new ϵ centered at ϵ_init
-        ϵ_new = ϵ_init[:, i] + rand(dist)
+        ϵ_new = ϵ[:, i] + rand(dist)
 
-        s_out[:,i], ϵ_out[:,i], accept_vec[i] =
-            mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ_init[:,i], ϵ_new,
+        s_non[:,i], ϵ[:,i], accept_vec[i] =
+            mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ[:,i], ϵ_new,
                     φ_new, det_HH, inv_HH, n_obs, n_shocks, N_MH; testing = testing)
     end
 
-    # Calculate acceptance rate
+    # Calculate and return acceptance rate
     accept_rate = sum(accept_vec)/(N_MH*n_particles)
-
-    return s_out, ϵ_out, accept_rate
+    return accept_rate
 end
 
 function mh_step(Φ::Function, Ψ::Function, y_t::Vector{Float64}, s_init::Vector{Float64},

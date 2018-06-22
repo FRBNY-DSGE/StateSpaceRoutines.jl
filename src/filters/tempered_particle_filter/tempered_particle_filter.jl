@@ -193,9 +193,8 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
 
             # Mutate particles
             if stage != 1
-                s_t_nontempered, ϵ, accept_rate =
-                    mutation(Φ, Ψ_t, F_ϵ.Σ.mat, det_HH_t, inv_HH_t, φ_new, y_t,
-                             s_t_nontempered, s_lag_tempered, ϵ, c, N_MH; parallel = parallel)
+                accept_rate = mutation!(Φ, Ψ_t, F_ϵ.Σ.mat, det_HH_t, inv_HH_t, φ_new, y_t,
+                                        s_t_nontempered, s_lag_tempered, ϵ, c, N_MH; parallel = parallel)
             end
 
             φ_old = φ_new
