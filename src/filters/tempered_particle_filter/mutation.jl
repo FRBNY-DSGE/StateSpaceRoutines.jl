@@ -29,11 +29,11 @@ all particles, calling this method on each.
 - `accept_rate`: acceptance rate across N_MH steps
 
 """
-function mutation{S<:AbstractFloat}(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
-                                    det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::S, y_t::Vector{S},
-                                    s_non::AbstractMatrix{S}, s_init::AbstractMatrix{S},
-                                    ϵ_init::AbstractMatrix{S}, c::S, N_MH::Int;
-                                    ϵ_testing::Matrix{S} = zeros(0,0), parallel::Bool = false)
+function mutation(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
+                  det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::Float64, y_t::Vector{Float64},
+                  s_non::AbstractMatrix{Float64}, s_init::AbstractMatrix{Float64},
+                  ϵ_init::AbstractMatrix{Float64}, c::Float64, N_MH::Int;
+                  ϵ_testing::Matrix{Float64} = zeros(0,0), parallel::Bool = false)
     #------------------------------------------------------------------------
     # Setup
     #------------------------------------------------------------------------
@@ -59,9 +59,12 @@ function mutation{S<:AbstractFloat}(Φ::Function, Ψ::Function, QQ::Matrix{Float
     # Metropolis-Hastings Steps
     #------------------------------------------------------------------------
 
-    # Generate new draw of ε from a N(ε_init, c²I) distribution, c tuning parameter, I identity
+    dist = MvNormal(zeros(n_shocks), c^2*QQ)
+
     @mypar parallel for i in 1:n_particles
-        ϵ_new = rand(MvNormal(ϵ_init[:,i], c^2*QQ))
+        # Generate new ϵ centered at ϵ_init
+        ϵ_new = ϵ_init[:, i] + rand(dist)
+
         s_out[:,i], ϵ_out[:,i], accept_vec[i] =
             mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ_init[:,i], ϵ_new,
                     φ_new, det_HH, inv_HH, n_obs, n_shocks, N_MH; testing = testing)
