@@ -83,23 +83,6 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
     lik       = zeros(T)
     times     = zeros(T)
 
-    # Ensuring Φ, Ψ broadcast to matrices
-    function Φ_bcast(s_t1::AbstractMatrix{S}, ϵ_t1::AbstractMatrix{S})
-        s_t = zeros(n_states, n_particles)
-        for i in 1:n_particles
-            s_t[:, i] = Φ(s_t1[:, i], ϵ_t1[:, i])
-        end
-        return s_t
-    end
-
-    function Ψ_bcast(s_t::AbstractMatrix{S})
-        y_t = zeros(n_obs, n_particles)
-        for i in 1:n_particles
-            y_t[:, i] = Ψ(s_t[:, i])
-        end
-        return y_t
-    end
-
     # Array types depend on parallelization
     MyVector = parallel ? SharedVector : Vector
     MyMatrix = parallel ? SharedMatrix : Matrix
@@ -130,14 +113,13 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
         y_t = data[:,t]
 
         # Remove rows/columns of series with NaN values
-        nonmissing          = isfinite.(y_t)
-        y_t                 = y_t[nonmissing]
-        n_obs_t             = length(y_t)
-        Ψ_t                 = x -> Ψ(x)[nonmissing]
-        Ψ_bcast_t           = x -> Ψ_bcast(x)[nonmissing, :]
-        HH_t                = F_u.Σ.mat[nonmissing, nonmissing]
-        inv_HH_t            = inv(HH_t)
-        det_HH_t            = det(HH_t)
+        nonmissing  = isfinite.(y_t)
+        y_t         = y_t[nonmissing]
+        n_obs_t     = length(y_t)
+        Ψ_t         = x -> Ψ(x)[nonmissing]
+        HH_t        = F_u.Σ.mat[nonmissing, nonmissing]
+        inv_HH_t    = inv(HH_t)
+        det_HH_t    = det(HH_t)
 
         #####################################
 
