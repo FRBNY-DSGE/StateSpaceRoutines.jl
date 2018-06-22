@@ -123,31 +123,28 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
 
         #####################################
 
+        # Forecast forward one time step
         ϵ = MyMatrix{Float64}(n_shocks, n_particles)
         s_t_nontempered = MyMatrix{Float64}(n_states, n_particles)
-
         @mypar parallel for i in 1:n_particles
-            # Draw random shock
             ϵ[:, i] = rand(F_ϵ)
-
-            # Forecast forward one time step
             s_t_nontempered[:, i] = Φ(s_lag_tempered[:, i], ϵ[:, i])
+        end
 
-            # Compute forecast error
+        # Compute weight kernel terms
+        @mypar parallel for i in 1:n_particles
             p_err = y_t - Ψ_t(s_t_nontempered[:, i])
-
-            # Solve for initial tempering parameter φ_1
             coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] =
                 weight_kernel(0., y_t, p_err, det_HH_t, inv_HH_t, initialize = true)
         end
 
-        if adaptive
+        # Determine φ_1
+        φ_1 = if adaptive
             init_ineff_func(φ) =
                 solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t) - r_star
-
-            φ_1 = findroot(init_ineff_func, 1e-30, 1.0, xtol = xtol)
+            findroot(init_ineff_func, 1e-30, 1.0, xtol = xtol)
         else
-            φ_1 = fixed_sched[1]
+            fixed_sched[1]
         end
         # #####################################
 
@@ -173,41 +170,40 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
         while φ_old < 1
             count += 1
 
+            # Compute weight kernel terms
             @mypar parallel for i in 1:n_particles
-                # Compute forecast error
                 p_err = y_t - Ψ_t(s_t_nontempered[:, i])
-
                 coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] =
                     weight_kernel(φ_old, y_t, p_err, det_HH_t, inv_HH_t, initialize = false)
             end
 
-            # Define inefficiency function
-            solve_ineff_func(φ) =
-                solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t) - r_star
-            fphi_interval = [solve_ineff_func(φ_old) solve_ineff_func(1.0)]
+            # Determine φ_new
+            φ_new = if adaptive
+                # Compute interval
+                solve_ineff_func(φ) =
+                    solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t) - r_star
+                fphi_interval = [solve_ineff_func(φ_old) solve_ineff_func(1.0)]
 
-            # The below boolean checks that a solution exists within interval
-            if prod(sign.(fphi_interval)) == -1 && adaptive
-                φ_new = findroot(init_ineff_func, φ_old, 1., xtol = xtol)
-            elseif prod(sign.(fphi_interval)) != -1 && adaptive
-                φ_new = 1.
-            else # fixed φ
-                φ_new = fixed_sched[count]
+                # Look for optimal φ within the interval
+                if prod(sign.(fphi_interval)) == -1
+                    findroot(solve_ineff_func, φ_old, 1., xtol = xtol)
+                else
+                    1.0
+                end
+            else
+                fixed_sched[count]
             end
 
             if VERBOSITY[verbose] >= VERBOSITY[:high]
                 @show φ_new
             end
 
-            # Correct and resample particles
+            # Correct and resample particles using φ_new
             normalized_weights, loglik = correction(φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t)
             selection!(normalized_weights, s_lag_tempered, s_t_nontempered, ϵ;
                        resampling_method = resampling_method)
 
-            # Update likelihood
             lik[t] += loglik
-
-            # Update value for c
             c = update_c!(c, accept_rate, target)
 
             if VERBOSITY[verbose] >= VERBOSITY[:high]
@@ -215,17 +211,11 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
                 println("------------------------------")
             end
 
-            # Mutation Step
-            accept_vec = zeros(n_particles)
-            if VERBOSITY[verbose] >= VERBOSITY[:high]
-                print("Mutation ")
-            end
-
+            # Mutate particles
             s_t_nontempered, ϵ, accept_rate = mutation(Φ, Ψ_t, F_ϵ.Σ.mat, det_HH_t, inv_HH_t, φ_new, y_t,
                                                        s_t_nontempered, s_lag_tempered, ϵ, c, N_MH;
                                                        parallel = parallel)
 
-            # Update φ_old
             φ_old = φ_new
         end # of loop over stages
 
