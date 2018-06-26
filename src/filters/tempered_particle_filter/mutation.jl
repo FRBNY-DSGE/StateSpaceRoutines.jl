@@ -34,17 +34,11 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
                    s_non::AbstractMatrix{Float64}, s_init::AbstractMatrix{Float64},
                    ϵ::AbstractMatrix{Float64}, c::Float64, N_MH::Int;
                    ϵ_testing::Matrix{Float64} = zeros(0,0), parallel::Bool = false)
-    #------------------------------------------------------------------------
-    # Setup
-    #------------------------------------------------------------------------
-
     # Check if testing
     testing = !isempty(ϵ_testing)
 
     # Sizes
-    n_obs    = size(y_t, 1)
-    n_states = size(s_init, 1)
-    n_shocks = size(ϵ, 1)
+    n_obs = size(y_t, 1)
     n_particles = size(ϵ, 2)
 
     # Initialize vector of acceptances
@@ -54,29 +48,27 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
     # Used to generate new draws of ϵ
     dist_ϵ = MvNormal(c^2 * diag(QQ))
 
-    #------------------------------------------------------------------------
-    # Metropolis-Hastings Steps
-    #------------------------------------------------------------------------
+    # Used to calculate posteriors
+    scaled_det_HH = det_HH/(φ_new^n_obs)
+    scaled_inv_HH = inv_HH*φ_new
 
+    # Take Metropolis-Hastings steps
     @mypar parallel for i in 1:n_particles
         s_non[:,i], ϵ[:,i], accept_vec[i] =
             mh_step(Φ, Ψ, dist_ϵ, y_t, s_init[:,i], s_non[:,i], ϵ[:,i],
-                    φ_new, det_HH, inv_HH, n_obs, n_shocks, N_MH; testing = testing)
+                    scaled_det_HH, scaled_inv_HH, N_MH; testing = testing)
     end
 
     # Calculate and return acceptance rate
-    accept_rate = sum(accept_vec)/(N_MH*n_particles)
+    accept_rate = sum(accept_vec) / (N_MH*n_particles)
     return accept_rate
 end
 
 function mh_step(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Float64},
                  s_t1::Vector{Float64}, s_t::Vector{Float64}, ϵ_t::Vector{Float64},
-                 φ_new::Float64, det_HH::Float64, inv_HH::Matrix{Float64},
-                 n_obs::Int, n_shocks::Int, N_MH::Int; testing::Bool = false)
+                 scaled_det_HH::Float64, scaled_inv_HH::Matrix{Float64},
+                 N_MH::Int; testing::Bool = false)
     accept = 0
-
-    scaled_det_HH = det_HH/(φ_new)^n_obs
-    scaled_inv_HH = inv_HH*φ_new
 
     # Compute posterior at initial ϵ_t
     post_1 = fast_mvnormal_pdf(y_t - Ψ(s_t), scaled_det_HH, scaled_inv_HH)
@@ -88,7 +80,7 @@ function mh_step(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Floa
         ϵ_new = ϵ_t + rand(dist_ϵ)
         s_new = Φ(s_t1, ϵ_new)
 
-        # Calculate posteriors
+        # Calculate posterior
         post_new_1 = fast_mvnormal_pdf(y_t - Ψ(s_new), scaled_det_HH, scaled_inv_HH)
         post_new_2 = fast_mvnormal_pdf(ϵ_new)
         post_new = post_new_1 * post_new_2
