@@ -51,18 +51,16 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
     MyVector = parallel ? SharedVector : Vector
     accept_vec = MyVector{Int}(n_particles)
 
+    # Used to generate new draws of ϵ
+    dist_ϵ = MvNormal(c^2 * diag(QQ))
+
     #------------------------------------------------------------------------
     # Metropolis-Hastings Steps
     #------------------------------------------------------------------------
 
-    dist = MvNormal(zeros(n_shocks), c^2*QQ)
-
     @mypar parallel for i in 1:n_particles
-        # Generate new ϵ centered at ϵ_init
-        ϵ_new = ϵ[:, i] + rand(dist)
-
         s_non[:,i], ϵ[:,i], accept_vec[i] =
-            mh_step(Φ, Ψ, y_t, s_init[:,i], s_non[:,i], ϵ[:,i], ϵ_new,
+            mh_step(Φ, Ψ, dist_ϵ, y_t, s_init[:,i], s_non[:,i], ϵ[:,i],
                     φ_new, det_HH, inv_HH, n_obs, n_shocks, N_MH; testing = testing)
     end
 
@@ -71,8 +69,8 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
     return accept_rate
 end
 
-function mh_step(Φ::Function, Ψ::Function, y_t::Vector{Float64}, s_init::Vector{Float64},
-                 s_non::Vector{Float64}, ϵ_init::Vector{Float64}, ϵ_new::Vector{Float64},
+function mh_step(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Float64}, s_init::Vector{Float64},
+                 s_non::Vector{Float64}, ϵ_init::Vector{Float64},
                  φ_new::Float64, det_HH::Float64, inv_HH::Matrix{Float64},
                  n_obs::Int, n_shocks::Int, N_MH::Int; testing::Bool = false)
     s_out = similar(s_init)
@@ -80,8 +78,8 @@ function mh_step(Φ::Function, Ψ::Function, y_t::Vector{Float64}, s_init::Vecto
     accept = 0
 
     for j = 1:N_MH
-
-        # Use the state equation to calculate the corresponding state from that ε
+        # Draw ϵ_new and s_new
+        ϵ_new = ϵ_init + rand(dist_ϵ)
         s_new = Φ(s_init, ϵ_new)
 
         # Calculate difference between data and expected y from measurement equation
