@@ -37,9 +37,15 @@ function bisection(f::Function, a::Number, b::Number; xtol::AbstractFloat=1e-1, 
     return c
 end
 
-function fast_mvnormal_pdf(x::Vector{Float64}, μ::Vector{Float64}, detΣ::Float64, invΣ::Matrix{Float64})
+function fast_mvnormal_pdf(x::Vector{Float64})
+    coeff_term = (2*pi)^(-length(x)/2)
+    exp_term   = exp(-(1/2) * dot(x, x))
+    return coeff_term*exp_term
+end
+
+function fast_mvnormal_pdf(x::Vector{Float64}, detΣ::Float64, invΣ::Matrix{Float64})
     coeff_term = (2*pi)^(-length(x)/2) * detΣ^(-1/2)
-    exp_term   = exp(-(1/2) * dot((x - μ), invΣ*(x - μ)))
+    exp_term   = exp(-(1/2) * dot(x, invΣ * x))
     return coeff_term*exp_term
 end
 

@@ -89,16 +89,13 @@ function mh_step(Φ::Function, Ψ::Function, y_t::Vector{Float64}, s_init::Vecto
         error_init = y_t - Ψ(s_non)
 
         # Calculate posteriors
-        μ_1 = zeros(n_obs)
         scaled_det_HH = det_HH/(φ_new)^n_obs
         scaled_inv_HH = inv_HH*φ_new
-        post_new_1  = fast_mvnormal_pdf(error_new,  μ_1, scaled_det_HH, scaled_inv_HH)
-        post_init_1 = fast_mvnormal_pdf(error_init, μ_1, scaled_det_HH, scaled_inv_HH)
+        post_new_1  = fast_mvnormal_pdf(error_new,  scaled_det_HH, scaled_inv_HH)
+        post_init_1 = fast_mvnormal_pdf(error_init, scaled_det_HH, scaled_inv_HH)
 
-        μ_2 = zeros(n_shocks)
-        inv_ϵ_cov = eye(n_shocks)
-        post_new_2  = fast_mvnormal_pdf(ϵ_new,  μ_2, 1., inv_ϵ_cov)
-        post_init_2 = fast_mvnormal_pdf(ϵ_init, μ_2, 1., inv_ϵ_cov)
+        post_new_2  = fast_mvnormal_pdf(ϵ_new)
+        post_init_2 = fast_mvnormal_pdf(ϵ_init)
 
         post_new  = post_new_1  * post_new_2
         post_init = post_init_1 * post_init_2
