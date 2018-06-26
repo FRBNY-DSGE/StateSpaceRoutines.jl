@@ -31,15 +31,15 @@ all particles, calling this method on each.
 """
 function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
                    det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::Float64, y_t::Vector{Float64},
-                   s_non::AbstractMatrix{Float64}, s_init::AbstractMatrix{Float64},
-                   ϵ::AbstractMatrix{Float64}, c::Float64, N_MH::Int;
+                   s_t::AbstractMatrix{Float64}, s_t1::AbstractMatrix{Float64},
+                   ϵ_t::AbstractMatrix{Float64}, c::Float64, N_MH::Int;
                    ϵ_testing::Matrix{Float64} = zeros(0,0), parallel::Bool = false)
     # Check if testing
     testing = !isempty(ϵ_testing)
 
     # Sizes
     n_obs = size(y_t, 1)
-    n_particles = size(ϵ, 2)
+    n_particles = size(ϵ_t, 2)
 
     # Initialize vector of acceptances
     MyVector = parallel ? SharedVector : Vector
@@ -54,8 +54,8 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
 
     # Take Metropolis-Hastings steps
     @mypar parallel for i in 1:n_particles
-        s_non[:,i], ϵ[:,i], accept_vec[i] =
-            mh_step(Φ, Ψ, dist_ϵ, y_t, s_init[:,i], s_non[:,i], ϵ[:,i],
+        s_t[:,i], ϵ_t[:,i], accept_vec[i] =
+            mh_step(Φ, Ψ, dist_ϵ, y_t, s_t1[:,i], s_t[:,i], ϵ_t[:,i],
                     scaled_det_HH, scaled_inv_HH, N_MH; testing = testing)
     end
 
