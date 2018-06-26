@@ -82,6 +82,8 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
     n_states  = size(s_init, 1)
     lik       = zeros(T)
     times     = zeros(T)
+    QQ        = cov(F_ϵ)
+    HH        = cov(F_u)
 
     # Array types depend on parallelization
     MyVector = parallel ? SharedVector : Vector
@@ -118,7 +120,7 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
         y_t         = y_t[nonmissing]
         n_obs_t     = length(y_t)
         Ψ_t         = x -> Ψ(x)[nonmissing]
-        HH_t        = F_u.Σ.mat[nonmissing, nonmissing]
+        HH_t        = HH[nonmissing, nonmissing]
         inv_HH_t    = inv(HH_t)
         det_HH_t    = det(HH_t)
 
@@ -171,7 +173,7 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
 
             # Mutate particles
             if stage != 1
-                accept_rate = mutation!(Φ, Ψ_t, F_ϵ.Σ.mat, det_HH_t, inv_HH_t, φ_new, y_t,
+                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
                                         s_t_nontemp, s_t1_temp, ϵ, c, N_MH; parallel = parallel)
             end
 
