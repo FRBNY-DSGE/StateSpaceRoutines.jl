@@ -1,9 +1,9 @@
 function next_φ!(Ψ::Function, stage::Int, φ_old::Float64, det_HH::Float64, inv_HH::Matrix{Float64},
                  y_t::Vector{Float64}, s_t_nontemp::AbstractMatrix{Float64},
-                 coeff_terms::AbstractVector{Float64}, log_e_1_terms::AbstractVector{Float64},
-                 log_e_2_terms::AbstractVector{Float64}, r_star::Float64;
+                 coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V, r_star::Float64;
                  adaptive::Bool = true, findroot::Function = bisection, xtol::Float64 = 1e-3,
-                 fixed_sched::Vector{Float64} = zeros(0), parallel::Bool = false)
+                 fixed_sched::Vector{Float64} = zeros(0),
+                 parallel::Bool = false) where V<:AbstractVector{Float64}
     # Sizes
     n_particles = length(coeff_terms)
     n_obs = length(y_t)
@@ -38,9 +38,9 @@ function next_φ!(Ψ::Function, stage::Int, φ_old::Float64, det_HH::Float64, in
     end
 end
 
-function correction!(φ_new::Float64, coeff_terms::AbstractVector{Float64},
-                     log_e_1_terms::AbstractVector{Float64}, log_e_2_terms::AbstractVector{Float64},
-                     n_obs::Int, inc_weights::Vector{Float64}, norm_weights::Vector{Float64})
+function correction!(φ_new::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
+                     n_obs::Int, inc_weights::Vector{Float64},
+                     norm_weights::Vector{Float64}) where V<:AbstractVector{Float64}
     # Compute incremental weights
     n_particles = length(inc_weights)
     for i = 1:n_particles
@@ -115,9 +115,8 @@ Where ∑ is over j=1...M particles, and incremental weight is:
 
     w̃ₜʲ(φ₁) = (φ₁/2π)^(d/2)|∑ᵤ|^(1/2) exp{-1/2 [yₜ-Ψ(sₜʲ'ⁿ⁻¹)]' φ₁ ∑ᵤ⁻¹ [yₜ-Ψ(sₜʲ'ⁿ⁻¹)]}
 """
-function solve_inefficiency(φ_new::Float64, coeff_terms::AbstractVector{Float64},
-                            exp_1_terms::AbstractVector{Float64}, exp_2_terms::AbstractVector{Float64},
-                            n_obs::Int64; parallel::Bool = false)
+function solve_inefficiency(φ_new::Float64, coeff_terms::V, exp_1_terms::V, exp_2_terms::V, n_obs::Int64;
+                            parallel::Bool = false) where V<:AbstractVector{Float64}
     # Compute incremental weights
     n_particles = length(coeff_terms)
     w = Vector{Float64}(n_particles)

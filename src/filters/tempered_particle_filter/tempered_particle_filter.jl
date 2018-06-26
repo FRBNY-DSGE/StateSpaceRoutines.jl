@@ -94,7 +94,7 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
     #--------------------------------------------------------------
 
     # Draw initial particles from the distribution of s₀: N(s₀, P₀)
-    s_t1_temp = s_init
+    s_t1_temp = MyMatrix{Float64}(s_init)
 
     # Vectors of the 3 component terms that are used to calculate the weights
     # Inputs saved in these vectors to conserve memory/avoid unnecessary re-computation

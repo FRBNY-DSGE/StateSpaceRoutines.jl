@@ -1,6 +1,5 @@
-function selection!(norm_weights::Vector{Float64}, s_t1_temp::AbstractMatrix{Float64},
-                    s_t_nontemp::AbstractMatrix{Float64}, ϵ::AbstractMatrix{Float64};
-                    resampling_method::Symbol = :multinomial)
+function selection!(norm_weights::Vector{Float64}, s_t1_temp::M, s_t_nontemp::M, ϵ::M;
+                    resampling_method::Symbol = :multinomial) where M<:AbstractMatrix{Float64}
     # Resampling
     id = resample(norm_weights, method = resampling_method)
 

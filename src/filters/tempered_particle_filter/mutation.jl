@@ -31,9 +31,9 @@ all particles, calling this method on each.
 """
 function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
                    det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::Float64, y_t::Vector{Float64},
-                   s_t::AbstractMatrix{Float64}, s_t1::AbstractMatrix{Float64},
-                   ϵ_t::AbstractMatrix{Float64}, c::Float64, N_MH::Int;
-                   ϵ_testing::Matrix{Float64} = zeros(0,0), parallel::Bool = false)
+                   s_t::M, s_t1::M, ϵ_t::M, c::Float64, N_MH::Int;
+                   ϵ_testing::Matrix{Float64} = zeros(0,0),
+                   parallel::Bool = false) where M<:AbstractMatrix{Float64}
     # Check if testing
     testing = !isempty(ϵ_testing)
 
