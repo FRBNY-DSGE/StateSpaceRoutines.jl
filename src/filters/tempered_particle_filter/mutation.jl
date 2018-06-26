@@ -69,52 +69,41 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
     return accept_rate
 end
 
-function mh_step(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Float64}, s_init::Vector{Float64},
-                 s_non::Vector{Float64}, ϵ_init::Vector{Float64},
+function mh_step(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Float64},
+                 s_t1::Vector{Float64}, s_t::Vector{Float64}, ϵ_t::Vector{Float64},
                  φ_new::Float64, det_HH::Float64, inv_HH::Matrix{Float64},
                  n_obs::Int, n_shocks::Int, N_MH::Int; testing::Bool = false)
-    s_out = similar(s_init)
-    ϵ_out = similar(ϵ_init)
     accept = 0
+
+    scaled_det_HH = det_HH/(φ_new)^n_obs
+    scaled_inv_HH = inv_HH*φ_new
+
+    # Compute posterior at initial ϵ_t
+    post_1 = fast_mvnormal_pdf(y_t - Ψ(s_t), scaled_det_HH, scaled_inv_HH)
+    post_2 = fast_mvnormal_pdf(ϵ_t)
+    post = post_1 * post_2
 
     for j = 1:N_MH
         # Draw ϵ_new and s_new
-        ϵ_new = ϵ_init + rand(dist_ϵ)
-        s_new = Φ(s_init, ϵ_new)
-
-        # Calculate difference between data and expected y from measurement equation
-        error_new  = y_t - Ψ(s_new)
-        error_init = y_t - Ψ(s_non)
+        ϵ_new = ϵ_t + rand(dist_ϵ)
+        s_new = Φ(s_t1, ϵ_new)
 
         # Calculate posteriors
-        scaled_det_HH = det_HH/(φ_new)^n_obs
-        scaled_inv_HH = inv_HH*φ_new
-        post_new_1  = fast_mvnormal_pdf(error_new,  scaled_det_HH, scaled_inv_HH)
-        post_init_1 = fast_mvnormal_pdf(error_init, scaled_det_HH, scaled_inv_HH)
-
-        post_new_2  = fast_mvnormal_pdf(ϵ_new)
-        post_init_2 = fast_mvnormal_pdf(ϵ_init)
-
-        post_new  = post_new_1  * post_new_2
-        post_init = post_init_1 * post_init_2
+        post_new_1 = fast_mvnormal_pdf(y_t - Ψ(s_new), scaled_det_HH, scaled_inv_HH)
+        post_new_2 = fast_mvnormal_pdf(ϵ_new)
+        post_new = post_new_1 * post_new_2
 
         # Calculate α, probability of accepting the new particle
-        α = post_new/post_init
+        α = post_new / post
         rval = testing ? 0.5 : rand()
 
         # Accept the particle with probability α
         if rval < α
-            # Accept and update particle
-            s_out = s_new
-            ϵ_out = ϵ_new
+            s_t = s_new
+            ϵ_t = ϵ_new
+            post = post_new
             accept += 1
-        else
-            # Reject and keep particle unchanged
-            s_out = s_non
-            ϵ_out = ϵ_init
         end
-        ϵ_init = ϵ_out
-        s_non  = s_out
     end
-    return s_out, ϵ_out, accept
+    return s_t, ϵ_t, accept
 end
