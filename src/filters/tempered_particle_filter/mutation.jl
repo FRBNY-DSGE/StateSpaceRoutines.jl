@@ -91,3 +91,15 @@ function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Flo
     end
     return s_t, ϵ_t, accept
 end
+
+"""
+```
+update_c(c, accept_rate, target_rate)
+```
+
+Return the new proposal covariance matrix scaling `c`, adaptively chosen given
+`accept_rate` to match `target_rate`.
+"""
+@inline function update_c(c::Float64, accept_rate::Float64, target_rate::Float64)
+    c*(0.95 + 0.1*exp(20*(accept_rate - target_rate))/(1 + exp(20*(accept_rate - target_rate))))
+end

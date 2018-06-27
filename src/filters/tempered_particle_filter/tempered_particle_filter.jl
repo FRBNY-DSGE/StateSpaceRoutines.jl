@@ -170,7 +170,7 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
             selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t; resampling_method = resampling_method)
 
             loglh[t] += log(mean(inc_weights))
-            c = update_c!(c, accept_rate, target_accept_rate)
+            c = update_c(c, accept_rate, target_accept_rate)
 
             if VERBOSITY[verbose] >= VERBOSITY[:high]
                 @show c

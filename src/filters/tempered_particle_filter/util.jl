@@ -2,19 +2,6 @@ macro mypar(parallel, ex)
     return :( $(esc(parallel)) ? (@sync @parallel $(esc(ex))) : $(esc(ex)) )
 end
 
-"""
-```
-update_c!(c_in::Float64, accept_in::Float64, target_in::Float64)
-```
-Updates value of c by expression that is function of the target and mean acceptance rates.
-Returns the new c, in addition to storing it in the model settings.
-
-"""
-@inline function update_c!(c_in::Float64, accept_in::Float64, target_in::Float64)
-    c_out = c_in*(0.95 + 0.1*exp(20*(accept_in - target_in))/(1 + exp(20*(accept_in - target_in))))
-    return c_out
-end
-
 function bisection(f::Function, a::Number, b::Number; xtol::AbstractFloat=1e-1, maxiter::Integer=1000)
     fa = f(a)
     fa * f(b) <= 0 || throw("No real root in [a,b]")
