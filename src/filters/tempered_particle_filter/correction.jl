@@ -38,15 +38,17 @@ function next_φ(φ_old::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_term
                 findroot::Function = bisection, xtol::Float64 = 1e-3) where V<:AbstractVector{Float64}
 
     if isempty(fixed_sched)
-        # Solve for optimal φ
-        solve_ineff_func(φ) =
-            solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs) - r_star
+        n_particles  = length(coeff_terms)
+        inc_weights  = Vector{Float64}(n_particles)
+        norm_weights = Vector{Float64}(n_particles)
+        ineff0(φ) =
+            ineff!(inc_weights, norm_weights, φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs) - r_star
 
-        if stage == 1 || (sign(solve_ineff_func(φ_old)) != sign(solve_ineff_func(1.0)))
+        if stage == 1 || (sign(ineff0(φ_old)) != sign(ineff0(1.0)))
             # Solve for optimal φ if either
             # 1. First stage
-            # 2. Sign change from solve_ineff_fun(φ_old) to solve_ineff_func(1.0)
-            return findroot(solve_ineff_func, φ_old, 1.0, xtol = xtol)
+            # 2. Sign change from ineff0(φ_old) to ineff0(1.0)
+            return findroot(ineff0, φ_old, 1.0, xtol = xtol)
         else
             # Otherwise, set φ = 1
             return 1.0
@@ -56,14 +58,14 @@ function next_φ(φ_old::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_term
     end
 end
 
-function correction!(φ_new::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
-                     n_obs::Int, inc_weights::Vector{Float64},
-                     norm_weights::Vector{Float64}) where V<:AbstractVector{Float64}
+function correction!(inc_weights::Vector{Float64}, norm_weights::Vector{Float64},
+                     φ_new::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
+                     n_obs::Int) where V<:AbstractVector{Float64}
     # Compute incremental weights
     n_particles = length(inc_weights)
     for i = 1:n_particles
         inc_weights[i] =
-            incremental_weight(φ_new, coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i], n_obs)
+            φ_new^(n_obs/2) * coeff_terms[i] * exp(log_e_1_terms[i]) * exp(φ_new*log_e_2_terms[i])
     end
 
     # Normalize weights
@@ -72,56 +74,10 @@ function correction!(φ_new::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_
     return nothing
 end
 
-"""
-```
-solve_inefficiency{S<:AbstractFloat}(φ_new::S, φ_old::S, y_t::Vector{S}, p_error::Matrix{S},
-inv_HH::Matrix{S}, det_HH::S; initialize::Bool=false)
-```
-Returns the value of the ineffeciency function InEff(φₙ), where:
+function ineff!(inc_weights::Vector{Float64}, norm_weights::Vector{Float64},
+                φ_new::Float64, coeff_terms::V, exp_1_terms::V, exp_2_terms::V,
+                n_obs::Int) where V<:AbstractVector{Float64}
 
-        InEff(φₙ) = (1/M) ∑ᴹ (W̃ₜʲ(φₙ))²
-
-Where ∑ is over j=1...M particles, and for a particle j:
-
-        W̃ₜʲ(φₙ) = w̃ₜʲ(φₙ) / (1/M) ∑ᴹ w̃ₜʲ(φₙ)
-
-Where ∑ is over j=1...M particles, and incremental weight is:
-
-        w̃ₜʲ(φₙ) = pₙ(yₜ|sₜʲ'ⁿ⁻¹) / pₙ₋₁(yₜ|sₜ^{j,n-1})
-                = (φₙ/φₙ₋₁)^(d/2) exp{-1/2 [yₜ-Ψ(sₜʲ'ⁿ⁻¹)]' (φₙ-φₙ₋₁) ∑ᵤ⁻¹ [yₜ-Ψ(sₜʲ'ⁿ⁻¹)]}
-
-### Inputs
-
-- `φ_new`: φₙ
-- `φ_old`: φₙ₋₁
-- `y_t`: vector of observables for time t
-- `p_error`: (`n_states` x `n_particles`) matrix of particles' errors yₜ - Ψ(sₜʲ'ⁿ⁻¹) in columns
-- `inv_HH`: The inverse of the measurement error covariance matrix, ∑ᵤ
-- `det_HH`: The determinant of the measurement error covariance matrix, ∑ᵤ
-
-### Keyword Arguments
-
-- `initialize::Bool`: flag to indicate whether this is being used in initialization stage,
-    in which case one instead solves the formula for w̃ₜʲ(φₙ) as:
-
-    w̃ₜʲ(φ₁) = (φ₁/2π)^(d/2)|∑ᵤ|^(1/2) exp{-1/2 [yₜ-Ψ(sₜʲ'ⁿ⁻¹)]' φ₁ ∑ᵤ⁻¹ [yₜ-Ψ(sₜʲ'ⁿ⁻¹)]}
-"""
-function solve_inefficiency(φ_new::Float64, coeff_terms::V, exp_1_terms::V, exp_2_terms::V, n_obs::Int64;
-                            parallel::Bool = false) where V<:AbstractVector{Float64}
-    # Compute incremental weights
-    n_particles = length(coeff_terms)
-    w = Vector{Float64}(n_particles)
-    for i = 1:n_particles
-        w[i] = incremental_weight(φ_new, coeff_terms[i], exp_1_terms[i], exp_2_terms[i], n_obs)
-    end
-
-    # Compute normalized weights
-    W = w/mean(w)
-
-    return sum(W.^2)/n_particles
-end
-
-function incremental_weight(φ_new::Float64, coeff_term::Float64, log_e_term_1::Float64,
-                            log_e_term_2::Float64, n_obs::Int64)
-    return φ_new^(n_obs/2) * coeff_term * exp(log_e_term_1) * exp(φ_new*log_e_term_2)
+    correction!(inc_weights, norm_weights, φ_new, coeff_terms, exp_1_terms, exp_2_terms, n_obs)
+    return sum(norm_weights.^2) / length(norm_weights)
 end

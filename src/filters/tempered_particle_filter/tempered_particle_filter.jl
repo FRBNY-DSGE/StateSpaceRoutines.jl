@@ -157,8 +157,8 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
                            fixed_sched = fixed_sched, findroot = findroot, xtol = xtol)
 
             # Modifies inc_weights, norm_weights
-            correction!(φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
-                        inc_weights, norm_weights)
+            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
+                        log_e_1_terms, log_e_2_terms, n_obs_t)
 
             if VERBOSITY[verbose] >= VERBOSITY[:high]
                 @show φ_new
