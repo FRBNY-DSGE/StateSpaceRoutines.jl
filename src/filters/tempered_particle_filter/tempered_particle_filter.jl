@@ -50,8 +50,8 @@ fixed schedule inputted directly into the tpf function.
 
 ### Outputs
 
-- `sum(lik)`: The tempered particle filter approximated log-likelihood
-- `lik`: (`hist_periods` x 1) vector returning log-likelihood per period t
+- `sum(loglh)`: The tempered particle filter approximated log-likelihood
+- `loglh`: (`hist_periods` x 1) vector returning log-likelihood per period t
 - `times`: (`hist_periods` x 1) vector returning elapsed runtime per period t
 
 """
@@ -69,10 +69,10 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
     # Setup
     #--------------------------------------------------------------
 
-    adaptive = isempty(fixed_sched)
+    adaptive_φ = isempty(fixed_sched)
 
     # Ensuring the fixed φ schedule is bounded properly
-    if !adaptive
+    if !adaptive_φ
         @assert fixed_sched[end] == 1 "φ schedule must be a range from [a,1] s.t. a > 0."
     end
 
@@ -80,7 +80,7 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
     n_obs, T  = size(data)
     n_shocks  = length(F_ϵ)
     n_states  = size(s_init, 1)
-    lik       = zeros(T)
+    loglh     = zeros(T)
     times     = zeros(T)
     QQ        = cov(F_ϵ)
     HH        = cov(F_u)
@@ -97,7 +97,7 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
     s_t1_temp = MyMatrix{Float64}(copy(s_init))
 
     # Initialize time-t matrices
-    ϵ = MyMatrix{Float64}(n_shocks, n_particles)
+    ϵ_t = MyMatrix{Float64}(n_shocks, n_particles)
     s_t_nontemp = MyMatrix{Float64}(n_states, n_particles)
 
     # Vectors of the 3 component terms that are used to calculate the weights
@@ -128,10 +128,10 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
         inv_HH_t    = inv(HH_t)
         det_HH_t    = det(HH_t)
 
-        # Initialize s_t_nontemp and ϵ for this period
+        # Initialize s_t_nontemp and ϵ_t for this period
         @mypar parallel for i in 1:n_particles
-            ϵ[:, i] = rand(F_ϵ)
-            s_t_nontemp[:, i] = Φ(s_t1_temp[:, i], ϵ[:, i])
+            ϵ_t[:, i] = rand(F_ϵ)
+            s_t_nontemp[:, i] = Φ(s_t1_temp[:, i], ϵ_t[:, i])
         end
 
         # Initialize weight vectors
@@ -152,7 +152,7 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
             # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
             φ_new = next_φ!(Ψ_t, stage, φ_old, det_HH_t, inv_HH_t, y_t, s_t_nontemp,
                             coeff_terms, log_e_1_terms, log_e_2_terms, r_star;
-                            adaptive = adaptive, findroot = findroot, xtol = xtol,
+                            adaptive = adaptive_φ, findroot = findroot, xtol = xtol,
                             fixed_sched = fixed_sched, parallel = parallel)
 
             # Modifies inc_weights, norm_weights
@@ -164,10 +164,10 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
             end
 
             # 2. Selection
-            # Modifies s_t1_temp, s_t_nontemp, ϵ
-            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ; resampling_method = resampling_method)
+            # Modifies s_t1_temp, s_t_nontemp, ϵ_t
+            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t; resampling_method = resampling_method)
 
-            lik[t] += log(mean(inc_weights))
+            loglh[t] += log(mean(inc_weights))
             c = update_c!(c, accept_rate, target)
 
             if VERBOSITY[verbose] >= VERBOSITY[:high]
@@ -176,10 +176,10 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
             end
 
             # 3. Mutation
-            # Modifies s_t_nontemp, ϵ
+            # Modifies s_t_nontemp, ϵ_t
             if stage != 1
                 accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
-                                        s_t_nontemp, s_t1_temp, ϵ, c, N_MH; parallel = parallel)
+                                        s_t_nontemp, s_t1_temp, ϵ_t, c, N_MH; parallel = parallel)
             end
 
             φ_old = φ_new
@@ -187,7 +187,7 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
 
         if VERBOSITY[verbose] >= VERBOSITY[:low]
             print("\n")
-            @show lik[t]
+            @show loglh[t]
             print("Completion of one period ")
             times[t] = toc()
         else
@@ -201,8 +201,8 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
     end
 
     if allout
-        return sum(lik[n_presample_periods + 1:end]), lik[n_presample_periods + 1:end], times
+        return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times
     else
-        return sum(lik[n_presample_periods + 1:end])
+        return sum(loglh[n_presample_periods + 1:end])
     end
 end
