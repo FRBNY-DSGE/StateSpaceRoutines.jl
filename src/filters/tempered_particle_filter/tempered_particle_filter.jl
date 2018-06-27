@@ -146,12 +146,15 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
         while φ_old < 1
             stage += 1
 
-            # 1. Correction
+            ### 1. Correction
+
             # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
-            φ_new = next_φ!(Ψ_t, stage, φ_old, det_HH_t, inv_HH_t, y_t, s_t_nontemp,
-                            coeff_terms, log_e_1_terms, log_e_2_terms, r_star;
-                            adaptive = adaptive_φ, findroot = findroot, xtol = xtol,
-                            fixed_sched = fixed_sched, parallel = parallel)
+            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+                           Ψ, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
+                           initialize = stage == 1, parallel = parallel)
+
+            φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t, r_star, stage;
+                           fixed_sched = fixed_sched, findroot = findroot, xtol = xtol)
 
             # Modifies inc_weights, norm_weights
             correction!(φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
@@ -161,7 +164,8 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
                 @show φ_new
             end
 
-            # 2. Selection
+            ### 2. Selection
+
             # Modifies s_t1_temp, s_t_nontemp, ϵ_t
             selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t; resampling_method = resampling_method)
 
@@ -173,7 +177,8 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
                 println("------------------------------")
             end
 
-            # 3. Mutation
+            ### 3. Mutation
+
             # Modifies s_t_nontemp, ϵ_t
             if stage != 1
                 accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,

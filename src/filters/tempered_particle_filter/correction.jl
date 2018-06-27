@@ -1,40 +1,58 @@
-function next_φ!(Ψ::Function, stage::Int, φ_old::Float64, det_HH::Float64, inv_HH::Matrix{Float64},
-                 y_t::Vector{Float64}, s_t_nontemp::AbstractMatrix{Float64},
-                 coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V, r_star::Float64;
-                 adaptive::Bool = true, findroot::Function = bisection, xtol::Float64 = 1e-3,
-                 fixed_sched::Vector{Float64} = zeros(0),
-                 parallel::Bool = false) where V<:AbstractVector{Float64}
+# The outputs of the weight_kernel function are meant to make calculating
+# the incremental weight much more efficient to speed up the adaptive φ finding
+# that way we're not doing the same matrix multiplication step (dot(p_error, inv_HH*p_error))
+# for every iteration of the root-solving algorithm
+# Also, the exponential terms are logged first and then exponentiated in the
+# incremental_weight calculation so the problem is well-conditioned (i.e. not exponentiating
+# very large negative numbers)
+function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
+                        φ_old::Float64, Ψ::Function, y_t::Vector{Float64},
+                        s_t_nontemp::AbstractMatrix{Float64},
+                        det_HH::Float64, inv_HH::Matrix{Float64};
+                        initialize::Bool = false, parallel::Bool = false) where V<:AbstractVector{Float64}
     # Sizes
     n_particles = length(coeff_terms)
     n_obs = length(y_t)
 
-    # Compute weight kernel terms
     @mypar parallel for i in 1:n_particles
-        p_err = y_t - Ψ(s_t_nontemp[:, i])
-        coeff_terms[i], log_e_1_terms[i], log_e_2_terms[i] =
-            weight_kernel(φ_old, y_t, p_err, det_HH, inv_HH, initialize = stage == 1)
-    end
+        error    = y_t - Ψ(s_t_nontemp[:, i])
+        sq_error = dot(error, inv_HH * error)
 
-    # Determine φ_new
-    φ_new = if adaptive
+        if initialize
+            # Initialization step (using 2π instead of φ_old)
+            coeff_terms[i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
+            log_e_1_terms[i] = 0.
+            log_e_2_terms[i] = -1/2 * sq_error
+        else
+            # Non-initialization step (tempering and final iteration)
+            coeff_terms[i]   = (φ_old)^(-n_obs/2)
+            log_e_1_terms[i] = -1/2 * (-φ_old) * sq_error
+            log_e_2_terms[i] = -1/2 * sq_error
+        end
+    end
+    return nothing
+end
+
+function next_φ(φ_old::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
+                n_obs::Int, r_star::Float64, stage::Int; fixed_sched::Vector{Float64} = Float64[],
+                findroot::Function = bisection, xtol::Float64 = 1e-3) where V<:AbstractVector{Float64}
+
+    if isempty(fixed_sched)
+        # Solve for optimal φ
         solve_ineff_func(φ) =
             solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs) - r_star
 
-        if stage == 1
-            findroot(solve_ineff_func, φ_old, 1.0, xtol = xtol)
+        if stage == 1 || (sign(solve_ineff_func(φ_old)) != sign(solve_ineff_func(1.0)))
+            # Solve for optimal φ if either
+            # 1. First stage
+            # 2. Sign change from solve_ineff_fun(φ_old) to solve_ineff_func(1.0)
+            return findroot(solve_ineff_func, φ_old, 1.0, xtol = xtol)
         else
-            # Compute interval
-            fphi_interval = [solve_ineff_func(φ_old) solve_ineff_func(1.0)]
-
-            # Look for optimal φ within the interval
-            if prod(sign.(fphi_interval)) == -1
-                findroot(solve_ineff_func, φ_old, 1.0, xtol = xtol)
-            else
-                1.0
-            end
+            # Otherwise, set φ = 1
+            return 1.0
         end
     else
-        fixed_sched[stage]
+        return fixed_sched[stage]
     end
 end
 
@@ -52,33 +70,6 @@ function correction!(φ_new::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_
     norm_weights .= inc_weights ./ mean(inc_weights)
 
     return nothing
-end
-
-# The outputs of the weight_kernel function are meant to make calculating
-# the incremental weight much more efficient to speed up the adaptive φ finding
-# that way we're not doing the same matrix multiplication step (dot(p_error, inv_HH*p_error))
-# for every iteration of the root-solving algorithm
-# Also, the exponential terms are logged first and then exponentiated in the
-# incremental_weight calculation so the problem is well-conditioned (i.e. not exponentiating
-# very large negative numbers)
-function weight_kernel(φ_old::Float64, y_t::Vector{Float64},
-                       p_error::Vector{Float64}, det_HH::Float64, inv_HH::Matrix{Float64};
-                       initialize::Bool = false)
-
-    sq_error = dot(p_error, inv_HH * p_error)
-
-    if initialize
-        # Initialization step (using 2π instead of φ_old)
-        coeff_term   = (2*pi)^(-length(y_t)/2) * det_HH^(-1/2)
-        log_e_term_1 = 0.
-        log_e_term_2 = -1/2 * sq_error
-    else
-        # Non-initialization step (tempering and final iteration)
-        coeff_term   = (φ_old)^(-length(y_t)/2)
-        log_e_term_1 = -1/2 * (-φ_old) * sq_error
-        log_e_term_2 = -1/2 * sq_error
-    end
-    return coeff_term, log_e_term_1, log_e_term_2
 end
 
 """
