@@ -1,73 +1,54 @@
-function selection!(norm_weights::Vector{Float64}, s_t1_temp::M, s_t_nontemp::M, ϵ::M;
+function selection!(norm_weights::Vector{Float64}, s_t1_temp::M, s_t_nontemp::M, ϵ_t::M;
                     resampling_method::Symbol = :multinomial) where M<:AbstractMatrix{Float64}
     # Resampling
-    id = resample(norm_weights, method = resampling_method)
+    is = resample(norm_weights, method = resampling_method)
 
-    # Update arrays for resampled indices
-    s_t_nontemp .= s_t_nontemp[:, id]
-    s_t1_temp   .= s_t1_temp[:, id]
-    ϵ           .= ϵ[:, id]
+    # Update arrays using resampled indices
+    s_t1_temp   .= s_t1_temp[:, is]
+    s_t_nontemp .= s_t_nontemp[:, is]
+    ϵ_t         .= ϵ_t[:, is]
 
     return nothing
 end
 
 """
 ```
-resample(weights::AbstractArray; method::Symbol=:systematic,
-         parallel::Bool=false, testing::Bool=false)
+resample(weights; method = :systematic)
 ```
 
-Reindexing and reweighting samples from a degenerate distribution
-
-### Arguments:
-
-- `weights`: The weights of each of the particles.
-- `method`: :systematic or :multinomial
-        the method for resampling.
-- `parallel`: to indicate whether to resample using multiple workers (if available).
-- `testing`: to indicate whether to give test output.
-
-### Output:
-
-- `vec(indx)`: id
-        the newly assigned indices of parameter draws.
+Return indices after resampling according to `method`, weighting by `weights`.
 """
 function resample(weights::Vector{Float64}; method::Symbol = :systematic)
-    if method == :systematic
-        n_parts = length(weights)
+    n_particles = length(weights)
 
-        # Stores cumulative weights until given index
-        cumulative_weights = cumsum(weights/sum(weights))
+    # Normalize weights if necessary
+    if sum(weights) != 1
+        weights = weights ./ sum(weights)
+    end
+
+    if method == :systematic
+
+        cumulative_weights = cumsum(weights)
         offset = rand()
 
-        # Function solves where an individual "spoke" lands
-        function subsys(i::Int, offset::Float64, n_parts::Int64, start_ind::Int64,
-                        cumulative_weights::Vector{Float64})
-            threshold = (i - 1 + offset)/n_parts
-            range = start_ind:n_parts
-            for j in range
+        new_inds = zeros(Int, n_particles)
+        for i in 1:n_particles
+            threshold = (i - 1 + offset) / n_particles
+            start_ind = i == 1 ? 1 : new_inds[i-1]
+
+            for j in start_ind:n_particles
                 if cumulative_weights[j] > threshold
-                    return j
+                    new_inds[i] = j
+                    break
                 end
             end
-            return 0
         end
+        return new_inds
 
-        indx = Vector{Int64}(n_parts)
-        for i in 1:n_parts
-            if i == 1
-                indx[i] = subsys(i, offset, n_parts, 1, cumulative_weights)
-            else
-                indx[i] = subsys(i, offset, n_parts, indx[i-1], cumulative_weights)
-            end
-        end
-
-        return indx
     elseif method == :multinomial
-        n_parts = length(weights)
-        weights = Weights(weights./sum(weights))
-        return sample(1:n_parts, weights, n_parts, replace = true)
+        return sample(1:n_parts, Weights(weights), n_particles, replace = true)
+
     else
-        throw("Invalid resampler. Set tuning field :resampling_method to either :systematic or :multinomial")
+        throw("Invalid resampling method: $method")
     end
 end
