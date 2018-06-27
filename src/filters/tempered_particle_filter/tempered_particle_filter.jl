@@ -58,53 +58,51 @@ fixed schedule inputted directly into the tpf function.
 function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
                                   F_ϵ::Distribution, F_u::Distribution, s_init::Matrix{S};
                                   verbose::Symbol = :high, fixed_sched::Vector{S} = zeros(0),
-                                  r_star::S = 2., c::S = 0.3, accept_rate::S = 0.4, target::S = 0.4,
+                                  r_star::S = 2.0, c_init::S = 0.3, target_accept_rate::S = 0.4,
                                   xtol::Float64 = 1e-3, findroot::Function = bisection,
                                   resampling_method = :multinomial,
                                   N_MH::Int = 1, n_particles::Int = 1000,
                                   n_presample_periods::Int = 0,
-                                  allout::Bool = true, parallel::Bool = false,
-                                  testing::Bool = false) where S<:AbstractFloat
+                                  allout::Bool = true, parallel::Bool = false) where S<:AbstractFloat
     #--------------------------------------------------------------
     # Setup
     #--------------------------------------------------------------
 
+    # If using fixed φ schedule, check well-formed
     adaptive_φ = isempty(fixed_sched)
-
-    # Ensuring the fixed φ schedule is bounded properly
     if !adaptive_φ
         @assert fixed_sched[end] == 1 "φ schedule must be a range from [a,1] s.t. a > 0."
     end
 
-    # Initialization of constants and output vectors
+    # Initialize constants
     n_obs, T  = size(data)
     n_shocks  = length(F_ϵ)
     n_states  = size(s_init, 1)
-    loglh     = zeros(T)
-    times     = zeros(T)
     QQ        = cov(F_ϵ)
     HH        = cov(F_u)
 
-    # Array types depend on parallelization
+    # Initialize output vectors
+    loglh = zeros(T)
+    times = zeros(T)
+
+    # Initialize working variables
     MyVector = parallel ? SharedVector : Vector
     MyMatrix = parallel ? SharedMatrix : Matrix
+
+    s_t1_temp     = MyMatrix{Float64}(copy(s_init))
+    s_t_nontemp   = MyMatrix{Float64}(n_states, n_particles)
+    ϵ_t           = MyMatrix{Float64}(n_shocks, n_particles)
+
+    coeff_terms   = MyVector{Float64}(n_particles)
+    log_e_1_terms = MyVector{Float64}(n_particles)
+    log_e_2_terms = MyVector{Float64}(n_particles)
+
+    c = c_init
+    accept_rate = target_accept_rate
 
     #--------------------------------------------------------------
     # Main Algorithm: Tempered Particle Filter
     #--------------------------------------------------------------
-
-    # Draw initial particles from the distribution of s₀: N(s₀, P₀)
-    s_t1_temp = MyMatrix{Float64}(copy(s_init))
-
-    # Initialize time-t matrices
-    ϵ_t = MyMatrix{Float64}(n_shocks, n_particles)
-    s_t_nontemp = MyMatrix{Float64}(n_states, n_particles)
-
-    # Vectors of the 3 component terms that are used to calculate the weights
-    # Inputs saved in these vectors to conserve memory/avoid unnecessary re-computation
-    coeff_terms   = MyVector{Float64}(n_particles)
-    log_e_1_terms = MyVector{Float64}(n_particles)
-    log_e_2_terms = MyVector{Float64}(n_particles)
 
     for t = 1:T
         tic()
@@ -118,15 +116,15 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
         #--------------------------------------------------------------
 
         # Remove rows/columns of series with NaN values
-        y_t = data[:,t]
+        y_t = data[:, t]
 
-        nonmissing  = isfinite.(y_t)
-        y_t         = y_t[nonmissing]
-        n_obs_t     = length(y_t)
-        Ψ_t         = x -> Ψ(x)[nonmissing]
-        HH_t        = HH[nonmissing, nonmissing]
-        inv_HH_t    = inv(HH_t)
-        det_HH_t    = det(HH_t)
+        nonmissing = isfinite.(y_t)
+        y_t        = y_t[nonmissing]
+        n_obs_t    = length(y_t)
+        Ψ_t        = x -> Ψ(x)[nonmissing]
+        HH_t       = HH[nonmissing, nonmissing]
+        inv_HH_t   = inv(HH_t)
+        det_HH_t   = det(HH_t)
 
         # Initialize s_t_nontemp and ϵ_t for this period
         @mypar parallel for i in 1:n_particles
@@ -168,7 +166,7 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
             selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t; resampling_method = resampling_method)
 
             loglh[t] += log(mean(inc_weights))
-            c = update_c!(c, accept_rate, target)
+            c = update_c!(c, accept_rate, target_accept_rate)
 
             if VERBOSITY[verbose] >= VERBOSITY[:high]
                 @show c
