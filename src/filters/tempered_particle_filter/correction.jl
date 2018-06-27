@@ -17,13 +17,13 @@ function next_φ!(Ψ::Function, stage::Int, φ_old::Float64, det_HH::Float64, in
 
     # Determine φ_new
     φ_new = if adaptive
-        # Compute interval
         solve_ineff_func(φ) =
             solve_inefficiency(φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs) - r_star
 
         if stage == 1
             findroot(solve_ineff_func, φ_old, 1.0, xtol = xtol)
         else
+            # Compute interval
             fphi_interval = [solve_ineff_func(φ_old) solve_ineff_func(1.0)]
 
             # Look for optimal φ within the interval
@@ -69,14 +69,14 @@ function weight_kernel(φ_old::Float64, y_t::Vector{Float64},
 
     if initialize
         # Initialization step (using 2π instead of φ_old)
-        coeff_term = (2*pi)^(-length(y_t)/2) * det_HH^(-1/2)
-        log_e_term_1   = 0.
-        log_e_term_2   = -1/2 * sq_error
+        coeff_term   = (2*pi)^(-length(y_t)/2) * det_HH^(-1/2)
+        log_e_term_1 = 0.
+        log_e_term_2 = -1/2 * sq_error
     else
         # Non-initialization step (tempering and final iteration)
-        coeff_term = (φ_old)^(-length(y_t)/2)
-        log_e_term_1   = -1/2 * (-φ_old) * sq_error
-        log_e_term_2   = -1/2 * sq_error
+        coeff_term   = (φ_old)^(-length(y_t)/2)
+        log_e_term_1 = -1/2 * (-φ_old) * sq_error
+        log_e_term_2 = -1/2 * sq_error
     end
     return coeff_term, log_e_term_1, log_e_term_2
 end
