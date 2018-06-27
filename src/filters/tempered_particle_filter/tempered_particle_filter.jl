@@ -1,69 +1,77 @@
 """
 ```
-tempered_particle_filter{S<:AbstractFloat}(data::Array{S}, Φ::Function,
-                         Ψ::Function, F_ϵ::Distribution, F_u::Distribution, s_init::Matrix{S};
-                         verbose::Symbol = :high, include_presample::Bool = true,
-                         fixed_sched::Vector{S} = zeros(0), r_star::S = 2.,]
-                         c::S = 0.3, accept_rate::S = 0.4, target::S = 0.4,
-                         xtol = 0., resampling_method::Symbol = :systematic,
-                         N_MH::Int = 1, n_particles::Int = 1000,
-                         n_presample_periods::Int = 0, adaptive::bool = true,
-                         allout::Bool = true, parallel::Bool = false,
-                         testing = false)
+tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; verbose = :high,
+    n_particles = 1000, fixed_sched = [], r_star = 2, findroot = bisection,
+    xtol = 1e-3, resampling_method = :multionial, N_MH = 1, c_init = 0.3,
+    target_accept_rate = 0.4, n_presample_periods = 0, allout = true,
+    parallel = false, verbose = :low)
 ```
-Executes tempered particle filter.
 
 ### Inputs
 
-- `data`: (`n_observables` x `hist_periods`) size `Matrix{S}` of data for observables.
-- `Φ`: The state transition function: s_t = Φ(s_t-1, ϵ_t)
-- `Ψ`: The measurement equation: y_t = Ψ(s_t) + u_t
-- `F_ϵ`: The shock distribution: ϵ ~ F_ϵ
-- `F_u`: The measurement error distribution: u ~ F_u
-- `s_init`: (`n_observables` x `n_particles`) initial state vector
+- `data::Matrix{S}`: `Ny` x `Nt` matrix of historical data
+- `Φ::Function`: state transition equation: s_t = Φ(s_{t-1}, ϵ_t)
+- `Ψ::Function`: measurement equation: y_t = Ψ(s_t) + u_t
+- `F_ϵ::Distribution`: shock distribution: ϵ_t ~ F_ϵ
+- `F_u::Distribution`: measurement error distribution: u_t ~ F_u
+- `s_init::Matrix{S}`: `Ns` x `n_particles` matrix of initial state vectors s_0
+
+where `S<:AbstractFloat` and
+
+- `Ns` is the number of states
+- `Ny` is the number of observables
+- `Nt` is the number of data periods
 
 ### Keyword Arguments
 
-- `verbose`: Indicates desired nuance of outputs. Default to `:low`.
-- `include_presample`: Indicates whether to include presample in periods in the returned
-   outputs. Defaults to `true`.
-- `fixed_sched`: An array of elements in (0,1] that are monotonically increasing, which
-specify the tempering schedule.
-- `r_star`: The target ratio such that the chosen φ* satisfies r_star = InEff(φ*) = Sample mean with respect
-to the number of particles of the squared, normalized particle weights, W_t^{j,n}(φ_n)^2.
-- `c`: The adaptively chosen step size of each proposed move in the mutation step of the tempering iterations portion of
-the algorithm.
-- `accept_rate`: The rate of the number of particles accepted in the mutation step at each time step, which factors
-into the calculation of the adaptively chosen c step.
-- `target`: The target acceptance rate, which factors into the calculation of the adaptively chosen c step.
-accurate root.
-- `resampling_method`: The method for resampling particles each time step
-- `N_MH`: The number of metropolis hastings steps that are proposed in the mutation step of the tempering iterations portion of
-the algorithm.
-- `n_particles`: The number of particles that are used to make the log-likelihood approximation (more giving a more accurate
-estimate of the log-likelihood at the cost of being more computationally intensive).
-- `n_presample_periods`: If greater than 0, the first `n_presample_periods` will be omitted from the likelihood calculation.
-- `adaptive`: Whether or not to adaptively solve for an optimal φ schedule w/ resp. to r_star, and instead use the pre-allocated
-fixed schedule inputted directly into the tpf function.
-- `allout`: Whether or not to return all outputs (log-likelihood, incremental likelihood, and time for each time step iteration)
-- `parallel`: Whether or not to run the algorithm with parallelized mutation and resampling steps.
+- `n_particles::Int`: number of particles used to approximate the
+  log-likelihood. Using more particles yields a more accurate estimate, at the
+  cost of being more computationally intensive
+
+**Correction:**
+
+- `fixed_sched::Vector{S}`: array of monotone increasing values in (0,1] which
+  specify the fixed tempering schedule. Set to `[]` if you wish to adaptively
+  choose the tempering schedule (below)
+- `r_star::S`: target inefficiency ratio used to adaptively choose φ, i.e.
+  Ineff(φ_n) := 1/M Σ_{j=1}^M (Wtil_t^{j,n}(φ_n))^2 = r_star
+- `findroot::Function`: root-finding algorithm, one of `bisection` or `fzero`
+- `xtol::S`: root-finding tolerance on x bracket size
+
+**Selection:**
+
+- `resampling_method::Symbol`: either `:multinomial` or `:systematic`
+
+**Mutation:**
+
+- `N_MH::Int`: number of Metropolis-Hastings steps to take in each tempering
+  stage
+- `c_init::S`: initial scaling of proposal covariance matrix
+- `target_accept_rate::S`: target Metropolis-Hastings acceptance rate
+
+**Other:**
+
+- `n_presample_periods::Int`: number of initial periods to omit from the
+  log-likelihood calculation
+- `allout::Bool`: whether to return all outputs or just `sum(loglh)`
+- `parallel::Bool`: whether to use `SharedArray`s
+- `verbose::Symbol`: amount to print to STDOUT. One of `:none`, `:low`, or
+  `:high`
 
 ### Outputs
 
-- `sum(loglh)`: The tempered particle filter approximated log-likelihood
-- `loglh`: (`hist_periods` x 1) vector returning log-likelihood per period t
-- `times`: (`hist_periods` x 1) vector returning elapsed runtime per period t
-
+- `sum(loglh)::S`: log-likelihood p(y_{1:T}|Φ,Ψ,F_ϵ,F_u) approximation
+- `loglh::Vector{S}`: vector of conditional log-likelihoods p(y_t|y_{1:t-1},Φ,Ψ,F_ϵ,F_u)
+- `times::Vector{S}`: vector of runtimes per period t
 """
 function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
                                   F_ϵ::Distribution, F_u::Distribution, s_init::Matrix{S};
-                                  verbose::Symbol = :high, fixed_sched::Vector{S} = zeros(0),
-                                  r_star::S = 2.0, c_init::S = 0.3, target_accept_rate::S = 0.4,
-                                  xtol::Float64 = 1e-3, findroot::Function = bisection,
-                                  resampling_method = :multinomial,
-                                  N_MH::Int = 1, n_particles::Int = 1000,
-                                  n_presample_periods::Int = 0,
-                                  allout::Bool = true, parallel::Bool = false) where S<:AbstractFloat
+                                  n_particles::Int = 1000, fixed_sched::Vector{S} = zeros(0),
+                                  r_star::S = 2.0, findroot::Function = bisection, xtol::S = 1e-3,
+                                  resampling_method = :multinomial, N_MH::Int = 1,
+                                  c_init::S = 0.3, target_accept_rate::S = 0.4,
+                                  n_presample_periods::Int = 0, allout::Bool = true,
+                                  parallel::Bool = false, verbose::Symbol = :high) where S<:AbstractFloat
     #--------------------------------------------------------------
     # Setup
     #--------------------------------------------------------------
@@ -155,14 +163,13 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
 
             φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t, r_star, stage;
                            fixed_sched = fixed_sched, findroot = findroot, xtol = xtol)
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show φ_new
+            end
 
             # Modifies inc_weights, norm_weights
             correction!(inc_weights, norm_weights, φ_new, coeff_terms,
                         log_e_1_terms, log_e_2_terms, n_obs_t)
-
-            if VERBOSITY[verbose] >= VERBOSITY[:high]
-                @show φ_new
-            end
 
             ### 2. Selection
 
@@ -170,8 +177,8 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
             selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t; resampling_method = resampling_method)
 
             loglh[t] += log(mean(inc_weights))
-            c = update_c(c, accept_rate, target_accept_rate)
 
+            c = update_c(c, accept_rate, target_accept_rate)
             if VERBOSITY[verbose] >= VERBOSITY[:high]
                 @show c
                 println("------------------------------")

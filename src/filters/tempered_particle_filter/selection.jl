@@ -1,3 +1,12 @@
+"""
+```
+selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+    resampling_method = :multinomial)
+```
+
+Resample particles using `norm_weights`. This function modifies `s_t1_temp`,
+`s_t_nontemp`, and `ϵ_t` in place.
+"""
 function selection!(norm_weights::Vector{Float64}, s_t1_temp::M, s_t_nontemp::M, ϵ_t::M;
                     resampling_method::Symbol = :multinomial) where M<:AbstractMatrix{Float64}
     # Resampling

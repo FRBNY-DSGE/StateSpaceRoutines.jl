@@ -1,10 +1,19 @@
-# The outputs of the weight_kernel function are meant to make calculating
-# the incremental weight much more efficient to speed up the adaptive φ finding
-# that way we're not doing the same matrix multiplication step (dot(p_error, inv_HH*p_error))
-# for every iteration of the root-solving algorithm
-# Also, the exponential terms are logged first and then exponentiated in the
-# incremental_weight calculation so the problem is well-conditioned (i.e. not exponentiating
-# very large negative numbers)
+"""
+```
+weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, y_t,
+    s_t_nontemp, det_HH, inv_HH; initialize = false, parallel = false)
+```
+
+The outputs of the weight_kernel function are meant to speed up the adaptive φ
+finding, so that we don't do the same matrix multiplication step in every
+iteration of the root-solving algorithm.
+
+The exponential terms are logged first and then exponentiated in the
+incremental weight calculation so the problem is well-conditioned (i.e. not
+exponentiating very large negative numbers).
+
+This function modifies `coeff_terms`, `log_e_1_terms`, and `log_e_2_terms`.
+"""
 function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                         φ_old::Float64, Ψ::Function, y_t::Vector{Float64},
                         s_t_nontemp::AbstractMatrix{Float64},
@@ -33,6 +42,16 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
     return nothing
 end
 
+"""
+```
+next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs, r_star, stage;
+    fixed_sched = [], findroot = bisection, xtol = 1e-3)
+```
+
+Return the next tempering factor `φ_new`. If `isempty(fixed_sched)`, adaptively
+choose `φ_new` by setting InEff(φ_new) = r_star. Otherwise, return
+`fixed_sched[stage]`.
+"""
 function next_φ(φ_old::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                 n_obs::Int, r_star::Float64, stage::Int; fixed_sched::Vector{Float64} = Float64[],
                 findroot::Function = bisection, xtol::Float64 = 1e-3) where V<:AbstractVector{Float64}
@@ -58,6 +77,19 @@ function next_φ(φ_old::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_term
     end
 end
 
+"""
+```
+correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms,
+    log_e_2_terms, n_obs)
+```
+
+Compute (and modify in-place) incremental weights w̃ₜʲ and normalized weights W̃ₜʲ:
+
+        w̃ₜʲ(φₙ) = pₙ(yₜ|sₜʲ'ⁿ⁻¹) / pₙ₋₁(yₜ|sₜʲ'ⁿ⁻¹)
+                = (φₙ/φₙ₋₁)^(d/2) exp{-1/2 (φₙ-φₙ₋₁) [yₜ-Ψ(sₜʲ'ⁿ⁻¹)]' Σᵤ⁻¹ [yₜ-Ψ(sₜʲ'ⁿ⁻¹)]}
+
+        W̃ₜʲ(φₙ) = w̃ₜʲ(φₙ) / (1/M) ∑ w̃ₜʲ(φₙ)
+"""
 function correction!(inc_weights::Vector{Float64}, norm_weights::Vector{Float64},
                      φ_new::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                      n_obs::Int) where V<:AbstractVector{Float64}
@@ -74,6 +106,15 @@ function correction!(inc_weights::Vector{Float64}, norm_weights::Vector{Float64}
     return nothing
 end
 
+"""
+```
+ineff!(inc_weights, norm_weights, φ_new, coeff_terms, exp_1_terms, exp_2_terms, n_obs)
+```
+
+Compute and return InEff(φₙ), where:
+
+        InEff(φₙ) = (1/M) ∑ (W̃ₜʲ(φₙ))²
+"""
 function ineff!(inc_weights::Vector{Float64}, norm_weights::Vector{Float64},
                 φ_new::Float64, coeff_terms::V, exp_1_terms::V, exp_2_terms::V,
                 n_obs::Int) where V<:AbstractVector{Float64}

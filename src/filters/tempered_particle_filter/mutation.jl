@@ -1,33 +1,11 @@
 """
 ```
-mutation{S<:AbstractFloat}(system::System{S}, y_t::Array{S,1}, s_init::Array{S,1},
-        ϵ_init::Array{S,1}, c::S, N_MH::Int, nonmissing::Array{Bool,1})
+mutation!(Φ, Ψ, QQ, det_HH, inv_HH, φ_new, y_t, s_t, s_t1, ϵ_t, c, N_MH;
+    parallel = false)
 ```
-Runs random-walk Metropolis Hastings for single particle. The caller should loop through
-all particles, calling this method on each.
 
-### Inputs
-
-- `system`: state-space system matrices
-- `y_t`: vector of observables at time t
-- `s_init`: vector of starting state before mutation (ŝ in paper)
-- `ϵ_init`: vector of starting state error before mutation
-- `c`: scaling factor used to achieve a desired acceptance rate, adjusted via:
-
-    cₙ = cₙ₋₁f(1-R̂ₙ₋₁(cₙ₋₁))
-
-    Where c₁ = c_star and R̂ₙ₋₁(cₙ₋₁) is the emprical rejection rate based on mutation
-    phase in iteration n-1. Average is computed across previous N_MH RWMH steps.
-
-- `N_MH`: number of Metropolis Hastings steps
-- `nonmissing`: vector of booleans used to remove NaN values from matrices in system object
-
-### Outputs
-
-- `s_out`: mutated state vector
-- `ϵ_out`: output ϵ shock corresponding to state vector
-- `accept_rate`: acceptance rate across N_MH steps
-
+Mutate particles by taking Metropolis-Hastings steps in the `ϵ_t` space. This
+function modifies `s_t` and `ϵ_t` in place and returns `accept_rate`.
 """
 function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
                    det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::Float64, y_t::Vector{Float64},
@@ -60,6 +38,14 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
     return accept_rate
 end
 
+"""
+```
+mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1, s_t, ϵ_t, scaled_det_HH, scaled_inv_HH, N_MH)
+```
+
+Take `N_MH` many steps in the `ϵ_t` space for a single particle. Returns the new
+`s_t`, `ϵ_t`, and the number of acceptances `accept`.
+"""
 function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Float64},
                   s_t1::Vector{Float64}, s_t::Vector{Float64}, ϵ_t::Vector{Float64},
                   scaled_det_HH::Float64, scaled_inv_HH::Matrix{Float64}, N_MH::Int)
