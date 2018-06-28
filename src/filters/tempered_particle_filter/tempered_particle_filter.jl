@@ -105,6 +105,9 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
     log_e_1_terms = MyVector{Float64}(n_particles)
     log_e_2_terms = MyVector{Float64}(n_particles)
 
+    inc_weights   = Vector{Float64}(n_particles)
+    norm_weights  = Vector{Float64}(n_particles)
+
     c = c_init
     accept_rate = target_accept_rate
 
@@ -139,10 +142,6 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
             ϵ_t[:, i] = rand(F_ϵ)
             s_t_nontemp[:, i] = Φ(s_t1_temp[:, i], ϵ_t[:, i])
         end
-
-        # Initialize weight vectors
-        inc_weights  = Vector{Float64}(n_particles)
-        norm_weights = Vector{Float64}(n_particles)
 
         # Tempering initialization
         φ_old = 1e-30
