@@ -55,7 +55,7 @@ function resample(weights::Vector{Float64}; method::Symbol = :systematic)
         return new_inds
 
     elseif method == :multinomial
-        return sample(1:n_parts, Weights(weights), n_particles, replace = true)
+        return sample(1:n_particles, Weights(weights), n_particles, replace = true)
 
     else
         throw("Invalid resampling method: $method")
