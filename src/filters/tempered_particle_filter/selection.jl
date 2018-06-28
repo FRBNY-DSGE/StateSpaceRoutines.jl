@@ -26,6 +26,8 @@ resample(weights; method = :systematic)
 ```
 
 Return indices after resampling according to `method`, weighting by `weights`.
+See https://xianblog.files.wordpress.com/2017/12/lawrenz.png for a helpful
+visual comparison of multinomial and systematic resampling.
 """
 function resample(weights::Vector{Float64}; method::Symbol = :systematic)
     n_particles = length(weights)
@@ -36,21 +38,27 @@ function resample(weights::Vector{Float64}; method::Symbol = :systematic)
     end
 
     if method == :systematic
+        # Divide a circle of circumference 1 into n_particles segments, where
+        # the jth segment has length weights[j] and lies on the half-closed
+        # interval (cdf[j-1], cdf[j]]
+        cdf = cumsum(weights)
 
-        cumulative_weights = cumsum(weights)
-        offset = rand()
+        # Take a wheel with n_particles spokes, each spaced 1/n_particles
+        # apart, and shift it from its initial position (where there is a spoke
+        # at 0) by offset
+        offset = rand() / n_particles
 
+        # The ith spoke landed in the jth segment <=> set the ith new particle
+        # equal to the jth old particle
         new_inds = zeros(Int, n_particles)
+        j = 1
         for i in 1:n_particles
-            threshold = (i - 1 + offset) / n_particles
-            start_ind = i == 1 ? 1 : new_inds[i-1]
-
-            for j in start_ind:n_particles
-                if cumulative_weights[j] > threshold
-                    new_inds[i] = j
-                    break
-                end
+            spoke = (i-1)/n_particles + offset
+            # Find j such that cdf[j-1] < spoke <= cdf[j]
+            while spoke > cdf[j]
+                j += 1
             end
+            new_inds[i] = j
         end
         return new_inds
 
