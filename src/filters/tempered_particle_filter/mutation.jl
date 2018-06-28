@@ -1,6 +1,6 @@
 """
 ```
-mutation!(Φ, Ψ, QQ, det_HH, inv_HH, φ_new, y_t, s_t, s_t1, ϵ_t, c, N_MH;
+mutation!(Φ, Ψ, QQ, det_HH, inv_HH, φ_new, y_t, s_t, s_t1, ϵ_t, c, n_mh_steps;
     parallel = false)
 ```
 
@@ -9,7 +9,7 @@ function modifies `s_t` and `ϵ_t` in place and returns `accept_rate`.
 """
 function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
                    det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::Float64, y_t::Vector{Float64},
-                   s_t::M, s_t1::M, ϵ_t::M, c::Float64, N_MH::Int;
+                   s_t::M, s_t1::M, ϵ_t::M, c::Float64, n_mh_steps::Int;
                    parallel::Bool = false) where M<:AbstractMatrix{Float64}
     # Sizes
     n_obs = size(y_t, 1)
@@ -30,25 +30,25 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
     @mypar parallel for i in 1:n_particles
         s_t[:,i], ϵ_t[:,i], accept_vec[i] =
             mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1[:,i], s_t[:,i], ϵ_t[:,i],
-                    scaled_det_HH, scaled_inv_HH, N_MH)
+                    scaled_det_HH, scaled_inv_HH, n_mh_steps)
     end
 
     # Calculate and return acceptance rate
-    accept_rate = sum(accept_vec) / (N_MH*n_particles)
+    accept_rate = sum(accept_vec) / (n_mh_steps*n_particles)
     return accept_rate
 end
 
 """
 ```
-mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1, s_t, ϵ_t, scaled_det_HH, scaled_inv_HH, N_MH)
+mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1, s_t, ϵ_t, scaled_det_HH, scaled_inv_HH, n_mh_steps)
 ```
 
-Take `N_MH` many steps in the `ϵ_t` space for a single particle. Returns the new
-`s_t`, `ϵ_t`, and the number of acceptances `accept`.
+Take `n_mh_steps` many steps in the `ϵ_t` space for a single particle. Returns
+the new `s_t`, `ϵ_t`, and the number of acceptances `accept`.
 """
 function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Float64},
                   s_t1::Vector{Float64}, s_t::Vector{Float64}, ϵ_t::Vector{Float64},
-                  scaled_det_HH::Float64, scaled_inv_HH::Matrix{Float64}, N_MH::Int)
+                  scaled_det_HH::Float64, scaled_inv_HH::Matrix{Float64}, n_mh_steps::Int)
     accept = 0
 
     # Compute posterior at initial ϵ_t
@@ -56,7 +56,7 @@ function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Flo
     post_2 = fast_mvnormal_pdf(ϵ_t)
     post = post_1 * post_2
 
-    for j = 1:N_MH
+    for j = 1:n_mh_steps
         # Draw ϵ_new and s_new
         ϵ_new = ϵ_t + rand(dist_ϵ)
         s_new = Φ(s_t1, ϵ_new)
