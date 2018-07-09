@@ -155,23 +155,6 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
 
             ### 1. Correction
             # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
-            ### DELETE ONCE DONE WITH TEST FILE
-            if (t==47 && stage==2)
-                jldopen("reference/test_file_inputs.jld", "w") do file
-                    write(file, "phi_old", φ_old)
-                    write(file, "coeff_terms", coeff_terms)
-                    write(file, "log_e_1_terms", log_e_1_terms)
-                    write(file, "log_e_2_terms", log_e_2_terms)
-                    write(file, "s_t_nontemp", s_t_nontemp)
-                    write(file, "inc_weights", inc_weights)
-                    write(file, "norm_weights", norm_weights)
-                    write(file, "s_t1_temp", s_t1_temp)
-                    write(file, "eps_t", ϵ_t)
-                    write(file, "c", c)
-                    write(file, "accept_rate", accept_rate)
-                end
-            end
-            ###
             weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                            Ψ, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
                            initialize = stage == 1, parallel = parallel)
@@ -186,37 +169,10 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
             # Modifies inc_weights, norm_weights
             correction!(inc_weights, norm_weights, φ_new, coeff_terms,
                         log_e_1_terms, log_e_2_terms, n_obs_t)
-            ### DELETE ONCE DONE WITH TEST FILE
-            #= (t==47 && stage==2)
-                jldopen("reference/test_file_outputs.jld", "w") do file
-                    write(file, "phi_new",φ_new)
-                    write(file, "coeff_terms", coeff_terms)
-                    write(file, "log_e_1_terms", log_e_1_terms)
-                    write(file, "log_e_2_terms", log_e_2_terms)
-                    write(file, "inc_weights", inc_weights)
-                    write(file, "norm_weights", norm_weights)
-                end
-            end=#
-            ###
 
             ### 2. Selection
             # Modifies s_t1_temp, s_t_nontemp, ϵ_t
-            srand(47)
             selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t; resampling_method = resampling_method)
-
-            if (t==47 && stage==2)
-                jldopen("reference/test_file_outputs.jld", "w") do file
-                    write(file, "phi_new",φ_new)
-                    write(file, "coeff_terms", coeff_terms)
-                    write(file, "log_e_1_terms", log_e_1_terms)
-                    write(file, "log_e_2_terms", log_e_2_terms)
-                    write(file, "inc_weights", inc_weights)
-                    write(file, "norm_weights", norm_weights)
-                    write(file, "s_t1_temp", s_t1_temp)
-                    write(file, "s_t_nontemp", s_t_nontemp)
-                    write(file, "eps_t", ϵ_t)
-                end
-            end
 
             loglh[t] += log(mean(inc_weights))
 
@@ -230,16 +186,8 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
 
             # Modifies s_t_nontemp, ϵ_t
             if stage != 1
-                srand(47)
                 accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
                                         s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps; parallel = parallel)
-            end
-
-            if (t==47 && stage==2)
-                jldopen("reference/test_file_outputs_mutation.jld", "w") do file
-                    write(file, "s_t_nontemp", s_t_nontemp)
-                    write(file, "eps_t", ϵ_t)
-                end
             end
 
             φ_old = φ_new

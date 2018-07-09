@@ -81,12 +81,6 @@ end
 @everywhere Φ(s_t::AbstractVector{Float64}, ϵ_t::AbstractVector{Float64}) = TTT*s_t + RRR*ϵ_t + CCC
 @everywhere Ψ(s_t::AbstractVector{Float64}) = ZZ*s_t + DD
 
-
-srand(47)
-out_no_parallel = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = false)
-#srand(47)
-#out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true)
-
 test_file_inputs = load("reference/test_file_inputs.jld")
 test_file_outputs = load("reference/test_file_outputs.jld")
 test_file_outputs_mutation = load("reference/test_file_outputs_mutation.jld")
@@ -104,6 +98,7 @@ s_t1_temp = test_file_inputs["s_t1_temp"]
 accept_rate = test_file_inputs["accept_rate"]
 c = test_file_inputs["c"]
 
+## Correction and Associated Auxiliary Function Tests
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH); initialize=false, parallel=false)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
@@ -116,9 +111,9 @@ correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e
     @test inc_weights[1] ≈ test_file_outputs["inc_weights"][1]
 end
 
+## Selection Tests
 srand(47)
 selection!(norm_weights, s_t1_temp, s_t_nontemp,ϵ_t, resampling_method = tuning[:resampling_method])
-
 @testset "Selection Tests" begin
     @test s_t1_temp[1] ≈ test_file_outputs["s_t1_temp"][1]
     @test s_t_nontemp[1] ≈ test_file_outputs["s_t_nontemp"][1]
@@ -127,6 +122,7 @@ end
 
 c = update_c(c, accept_rate, tuning[:target_accept_rate])
 
+## Mutation Tests
 srand(47)
 mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps])
 
@@ -135,26 +131,15 @@ mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_te
     @test ϵ_t[1] ≈ test_file_outputs_mutation["eps_t"][1]
 end
 
+## Whole TPF Tests
 srand(47)
 out_no_parallel = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = false)
 srand(47)
 out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true)
-
-
 @testset "TPF tests" begin
     @test out_no_parallel[1] ≈ -302.99967306704133
     @test out_parallel_one_worker[1] ≈ -306.8211172094595
 end
-
-
-
-
-
-
-
-
-
-
 
 
 #### OLD TEST FILE
