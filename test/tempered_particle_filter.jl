@@ -81,9 +81,9 @@ end
 @everywhere Φ(s_t::AbstractVector{Float64}, ϵ_t::AbstractVector{Float64}) = TTT*s_t + RRR*ϵ_t + CCC
 @everywhere Ψ(s_t::AbstractVector{Float64}) = ZZ*s_t + DD
 
-test_file_inputs = load("reference/test_file_inputs.jld")
-test_file_outputs = load("reference/test_file_outputs.jld")
-test_file_outputs_mutation = load("reference/test_file_outputs_mutation.jld")
+test_file_inputs = load("reference/tpf_aux_inputs.jld")
+test_file_outputs = load("reference/tpf_aux_outputs.jld")
+test_file_outputs_mutation = load("reference/tpf_aux_mutation_outputs.jld")
 coeff_terms = test_file_inputs["coeff_terms"]
 log_e_1_terms = test_file_inputs["log_e_1_terms"]
 log_e_2_terms = test_file_inputs["log_e_2_terms"]
