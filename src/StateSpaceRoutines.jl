@@ -5,7 +5,7 @@ module StateSpaceRoutines
     using QuantEcon: solve_discrete_lyapunov
     using Distributions: Distribution, MvNormal, pdf, Weights, sample
     using Roots: fzero
-    using HDF5
+    using HDF5, JLD
 
     export
 
@@ -13,8 +13,8 @@ module StateSpaceRoutines
         init_stationary_states, kalman_filter,
 
         # filters/tempered_particle_filter
-        tempered_particle_filter, initialize_state_draws, correction_selection!,
-        resample, solve_inefficiency, mutation,
+        tempered_particle_filter, initialize_state_draws,
+        resample, solve_inefficiency, mutation, weight_kernel!, next_φ,correction!, selection!, mutation!, update_c,
 
         # smoothers/
         hamilton_smoother, koopman_smoother, koopman_disturbance_smoother, carter_kohn_smoother, durbin_koopman_smoother
@@ -23,7 +23,9 @@ module StateSpaceRoutines
 
     include("filters/kalman_filter.jl")
     include("filters/tempered_particle_filter/util.jl")
-    include("filters/tempered_particle_filter/correction_selection.jl")
+    include("filters/tempered_particle_filter/initialization.jl")
+    include("filters/tempered_particle_filter/correction.jl")
+    include("filters/tempered_particle_filter/selection.jl")
     include("filters/tempered_particle_filter/mutation.jl")
     include("filters/tempered_particle_filter/tempered_particle_filter.jl")
 
