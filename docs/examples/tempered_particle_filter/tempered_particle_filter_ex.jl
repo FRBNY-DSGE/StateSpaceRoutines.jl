@@ -15,32 +15,15 @@ update!(m, params)
 # Solution to a Linear DSGE Model w/ IID Gaussian Errors
 
 system  = compute_system(m)
-TTT     = system[:TTT]
-RRR     = system[:RRR]
-CCC     = system[:CCC]
-HH      = system[:EE]
-DD      = system[:DD]
-ZZ      = system[:ZZ]
-QQ      = system[:QQ]
-
-#Φ(s_t::Vector{Float64}, ϵ_t::Vector{Float64}) = TTT*s_t + RRR*ϵ_t + CCC
-#Ψ(s_t::Vector{Float64}, u_t::Vector{Float64}) = ZZ*s_t + DD + u_t
-
-#F_ϵ = Distributions.MvNormal(zeros(size(QQ, 1)), QQ)
-#F_u = Distributions.MvNormal(zeros(size(HH, 1)), HH)
-
+TTT = system[:TTT]
+RRR = system[:RRR]
+QQ  = system[:QQ]
 Φ, Ψ, F_ϵ, F_u = compute_system_function(system)
 
 # Tuning of the tempered particle filter algorithm
 
-## Old tuning parameters
-#=tuning = Dict(:r_star => 2., :c => 0.3, :accept_rate => 0.4, :target => 0.4,
-              :xtol => 0., :resampling_method => :systematic, :N_MH => 1,
-              :n_particles => 1000, :n_presample_periods => 0,
-              :adaptive => true, :allout => true, :parallel => false)
-=#
 tuning = Dict(:r_star => 2.,
-              :xtol => 0., :resampling_method => :systematic,
+              :xtol => 1e-3, :resampling_method => :systematic,
               :n_particles => 1000, :n_presample_periods => 0,
               :allout => true, :parallel => false)
 
