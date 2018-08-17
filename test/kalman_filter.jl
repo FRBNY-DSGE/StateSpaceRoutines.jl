@@ -11,30 +11,33 @@ close(file)
 # Method with all arguments provided
 out = kalman_filter(y, T, R, C, Q, Z, D, E, s_0, P_0)
 
-h5open("$path/reference/kalman_filter_out.h5", "r") do h5
-    @test read(h5, "log_likelihood") ≈ sum(out[1])
-    @test read(h5, "marginal_loglh") ≈ out[1]
-    @test read(h5, "pred")           ≈ out[2]
-    @test read(h5, "vpred")          ≈ out[3]
-    @test read(h5, "filt")           ≈ out[4]
-    @test read(h5, "vfilt")          ≈ out[5]
-    @test s_0                        ≈ out[6]
-    @test P_0                        ≈ out[7]
+@testset "Test Kalman filter output with all arguments" begin
+    h5open("$path/reference/kalman_filter_out.h5", "r") do h5
+        @test read(h5, "log_likelihood") ≈ sum(out[1])
+        @test read(h5, "marginal_loglh") ≈ out[1]
+        @test read(h5, "pred")           ≈ out[2]
+        @test read(h5, "vpred")          ≈ out[3]
+        @test read(h5, "filt")           ≈ out[4]
+        @test read(h5, "vfilt")          ≈ out[5]
+        @test s_0                        ≈ out[6]
+        @test P_0                        ≈ out[7]
+    end
 end
 
 # Method with initial conditions omitted
 out = kalman_filter(y, T, R, C, Q, Z, D, E)
 
-h5open("$path/reference/kalman_filter_out.h5", "r") do h5
-    @test read(h5, "log_likelihood") ≈ sum(out[1])
-    @test read(h5, "marginal_loglh") ≈ out[1]
-    @test read(h5, "pred")           ≈ out[2]
-    @test read(h5, "vpred")          ≈ out[3]
-    @test read(h5, "filt")           ≈ out[4]
-    @test read(h5, "vfilt")          ≈ out[5]
-    @test s_0                        ≈ out[6]
-    @test P_0                        ≈ out[7]
+@testset "Test Kalman filter output with initial conditions omitted" begin
+    h5open("$path/reference/kalman_filter_out.h5", "r") do h5
+        @test read(h5, "log_likelihood") ≈ sum(out[1])
+        @test read(h5, "marginal_loglh") ≈ out[1]
+        @test read(h5, "pred")           ≈ out[2]
+        @test read(h5, "vpred")          ≈ out[3]
+        @test read(h5, "filt")           ≈ out[4]
+        @test read(h5, "vfilt")          ≈ out[5]
+        @test s_0                        ≈ out[6]
+        @test P_0                        ≈ out[7]
+    end
 end
-
 
 nothing
