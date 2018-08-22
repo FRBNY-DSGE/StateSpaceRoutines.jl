@@ -8,6 +8,19 @@ QQ, ZZ, DD, EE = read(file, "QQ"), read(file, "ZZ"), read(file, "DD"), read(file
 z0, P0   = read(file, "z0"), read(file, "P0")
 close(file)
 
+# Kalman filter with presample
+out = kalman_filter(y, T, R, C, Q, Z, D, E, Nt0=4)
+@testset "Test Kalman filter output with presample" begin
+    h5open("$path/reference/kalman_filter_out_presample.h5", "r") do h5
+        @test read(h5, "log_likelihood") ≈ sum(out[1])
+        @test read(h5, "marginal_loglh") ≈ out[1]
+        @test read(h5, "pred")           ≈ out[2]
+        @test read(h5, "vpred")          ≈ out[3]
+        @test read(h5, "filt")           ≈ out[4]
+        @test read(h5, "vfilt")          ≈ out[5]
+    end
+end
+
 # Method with all arguments provided
 out = kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0)
 
