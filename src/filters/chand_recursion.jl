@@ -26,17 +26,14 @@ function chand_recursion(y::Matrix{S},
     M_t = -invV_t     # (Eq 13)
     kal_gain = W_t*invV_t
 
-    # Initialize loglikelihoods to zeros so that the ones we don't update (those in presample) contribute zero towards sum of loglikelihoods.
-    loglh = zeros(Nt)
+    loglh = Vector{Float64}(Nt)
 
     for t in 1:Nt
         # Step 1: Compute forecast error, ν_t and evaluate likelihoood
         yhat = Z*s_t + D
         ν_t = y[:, t] - yhat
 
-        #if t > Nt0
         loglh[t] = logpdf(MvNormal(zeros(Ny), V_t), ν_t)
-        #end
 
         # Step 2: Compute s_{t+1} using Eq. 5
         s_t = T*s_t + kal_gain*ν_t
@@ -66,7 +63,7 @@ function chand_recursion(y::Matrix{S},
         V_t = V_t1
         invV_t = invV_t1
     end
-    loglh, _, _, _, _ = remove_presample!(Nt0, loglh, zeros(0,0), zeros(0,0,0), zeros(0,0), zeros(0,0,0))
+    loglh = remove_presample!(Nt0, loglh)
     if allout
         return sum(loglh), loglh
     else
@@ -74,26 +71,9 @@ function chand_recursion(y::Matrix{S},
     end
 end
 
-function chand_recursion(regime_indices::Vector{Range{Int}}, y::Matrix{S},
-                         Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}},
-                         Qs::Vector{Matrix{S}}, Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}},
-                         Es::Vector{Matrix{S}},
-                         s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0,0);
-                         outputs::Vector{Symbol} = [:loglh, :pred, :filt],
-                         Nt0::Int = 0) where {S<:AbstractFloat}
-    Ns = size(Ts[1], 1)
-    Nt = size(y, 2)
-    @assert first(regime_indices[1]) == 1
-    @assert last(regime_indices[end]) == Nt
-
-    loglh = Vector{S}(0)
-
-    for i=1:length(regime_indices)
-        ts = regime_indices[i]
-        loglh, loglh_i = chand_recursion(y[:ts], Ts[i], Rs[i], Cs[i], Qs[i], Zs[i], Ds[i], Es[i],
-                                         s_t, P_t; allout = true, Nt0 = 0)
-        loglh[ts] = loglh_i
+function remove_presample!(Nt0::Int, loglh::Vector{S}) where {S<:AbstractFloat}
+    if Nt0 >0
+        loglh = loglh[(Nt0+1):end]
     end
-    loglh, _, _, _, _ = remove_presample!(Nt0, loglh, zeros(0), zeros(0), zeros(0), zeros(0))
-    return sum(loglh), loglh
+    return loglh
 end
