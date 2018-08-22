@@ -3,14 +3,14 @@ isdefined(Base, :__precompile__) && __precompile__()
 module StateSpaceRoutines
 
     using QuantEcon: solve_discrete_lyapunov
-    using Distributions: Distribution, MvNormal, pdf, Weights, sample
+    using Distributions: Distribution, MvNormal, pdf, Weights, sample, logpdf
     using Roots: fzero
     using HDF5, JLD
 
     export
 
         # filters/kalman_filter.jl
-        init_stationary_states, kalman_filter,
+        init_stationary_states, kalman_filter, chand_recursion,
 
         # filters/tempered_particle_filter
         tempered_particle_filter, initialize_state_draws,
@@ -22,6 +22,7 @@ module StateSpaceRoutines
     const VERBOSITY = Dict(:none => 0, :low => 1, :high => 2)
 
     include("filters/kalman_filter.jl")
+    include("filters/chand_recursion.jl")
     include("filters/tempered_particle_filter/util.jl")
     include("filters/tempered_particle_filter/initialization.jl")
     include("filters/tempered_particle_filter/correction.jl")
