@@ -11,9 +11,7 @@ my_tests = [
             ]
 
 for test in my_tests
-    test_file = string("$test.jl")
     @testset "$test.jl" begin
-        #@printf " * %s\n" test_file
-        include(test_file)
+        include(string("$test.jl"))
     end
 end
