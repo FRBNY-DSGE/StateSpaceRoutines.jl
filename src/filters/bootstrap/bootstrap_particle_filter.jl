@@ -1,7 +1,7 @@
 """
 ```
-tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; verbose = :high,
-    n_particles = 1000, fixed_sched = [], r_star = 2, findroot = bisection,
+bootstrap_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; verbose = :high,
+    n_particles = 1000, findroot = bisection,
     xtol = 1e-3, resampling_method = :multionial, n_mh_steps = 1, c_init = 0.3,
     target_accept_rate = 0.4, n_presample_periods = 0, allout = true,
     parallel = false, verbose = :low)
@@ -30,11 +30,6 @@ where `S<:AbstractFloat` and
 
 **Correction:**
 
-- `fixed_sched::Vector{S}`: array of monotone increasing values in (0,1] which
-  specify the fixed tempering schedule. Set to `[]` if you wish to adaptively
-  choose the tempering schedule (below)
-- `r_star::S`: target inefficiency ratio used to adaptively choose φ, i.e.
-  Ineff(φ_n) := 1/M Σ_{j=1}^M (Wtil_t^{j,n}(φ_n))^2 = r_star
 - `findroot::Function`: root-finding algorithm, one of `bisection` or `fzero`
 - `xtol::S`: root-finding tolerance on x bracket size
 
@@ -44,8 +39,7 @@ where `S<:AbstractFloat` and
 
 **Mutation:**
 
-- `n_mh_steps::Int`: number of Metropolis-Hastings steps to take in each
-  tempering stage
+- `n_mh_steps::Int`: number of Metropolis-Hastings steps to take
 - `c_init::S`: initial scaling of proposal covariance matrix
 - `target_accept_rate::S`: target Metropolis-Hastings acceptance rate
 
@@ -64,23 +58,16 @@ where `S<:AbstractFloat` and
 - `loglh::Vector{S}`: vector of conditional log-likelihoods p(y_t|y_{1:t-1},Φ,Ψ,F_ϵ,F_u)
 - `times::Vector{S}`: vector of runtimes per period t
 """
-function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
+function bootstrap_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
                                   F_ϵ::Distribution, F_u::Distribution, s_init::Matrix{S};
-                                  n_particles::Int = 1000, fixed_sched::Vector{S} = zeros(0),
-                                  r_star::S = 2.0, findroot::Function = bisection, xtol::S = 1e-3,
-                                  resampling_method = :multinomial, n_mh_steps::Int = 1,
+                                  n_particles::Int = 1000, findroot::Function = bisection,
+                                  xtol::S = 1e-3, resampling_method = :multinomial, n_mh_steps::Int = 1,
                                   c_init::S = 0.3, target_accept_rate::S = 0.4,
                                   n_presample_periods::Int = 0, allout::Bool = true,
                                   parallel::Bool = false, verbose::Symbol = :high) where S<:AbstractFloat
     #--------------------------------------------------------------
     # Setup
     #--------------------------------------------------------------
-
-    # If using fixed φ schedule, check well-formed
-    adaptive_φ = isempty(fixed_sched)
-    if !adaptive_φ
-        @assert fixed_sched[end] == 1 "φ schedule must be a range from [a,1] s.t. a > 0."
-    end
 
     # Initialize constants
     n_obs, T  = size(data)
@@ -102,17 +89,17 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
     ϵ_t           = MyMatrix{Float64}(n_shocks, n_particles)
 
     coeff_terms   = MyVector{Float64}(n_particles)
-    log_e_1_terms = MyVector{Float64}(n_particles)
-    log_e_2_terms = MyVector{Float64}(n_particles)
+    log_e_terms = MyVector{Float64}(n_particles)
 
     inc_weights   = Vector{Float64}(n_particles)
     norm_weights  = Vector{Float64}(n_particles)
 
     c = c_init
+
     accept_rate = target_accept_rate
 
     #--------------------------------------------------------------
-    # Main Algorithm: Tempered Particle Filter
+    # Main Algorithm: Bootstrap Particle Filter
     #--------------------------------------------------------------
 
     for t = 1:T
@@ -138,61 +125,45 @@ function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
         det_HH_t   = det(HH_t)
 
         # CHECK
+        # NOTE
         # Initialize s_t_nontemp and ϵ_t for this period
         @mypar parallel for i in 1:n_particles
             ϵ_t[:, i] = rand(F_ϵ)
             s_t_nontemp[:, i] = Φ(@view(s_t1_temp[:, i]), @view(ϵ_t[:, i]))
         end
 
-        # Tempering initialization
-        φ_old = 1e-30
-        stage = 0
-
         #--------------------------------------------------------------
         # Main Algorithm
         #--------------------------------------------------------------
-        while φ_old < 1
-            stage += 1
 
-            ### 1. Correction
-            # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
-            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
-                           Ψ, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
-                           initialize = stage == 1, parallel = parallel)
+        ### 1. Correction
+        # Modifies coeff_terms, log_e_terms
+        weight_kernel!(coeff_terms, log_e_terms, Ψ, y_t, s_t_nontemp,
+                       det_HH_t, inv_HH_t; parallel = parallel)
 
-            φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t, r_star, stage;
-                           fixed_sched = fixed_sched, findroot = findroot, xtol = xtol)
+        # Modifies inc_weights, norm_weights
+        correction!(inc_weights, norm_weights, coeff_terms,
+                    log_e_terms, n_obs_t)
 
-            if VERBOSITY[verbose] >= VERBOSITY[:high]
-                @show φ_new
-            end
+        ### 2. Selection
+        # Modifies s_t1_temp, s_t_nontemp, ϵ_t
+        selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t; resampling_method = resampling_method)
 
-            # Modifies inc_weights, norm_weights
-            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
-                        log_e_1_terms, log_e_2_terms, n_obs_t)
+        loglh[t] += log(mean(inc_weights))
 
-            ### 2. Selection
-            # Modifies s_t1_temp, s_t_nontemp, ϵ_t
-            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t; resampling_method = resampling_method)
+        c = update_c(c, accept_rate, target_accept_rate)
+        if VERBOSITY[verbose] >= VERBOSITY[:high]
+            @show c
+            println("------------------------------")
+        end
 
-            loglh[t] += log(mean(inc_weights))
+        ### 3. Mutation
 
-            c = update_c(c, accept_rate, target_accept_rate)
-            if VERBOSITY[verbose] >= VERBOSITY[:high]
-                @show c
-                println("------------------------------")
-            end
+        # Modifies s_t_nontemp, ϵ_t
 
-            ### 3. Mutation
+        accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, y_t, s_t_nontemp,
+                                s_t1_temp, ϵ_t, c, n_mh_steps; parallel = parallel)
 
-            # Modifies s_t_nontemp, ϵ_t
-            if stage != 1
-                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
-                                        s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps; parallel = parallel)
-            end
-
-            φ_old = φ_new
-        end # of loop over stages
 
         if VERBOSITY[verbose] >= VERBOSITY[:low]
             print("\n")

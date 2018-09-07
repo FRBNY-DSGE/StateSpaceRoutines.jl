@@ -24,7 +24,7 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
     n_obs = length(y_t)
 
     @mypar parallel for i in 1:n_particles
-        error    = y_t - Ψ(s_t_nontemp[:, i])
+        error    = y_t - Ψ(@view(s_t_nontemp[:, i]))
         sq_error = dot(error, inv_HH * error)
 
         if initialize
