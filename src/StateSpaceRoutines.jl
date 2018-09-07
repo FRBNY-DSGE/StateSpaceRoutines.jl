@@ -12,14 +12,9 @@ module StateSpaceRoutines
         # filters/kalman_filter.jl
         init_stationary_states, kalman_filter,
 
-        # filters/tempered_particle_filter
-        tempered_particle_filter, initialize_state_draws,
+        # filters/particle_filters
+        tempered_particle_filter, bootstrap_particle_filter, initialize_state_draws,
         resample, solve_inefficiency, mutation, weight_kernel!, next_φ, correction!, selection!,
-        mutation!, update_c,
-
-        # filters/bootstrap
-        bootstrap_particle_filter, initialize_state_draws,
-        resample, solve_inefficiency, mutation, weight_kernel!, correction!, selection!,
         mutation!, update_c,
 
         # smoothers/
@@ -29,19 +24,13 @@ module StateSpaceRoutines
 
     include("filters/kalman_filter.jl")
 
-    include("filters/tempered_particle_filter/util.jl")
-    include("filters/tempered_particle_filter/initialization.jl")
-    include("filters/tempered_particle_filter/correction.jl")
-    include("filters/tempered_particle_filter/selection.jl")
-    include("filters/tempered_particle_filter/mutation.jl")
-    include("filters/tempered_particle_filter/tempered_particle_filter.jl")
-
-    include("filters/bootstrap/util.jl")
-    include("filters/bootstrap/initialization.jl")
-    include("filters/bootstrap/correction.jl")
-    include("filters/bootstrap/selection.jl")
-    include("filters/bootstrap/mutation.jl")
-    include("filters/bootstrap/bootstrap_particle_filter.jl")
+    include("filters/particle_filters/util.jl")
+    include("filters/particle_filters/initialization.jl")
+    include("filters/particle_filters/correction.jl")
+    include("filters/particle_filters/selection.jl")
+    include("filters/particle_filters/mutation.jl")
+    include("filters/particle_filters/bootstrap_particle_filter.jl")
+    include("filters/particle_filters/tempered_particle_filter.jl")
 
     include("smoothers/util.jl")
     include("smoothers/hamilton_smoother.jl")
