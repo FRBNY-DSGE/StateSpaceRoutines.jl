@@ -1,4 +1,4 @@
-# Tempered Particle Filter Documentation
+# Particle Filter Documentation
 
 ## Introduction
 - The tempered particle filter is a particle filtering method which can approximate the log-likelihood value
@@ -6,9 +6,11 @@ implied by a general (potentially non-linear) state space system. The filter was
 Frank Schorfheide in a recent paper (cited in the [README](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/doc)
 in the root directory of the StateSpaceRoutines repository).
 - An example of the tempered particle filter can be found [here](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/doc/docs/examples/tempered_particle_filter).
+- The bootstrap particle filter can be considered a base case of the tempered particle filter, equivalent to
+passing in a tempering schedule of a single element, 1.
 
 ## Inputs to the function
-- The inputs for `tempered_particle_filter` are as follows:
+- The inputs for both `tempered_particle_filter` and `tempered_particle_filter` are as follows:
     + The transition and measurement equations: `Φ`,and `Ψ`, which are instances of the `Function` type
     + The shock and measurement error distributions: `F_ϵ`, `F_u`, which are instances of the `Distribution` type
     + A matrix of initial draws (number of states by number of particles): `s_init`.
