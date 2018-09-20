@@ -1,8 +1,7 @@
-#=
+"""
 This code is loosely based on a routine originally copyright Federal Reserve Bank of Atlanta
 and written by Iskander Karibzhanov.
-=#
-
+"""
 mutable struct KalmanFilter{S<:AbstractFloat}
     T::Matrix{S}
     R::Matrix{S}
@@ -42,8 +41,8 @@ Compute the initial state `s_0` and state covariance matrix `P_0` under the
 stationarity condition:
 
 ```
-s_0  = (I - T)\C
-P_0 = reshape(I - kron(T, T))\vec(R*Q*R'), Ns, Ns)
+s_0  =  (I - T) \\ C
+P_0 = reshape(I - kron(T, T)) \\ vec(R*Q*R'), Ns, Ns)
 ```
 
 where:
@@ -111,7 +110,7 @@ Cov(ϵ_t, u_t) = 0
 
 **Method 2 only:**
 
-- `regime_indices`: `Vector{Range{Int}}` of length `n_regimes`, where
+- `regime_indices`: `Vector{AbstractRange{Int}}` of length `n_regimes`, where
   `regime_indices[i]` indicates the time periods `t` in regime `i`
 - `Ts`: `Vector{Matrix{S}}` of `T` matrices for each regime
 - `Rs`
@@ -157,7 +156,7 @@ where:
 When `s_0` and `P_0` are omitted, they are computed using
 `init_stationary_states`.
 """
-function kalman_filter(regime_indices::Vector{Range{Int}}, y::Matrix{S},
+function kalman_filter(regime_indices::Vector{AbstractRange{Int}}, y::Matrix{S},
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}},
     Qs::Vector{Matrix{S}}, Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
     s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0);

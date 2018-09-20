@@ -1,7 +1,7 @@
-macro mypar(parallel, ex)
-    return :( $(esc(parallel)) ? (@sync @parallel $(esc(ex))) : $(esc(ex)) )
+#=macro mypar(parallel, ex)
+    return :( $(esc(parallel)) ? (@sync @distributed $(esc(ex))) : $(esc(ex)) )
 end
-
+=#
 function bisection(f::Function, a::Number, b::Number;
                    xtol::AbstractFloat = 1e-1, maxiter::Int = 1000)
     fa = f(a)

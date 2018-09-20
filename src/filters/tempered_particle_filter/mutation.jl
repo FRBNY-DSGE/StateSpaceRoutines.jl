@@ -27,7 +27,8 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
     scaled_inv_HH = inv_HH*φ_new
 
     # Take Metropolis-Hastings steps
-    @mypar parallel for i in 1:n_particles
+    #@mypar parallel for i in 1:n_particles
+    @sync @distributed for i in 1:n_particles
         s_t[:,i], ϵ_t[:,i], accept_vec[i] =
             mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1[:,i], s_t[:,i], ϵ_t[:,i],
                     scaled_det_HH, scaled_inv_HH, n_mh_steps)

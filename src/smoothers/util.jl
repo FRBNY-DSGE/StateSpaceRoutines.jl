@@ -37,9 +37,9 @@ with initial state and covariance:
 
 Returns the augmented `TTTs`, `RRRs`, CCCs`, `ZZs`, `z0`, and `P0`.
 """
-function augment_states_with_shocks{S<:AbstractFloat}(regime_indices::Vector{Range{Int64}},
+function augment_states_with_shocks(regime_indices::Vector{AbstractRange{Int64}},
     TTTs::Vector{Matrix{S}}, RRRs::Vector{Matrix{S}}, CCCs::Vector{Vector{S}},
-    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, z0::Vector{S}, P0::Matrix{S})
+    QQs::Vector{Matrix{S}}, ZZs::Vector{Matrix{S}}, z0::Vector{S}, P0::Matrix{S}) where S <: AbstractFloat
 
     n_regimes = length(regime_indices)
 
