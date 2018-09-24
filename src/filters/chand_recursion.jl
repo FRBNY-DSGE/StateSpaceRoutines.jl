@@ -6,7 +6,7 @@ function chand_recursion(y::Matrix{S},
                          T::Matrix{S}, R::Matrix{S}, C::Vector{S},
                          Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, H::Matrix{S},
                          s_pred::Vector{S} = Vector{S}(0), P_pred::Matrix{S} = Matrix{S}(0,0);
-                         allout::Bool = true, Nt0::Int = 0) where {S<:AbstractFloat}
+                         allout::Bool = false, Nt0::Int = 0) where {S<:AbstractFloat}
     # Dimensions
     Ns = size(T, 1) # number of states
     Ny, Nt = size(y) # number of periods of data
@@ -38,7 +38,13 @@ function chand_recursion(y::Matrix{S},
         # Step 1: Compute forecast error, ν_t and evaluate likelihoood
         yhat = Z*s_pred + D
         ν_t = y[:, t] - yhat
-        loglh[t] = logpdf(MvNormal(zero_vec, V_pred), ν_t)
+
+        # This is a symptom of a bad parameter draw: tells callee to simply redraw
+        if !isposdef(V_pred)
+              return NaN
+        else
+            loglh[t] = logpdf(MvNormal(zero_vec, V_pred), ν_t)
+        end
 
         # Step 2: Compute s_{t+1} using Eq. 5
         if t < Nt
@@ -77,7 +83,7 @@ function chand_recursion(y::Matrix{S},
         P_TT = P - P'*Z'*invV_t1*Z*P
         return sum(loglh), loglh, s_TT, P_TT
     else
-        return loglh
+        return sum(loglh)
     end
 end
 
