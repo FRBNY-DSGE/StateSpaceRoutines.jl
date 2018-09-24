@@ -1,5 +1,16 @@
 # Read in from JLD
-data, TTT, RRR, CCC, ZZ, DD, F_ϵ, F_u, s_init = jldopen("reference/tpf_main_inputs.jld", "r") do file
+tpf_main_input = load("reference/tpf_main_inputs.jld2")
+data = tpf_main_input["data"]
+TTT = tpf_main_input["TTT"]
+RRR = tpf_main_input["RRR"]
+CCC = tpf_main_input["CCC"]
+ZZ = tpf_main_input["ZZ"]
+DD = tpf_main_input["DD"]
+F_ϵ = tpf_main_input["F_epsilon"]
+F_u = tpf_main_input["F_u"]
+s_init = tpf_main_input["s_init"]
+
+#=data, TTT, RRR, CCC, ZZ, DD, F_ϵ, F_u, s_init = jldopen("reference/tpf_main_inputs.jld2", "r") do file
     read(file, "data"),
     read(file, "TTT"),
     read(file, "RRR"),
@@ -9,7 +20,7 @@ data, TTT, RRR, CCC, ZZ, DD, F_ϵ, F_u, s_init = jldopen("reference/tpf_main_inp
     read(file, "F_epsilon"),
     read(file, "F_u"),
     read(file, "s_init")
-end
+end=#
 
 # Tune algorithm
 tuning = Dict(:r_star => 2., :c_init => 0.3, :target_accept_rate => 0.4,
@@ -22,8 +33,8 @@ tuning = Dict(:r_star => 2., :c_init => 0.3, :target_accept_rate => 0.4,
 Ψ(s_t::AbstractVector{Float64}) = ZZ*s_t + DD
 
 # Load in test inputs and outputs
-test_file_inputs = load("reference/tpf_aux_inputs.jld")
-test_file_outputs = load("reference/tpf_aux_outputs.jld")
+test_file_inputs = load("reference/tpf_aux_inputs.jld2")
+test_file_outputs = load("reference/tpf_aux_outputs.jld2")
 
 ## Correction and Associated Auxiliary Function Tests
 φ_old = test_file_inputs["phi_old"]

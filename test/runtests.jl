@@ -1,4 +1,4 @@
-using Test, HDF5, JLD2, Printf, LinearAlgebra
+using Test, HDF5, JLD2, Printf, LinearAlgebra, Statistics, FileIO, PDMats, Distributions
 using StateSpaceRoutines
 using QuantEcon: solve_discrete_lyapunov
 
