@@ -4,6 +4,7 @@ module StateSpaceRoutines
 
     using QuantEcon: solve_discrete_lyapunov
     using Distributions: Distribution, MvNormal, pdf, Weights, sample
+    using LinearAlgebra
     using Roots: fzero
     using HDF5, JLD2
     using Distributed
