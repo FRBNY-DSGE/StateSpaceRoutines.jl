@@ -58,7 +58,7 @@ vector estimate is set to `C` and its covariance matrix is given by `1e6 * I`.
 """
 function init_stationary_states(T::Matrix{S}, R::Matrix{S}, C::Vector{S},
                                 Q::Matrix{S}) where {S<:AbstractFloat}
-    e, _ = eig(T)
+    e = eigvals(T)
     if all(abs.(e) .< 1)
         s_0 = (UniformScaling(1) - T)\C
         P_0 = solve_discrete_lyapunov(T, R*Q*R')
@@ -224,7 +224,7 @@ end
 function kalman_filter(y::Matrix{S},
     T::Matrix{S}, R::Matrix{S}, C::Vector{S},
     Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
-    s_0::Vector{S} = Vector{S}(undef, 0), P_0::Matrix{S} = Matrix{S}(under, 0, 0);
+    s_0::Vector{S} = Vector{S}(undef, 0), P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
     outputs::Vector{Symbol} = [:loglh, :pred, :filt],
     Nt0::Int = 0) where {S<:AbstractFloat}
 
