@@ -1,5 +1,6 @@
+using JLD2
 # Read in from JLD
-data, TTT, RRR, CCC, ZZ, DD, F_ϵ, F_u, s_init = jldopen("reference/tpf_main_inputs.jld", "r") do file
+data, TTT, RRR, CCC, ZZ, DD, F_ϵ, F_u, s_init = jldopen("reference/tpf_main_inputs.jld2", "r") do file
     read(file, "data"),
     read(file, "TTT"),
     read(file, "RRR"),
@@ -22,10 +23,33 @@ tuning = Dict(:r_star => 2., :c_init => 0.3, :target_accept_rate => 0.4,
 Ψ(s_t::AbstractVector{Float64}) = ZZ*s_t + DD
 
 # Load in test inputs and outputs
-test_file_inputs = load("reference/tpf_aux_inputs.jld")
-test_file_outputs = load("reference/tpf_aux_outputs.jld")
+#test_file_inputs = JLD2.load("reference/tpf_aux_inputs.jld2")
+φ_old, norm_weights, coeff_terms, log_e_1_terms,
+log_e_2_terms, inc_weights, s_t_nontemp = jldopen("reference/tpf_aux_inputs.jld2","r") do file
+    read(file, "phi_old"),
+    read(file, "norm_weights"),
+    read(file, "coeff_terms"),
+    read(file, "log_e_1_terms"),
+    read(file, "log_e_2_terms"),
+    read(file, "inc_weights"),
+    read(file, "s_t_nontemp")
+end
+HH = cov(F_u)
+
+test_file_outputs = load("reference/tpf_aux_outputs.jld2")
 
 ## Correction and Associated Auxiliary Function Tests
+#=
+φ_old = test_file_inputs["phi_old"]
+norm_weights = test_file_inputs["norm_weights"]
+coeff_terms = test_file_inputs["coeff_terms"]
+log_e_1_terms = test_file_inputs["log_e_1_terms"]
+log_e_2_terms = test_file_inputs["log_e_2_terms"]
+inc_weights = test_file_inputs["inc_weights"]
+
+HH = cov(F_u)
+s_t_nontemp = test_file_inputs["s_t_nontemp"]
+=#
 φ_old = test_file_inputs["phi_old"]
 norm_weights = test_file_inputs["norm_weights"]
 coeff_terms = test_file_inputs["coeff_terms"]
@@ -34,6 +58,8 @@ log_e_2_terms = test_file_inputs["log_e_2_terms"]
 inc_weights = test_file_inputs["inc_weights"]
 HH = cov(F_u)
 s_t_nontemp = test_file_inputs["s_t_nontemp"]
+
+
 
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
                initialize = false, parallel = false)
