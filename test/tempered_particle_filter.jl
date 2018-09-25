@@ -11,18 +11,6 @@ F_ϵ = tpf_main_input["F_epsilon"]
 F_u = tpf_main_input["F_u"]
 s_init = tpf_main_input["s_init"]
 
-#=data, TTT, RRR, CCC, ZZ, DD, F_ϵ, F_u, s_init = jldopen("reference/tpf_main_inputs.jld2", "r") do file
-    read(file, "data"),
-    read(file, "TTT"),
-    read(file, "RRR"),
-    read(file, "CCC"),
-    read(file, "ZZ"),
-    read(file, "DD"),
-    read(file, "F_epsilon"),
-    read(file, "F_u"),
-    read(file, "s_init")
-end=#
-
 # Tune algorithm
 tuning = Dict(:r_star => 2., :c_init => 0.3, :target_accept_rate => 0.4,
               :resampling_method => :systematic, :n_mh_steps => 1,
@@ -71,7 +59,7 @@ log_e_2_terms = test_file_inputs["log_e_2_terms"]
 inc_weights = test_file_inputs["inc_weights"]
 HH = cov(F_u)
 s_t_nontemp = test_file_inputs["s_t_nontemp"]
-Σ
+
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
                initialize = false, parallel = false)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
@@ -89,7 +77,7 @@ end
 s_t1_temp = test_file_inputs["s_t1_temp"]
 ϵ_t = test_file_inputs["eps_t"]
 
-srand(47)
+Random.seed!(47)
 selection!(norm_weights, s_t1_temp, s_t_nontemp,ϵ_t, resampling_method = tuning[:resampling_method])
 @testset "Selection Tests" begin
     @test s_t1_temp[1] ≈ test_file_outputs["s_t1_temp"][1]
@@ -103,7 +91,7 @@ accept_rate = test_file_inputs["accept_rate"]
 c = test_file_inputs["c"]
 
 c = update_c(c, accept_rate, tuning[:target_accept_rate])
-srand(47)
+Random.seed!(47)
 mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps])
 
 @testset "Mutation Tests" begin

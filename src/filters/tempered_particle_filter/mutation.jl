@@ -16,8 +16,7 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
     n_particles = size(ϵ_t, 2)
 
     # Initialize vector of acceptances
-    MyVector = parallel ? SharedVector : Vector
-    accept_vec = MyVector{Int}(n_particles)
+    accept_vec = parallel ? SharedVector{Int}(n_particles) : Vector{Int}(undef, n_particles)
 
     # Used to generate new draws of ϵ
     dist_ϵ = MvNormal(c^2 * diag(QQ))
