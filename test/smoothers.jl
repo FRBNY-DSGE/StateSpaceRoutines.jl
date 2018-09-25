@@ -3,13 +3,13 @@ path = dirname(@__FILE__)
 # Initialize arguments to function
 h5 = h5open("$path/reference/kalman_filter_args.h5")
 for arg in ["data", "TTT", "RRR", "CCC", "QQ", "ZZ", "DD", "EE", "z0", "P0"]
-    eval(parse("$arg = read(h5, \"$arg\")"))
+    eval(Meta.parse("$arg = read(h5, \"$arg\")"))
 end
 close(h5)
 
 h5 = h5open("$path/reference/kalman_filter_out.h5")
 for arg in ["pred", "vpred", "filt", "vfilt"]
-    eval(parse("$arg = read(h5, \"$arg\")"))
+    eval(Meta.parse("$arg = read(h5, \"$arg\")"))
 end
 close(h5)
 

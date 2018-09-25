@@ -99,7 +99,7 @@ function durbin_koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::
     # Draw initial state s_0+
     s_plus_t = if draw_states
         U, eig, _ = svd(P_0)
-        U * diagm(sqrt.(eig)) * randn(Ns)
+        U * diagm(0 => (sqrt.(eig))) * randn(Ns)
     else
         zeros(S, Ns)
     end
@@ -129,7 +129,7 @@ function durbin_koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::
     end
 
     # Replace y+ with NaNs wherever y has NaNs
-    y_plus[isnan.(y)] = NaN
+    y_plus[isnan.(y)] .= NaN
 
     # Compute y* = y - y+
     y_star = y - y_plus

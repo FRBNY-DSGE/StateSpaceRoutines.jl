@@ -59,7 +59,7 @@ function augment_states_with_shocks(regime_indices::Vector{AbstractRange{Int64}}
 
         # Augment regime-specific matrices
         TTTs[i] = vcat(hcat(TTT, zeros(Nz, Ne)), hcat(zeros(Ne, Nz), zeros(Ne, Ne)))
-        RRRs[i] = vcat(RRR, eye(Ne))
+        RRRs[i] = vcat(RRR, Matrix{Float64}(I, Ne, Ne))
         CCCs[i] = vcat(CCC, zeros(Ne))
         ZZs[i]  = hcat(ZZ, zeros(Ny, Ne))
     end

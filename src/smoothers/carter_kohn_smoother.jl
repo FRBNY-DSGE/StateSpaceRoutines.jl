@@ -113,7 +113,7 @@ function carter_kohn_smoother(regime_indices::Vector{AbstractRange{Int}}, y::Mat
             # Draw stil_t ∼ N(stil_{t|T}, Ptil_{t|T})
             stil_smth[:, t] = if draw_states
                 U, eig, _ = svd(Σ)
-                μ + U * diagm(sqrt.(eig)) * randn(Ns+Ne)
+                μ + U * diagm(0 => (sqrt.(eig))) * randn(Ns+Ne)
             else
                 μ
             end
