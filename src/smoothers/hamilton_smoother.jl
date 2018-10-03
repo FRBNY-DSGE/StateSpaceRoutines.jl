@@ -65,7 +65,7 @@ function hamilton_smoother(y::Matrix{S},
         Matrix{S}[Q], Matrix{S}[Z], Vector{S}[D], Matrix{S}[E], s_0, P_0; Nt0 = Nt0)
 end
 
-function hamilton_smoother(regime_indices::Vector{AbstractRange{Int}}, y::Matrix{S},
+function hamilton_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray{S},
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
     Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
     s_0::Vector{S}, P_0::Matrix{S}; Nt0::Int = 0) where {S<:AbstractFloat}

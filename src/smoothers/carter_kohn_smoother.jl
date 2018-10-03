@@ -60,7 +60,7 @@ where:
 - `s_smth`: `Ns` x `Nt` matrix of smoothed states `s_{t|T}`
 - `ϵ_smth`: `Ne` x `Nt` matrix of smoothed shocks `ϵ_{t|T}`
 """
-function carter_kohn_smoother(y::Matrix{S},
+function carter_kohn_smoother(y::AbstractArray{S},
     T::Matrix{S}, R::Matrix{S}, C::Vector{S},
     Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
     s_0::Vector{S}, P_0::Matrix{S};
@@ -72,7 +72,7 @@ function carter_kohn_smoother(y::Matrix{S},
         Nt0 = Nt0, draw_states = draw_states)
 end
 
-function carter_kohn_smoother(regime_indices::Vector{AbstractRange{Int}}, y::Matrix{S},
+function carter_kohn_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray{S},
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
     Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
     s_0::Vector{S}, P_0::Matrix{S};
