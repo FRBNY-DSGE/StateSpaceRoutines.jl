@@ -1,5 +1,6 @@
-julia 0.6
+julia 0.7
 Distributions
+LinearAlgebra
 Roots
 QuantEcon
 HDF5
