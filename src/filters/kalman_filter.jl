@@ -157,7 +157,7 @@ where:
 When `s_0` and `P_0` are omitted, they are computed using
 `init_stationary_states`.
 """
-function kalman_filter(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray{S},
+function kalman_filter(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray{Union{S, Missing}},
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}},
     Qs::Vector{Matrix{S}}, Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
     s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0);
@@ -222,7 +222,7 @@ function kalman_filter(regime_indices::Vector{AbstractRange{Int}}, y::AbstractAr
     return loglh, s_pred, P_pred, s_filt, P_filt, s_0, P_0, s_T, P_T
 end
 
-function kalman_filter(y::Matrix{S},
+function kalman_filter(y::AbstractArray{Union{S, Missing}},
     T::Matrix{S}, R::Matrix{S}, C::Vector{S},
     Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
     s_0::Vector{S} = Vector{S}(undef, 0), P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
@@ -314,7 +314,7 @@ update!(k::KalmanFilter{S}, y_obs)
 Compute the filtered states s_{t|t} and state covariances P_{t|t}, and the
 log-likelihood P(y_t | y_{1:t-1}) and assign to `k`.
 """
-function update!(k::KalmanFilter{S}, y_obs::Vector{S};
+function update!(k::KalmanFilter{S}, y_obs::Vector{Union{S, Missing}};
                  return_loglh::Bool = true) where {S<:AbstractFloat}
     # Keep rows of measurement equation corresponding to non-NaN observables
     nonnan = .!isnan.(y_obs)

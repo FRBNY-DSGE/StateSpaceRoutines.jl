@@ -55,7 +55,7 @@ where:
 - `s_smth`: `Ns` x `Nt` matrix of smoothed states `s_{t|T}`
 - `ϵ_smth`: `Ne` x `Nt` matrix of smoothed shocks `ϵ_{t|T}`
 """
-function hamilton_smoother(y::Matrix{S},
+function hamilton_smoother(y::Matrix{Union{S, Missing}},
     T::Matrix{S}, R::Matrix{S}, C::Vector{S},
     Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
     s_0::Vector{S}, P_0::Matrix{S}; Nt0::Int = 0) where {S<:AbstractFloat}
@@ -65,7 +65,7 @@ function hamilton_smoother(y::Matrix{S},
         Matrix{S}[Q], Matrix{S}[Z], Vector{S}[D], Matrix{S}[E], s_0, P_0; Nt0 = Nt0)
 end
 
-function hamilton_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray{S},
+function hamilton_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray{Union{S, Missing}},
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
     Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
     s_0::Vector{S}, P_0::Matrix{S}; Nt0::Int = 0) where {S<:AbstractFloat}

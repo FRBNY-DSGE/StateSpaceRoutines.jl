@@ -1,17 +1,19 @@
 path = dirname(@__FILE__)
 
 # Initialize arguments to function
-h5 = h5open("$path/reference/kalman_filter_args.h5")
-for arg in ["data", "TTT", "RRR", "CCC", "QQ", "ZZ", "DD", "EE", "z0", "P0"]
-    eval(Meta.parse("$arg = read(h5, \"$arg\")"))
-end
-close(h5)
+file = jldopen("$path/reference/kalman_filter_args.jld2", "r")
+data            = read(file, "data")
+TTT, RRR, CCC   = read(file, "TTT"), read(file, "RRR"), read(file, "CCC")
+QQ, ZZ, DD, EE  = read(file, "QQ"), read(file, "ZZ"), read(file, "DD"), read(file, "EE")
+z0, P0          = read(file, "z0"), read(file, "P0")
+close(file)
 
-h5 = h5open("$path/reference/kalman_filter_out.h5")
-for arg in ["pred", "vpred", "filt", "vfilt"]
-    eval(Meta.parse("$arg = read(h5, \"$arg\")"))
-end
-close(h5)
+file  = h5open("$path/reference/kalman_filter_out.h5", "r")
+pred  = read(file, "pred")
+vpred = read(file, "vpred")
+filt  = read(file, "filt")
+vfilt = read(file, "vfilt")
+close(file)
 
 # Run smoothers
 states = Dict{Symbol, Matrix{Float64}}()
