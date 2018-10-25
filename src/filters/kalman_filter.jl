@@ -25,7 +25,7 @@ Outer constructor for the `KalmanFilter` type.
 """
 function KalmanFilter(T::Matrix{S}, R::Matrix{S}, C::Vector{S}, Q::Matrix{S},
                       Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
-                      s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0)) where {S<:AbstractFloat}
+                      s_0::Vector{S} = Vector{S}(undef, 0), P_0::Matrix{S} = Matrix{S}(undef, 0, 0)) where {S<:AbstractFloat}
     if isempty(s_0) || isempty(P_0)
         s_0, P_0 = init_stationary_states(T, R, C, Q)
     end
@@ -160,7 +160,7 @@ When `s_0` and `P_0` are omitted, they are computed using
 function kalman_filter(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray{Union{S, Missing}},
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}},
     Qs::Vector{Matrix{S}}, Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
-    s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0);
+    s_0::Vector{S} = Vector{S}(undef, 0), P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
     outputs::Vector{Symbol} = [:loglh, :pred, :filt],
     Nt0::Int = 0) where {S<:AbstractFloat}
 
@@ -196,9 +196,11 @@ function kalman_filter(regime_indices::Vector{AbstractRange{Int}}, y::AbstractAr
 
     for i = 1:length(regime_indices)
         ts = regime_indices[i]
+
         loglh_i, s_pred_i, P_pred_i, s_filt_i, P_filt_i, s_0, P_0, s_t, P_t =
             kalman_filter(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i], Zs[i], Ds[i], Es[i],
                               s_t, P_t; outputs = outputs, Nt0 = 0)
+
         if return_loglh
             loglh[ts] = loglh_i
         end

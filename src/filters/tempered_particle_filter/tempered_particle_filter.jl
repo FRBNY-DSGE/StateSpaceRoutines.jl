@@ -64,7 +64,7 @@ where `S<:AbstractFloat` and
 - `loglh::Vector{S}`: vector of conditional log-likelihoods p(y_t|y_{1:t-1},Φ,Ψ,F_ϵ,F_u)
 - `times::Vector{S}`: vector of runtimes per period t
 """
-function tempered_particle_filter(data::Matrix{S}, Φ::Function, Ψ::Function,
+function tempered_particle_filter(data::Matrix{Union{S, Missing}}, Φ::Function, Ψ::Function,
                                   F_ϵ::Distribution, F_u::Distribution, s_init::Matrix{S};
                                   n_particles::Int = 1000, fixed_sched::Vector{S} = zeros(0),
                                   r_star::S = 2.0, findroot::Function = bisection, xtol::S = 1e-3,

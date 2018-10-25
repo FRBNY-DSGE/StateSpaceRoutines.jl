@@ -114,7 +114,6 @@ function durbin_koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::
         # Get state-space system matrices for this regime
         T, R, C, Q = Ts[i], Rs[i], Cs[i], Qs[i]
         Z, D       = Zs[i], Ds[i]
-
         for t in regime_indices[i]
             s_plus_t = if draw_states
                 ϵ_plus[:, t] = sqrt.(Qs[i]) * randn(Ne)
@@ -122,17 +121,16 @@ function durbin_koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::
             else
                 T*s_plus_t + C
             end
-
             s_plus[:, t] = s_plus_t
             y_plus[:, t] = Z*s_plus_t + D
         end
     end
 
     # Replace y+ with NaNs wherever y has NaNs
-    y_plus[isnan.(y)] .= NaN
+    y_plus[ismissing.(y)] .= missing
 
     # Compute y* = y - y+
-    y_star = y - y_plus
+    y_star = y .- y_plus
 
     # Cast to Matrix{Union{S, Missing}} to ensure
     # conformity because for some reason
@@ -144,9 +142,7 @@ function durbin_koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::
     # Note that we pass in `zeros(Ny)` instead of `D` because the
     # measurement equation for y* has no constant term
     Ds_star = fill(zeros(Ny), n_regimes)
-    _, s_pred, P_pred, _, _, _, _, _, _ =
-        kalman_filter(regime_indices, y_star, Ts, Rs, Cs, Qs,
-                      Zs, Ds_star, Es, s_0, P_0; outputs = [:pred])
+    _, s_pred, P_pred, _, _, _, _, _, _ = kalman_filter(regime_indices, y_star, Ts, Rs, Cs, Qs, Zs, Ds_star, Es, s_0, P_0; outputs = [:pred])
 
     # Kalman smooth y*
     s_star, ϵ_star = koopman_smoother(regime_indices, y_star, Ts, Rs, Cs, Qs,
@@ -163,6 +159,5 @@ function durbin_koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::
         s_smth = s_smth[:, insample]
         ϵ_smth = ϵ_smth[:, insample]
     end
-
     return s_smth, ϵ_smth
 end
