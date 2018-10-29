@@ -5,7 +5,7 @@
 function chand_recursion(y::Matrix{S},
                          T::Matrix{S}, R::Matrix{S}, C::Vector{S},
                          Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, H::Matrix{S},
-                         s_pred::Vector{S} = Vector{S}(0), P_pred::Matrix{S} = Matrix{S}(0,0);
+                         s_pred::Vector{S} = Vector{S}(undef, 0), P_pred::Matrix{S} = Matrix{S}(undef, 0,0);
                          allout::Bool = true, Nt0::Int = 0) where {S<:AbstractFloat}
     # Dimensions
     Ns = size(T, 1) # number of states
@@ -29,7 +29,7 @@ function chand_recursion(y::Matrix{S},
     kal_gain = W_t*invV_pred
 
     # Initialize loglikelihoods to zeros so that the ones we don't update (those in presample) contribute zero towards sum of loglikelihoods.
-    loglh = Vector{Float64}(Nt)
+    loglh = Vector{Float64}(undef, Nt)
     zero_vec = zeros(Ny)
     ν_t = zero_vec
     P =  P_pred
@@ -82,7 +82,7 @@ function chand_recursion(y::Matrix{S},
 end
 
 function remove_presample!(Nt0::Int, loglh::Vector{S}) where {S<:AbstractFloat}
-    out = remove_presample!(Nt0, loglh, Array{Float64, 2}(0,0), Array{Float64,3}(0,0,0), Array{Float64, 2}(0,0), Array{Float64, 3}(0,0,0), outputs = [:loglh])
+    out = remove_presample!(Nt0, loglh, Array{Float64, 2}(undef, 0,0), Array{Float64,3}(undef, 0,0,0), Array{Float64, 2}(undef, 0,0), Array{Float64, 3}(undef, 0,0,0), outputs = [:loglh])
     return out[1]
 end
 

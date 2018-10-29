@@ -2,14 +2,14 @@ path = dirname(@__FILE__)
 
 # Initialize arguments to function
 file = jldopen("$path/reference/kalman_filter_args.jld2", "r")
-data = read(file, "data")
-TTT, RRR, CCC    = read(file, "TTT"), read(file, "RRR"), read(file, "CCC")
-QQ, ZZ, DD, EE = read(file, "QQ"), read(file, "ZZ"), read(file, "DD"), read(file, "EE")
+y = read(file, "data")
+T, R, C    = read(file, "TTT"), read(file, "RRR"), read(file, "CCC")
+Q, Z, D, E = read(file, "QQ"), read(file, "ZZ"), read(file, "DD"), read(file, "EE")
 z0, P0   = read(file, "z0"), read(file, "P0")
 close(file)
 
 # Kalman Filter (all arguments and no presample)
-out = kalman_filter(y, T, R, C, Q, Z, D, E, s_0, P_0)
+out = kalman_filter(y, T, R, C, Q, Z, D, E, z0, P0)
 @testset "Basic Kalman Filter (all arguments, no presample)" begin
     h5open("$path/reference/kalman_filter_out.h5", "r") do h5
         @test read(h5, "log_likelihood") ≈ sum(out[1])
@@ -23,8 +23,8 @@ out = kalman_filter(y, T, R, C, Q, Z, D, E, s_0, P_0)
     end
 end
 
-# Method with all arguments provided
-out = kalman_filter(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0)
+# Method with initial conditions omitted
+out = kalman_filter(y, T, R, C, Q, Z, D, E)
 
 # Kalman Filter (no initial conditions and no presample)
 out = kalman_filter(y, T, R, C, Q, Z, D, E)
@@ -55,7 +55,7 @@ out = kalman_filter(y, T, R, C, Q, Z, D, E, Nt0=4)
 end
 
 # Initialize arguments to for multi-regime Kalman Filter (ZLB)
-file = jldopen("$path/reference/kalman_filter_args_zlb.jld")
+file = jldopen("$path/reference/kalman_filter_args_zlb.jld2")
 y = read(file, "data")
 Ts, Rs, Cs    = read(file, "Ts"), read(file, "Rs"), read(file, "Cs")
 Qs, Zs, Ds, Es = read(file, "Qs"), read(file, "Zs"), read(file, "Ds"), read(file, "Es")
