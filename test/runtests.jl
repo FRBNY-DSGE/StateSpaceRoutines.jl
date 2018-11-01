@@ -1,6 +1,5 @@
 using Base.Test, HDF5, JLD
 using StateSpaceRoutines
-using BenchmarkTools
 using QuantEcon: solve_discrete_lyapunov
 
 my_tests = [
