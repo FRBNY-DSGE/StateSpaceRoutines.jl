@@ -8,7 +8,7 @@ s_0, P_0   = read(file, "z0"), read(file, "P0")
 close(file)
 
 # Basic Chand Recursion (all arguments, no presample)
-out = chand_recursion(y, T, R, C, Q, Z, D, E, s_0, P_0)
+out = chand_recursion(y, T, R, C, Q, Z, D, E, s_0, P_0, allout = true)
 @testset "Basic Chand Recursion (no presample, all)" begin
     h5open("$path/reference/kalman_filter_out.h5", "r") do h5
         @test read(h5, "log_likelihood") ≈ out[1]
@@ -19,7 +19,7 @@ out = chand_recursion(y, T, R, C, Q, Z, D, E, s_0, P_0)
 end
 
 # Chand Recursion (no initial conditions)
-out = chand_recursion(y, T, R, C, Q, Z, D, E)
+out = chand_recursion(y, T, R, C, Q, Z, D, E, allout = true)
 @testset "Chand Recursion (no initial conditions)" begin
       h5open("$path/reference/kalman_filter_out.h5", "r") do h5
           @test read(h5, "log_likelihood") ≈ out[1]
@@ -30,7 +30,7 @@ out = chand_recursion(y, T, R, C, Q, Z, D, E)
   end
 
 # Chand Recursion (presample)
-out = chand_recursion(y, T, R, C, Q, Z, D, E, Nt0 = 4)
+out = chand_recursion(y, T, R, C, Q, Z, D, E, Nt0 = 4, allout = true)
 @testset "Chand Recursion (presample)" begin
     h5open("$path/reference/kalman_filter_out_presample.h5", "r") do h5
         @test read(h5, "log_likelihood") ≈ out[1]
