@@ -18,8 +18,6 @@ out = kalman_filter(y, T, R, C, Q, Z, D, E, z0, P0)
         @test read(h5, "vpred")          ≈ out[3]
         @test read(h5, "filt")           ≈ out[4]
         @test read(h5, "vfilt")          ≈ out[5]
-        @test s_0                        ≈ out[6]
-        @test P_0                        ≈ out[7]
     end
 end
 
@@ -71,8 +69,6 @@ out = kalman_filter(regime_inds, y, Ts, Rs, Cs, Qs, Zs, Ds, Es)
         @test read(h5, "vpred")          ≈ out[3]
         @test read(h5, "filt")           ≈ out[4]
         @test read(h5, "vfilt")          ≈ out[5]
-        @test z0                         ≈ out[6]
-        @test P0                         ≈ out[7]
     end
 end
 
