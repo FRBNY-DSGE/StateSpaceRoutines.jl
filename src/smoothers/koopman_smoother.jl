@@ -64,7 +64,7 @@ where:
 - `s_smth`: `Ns` x `Nt` matrix of smoothed states `s_{t|T}`
 - `ϵ_smth`: `Ne` x `Nt` matrix of smoothed shocks `ϵ_{t|T}`
 """
-function koopman_smoother(y::Matrix{Union{S, Missing}},
+function koopman_smoother(y::AbstractArray,
     T::Matrix{S}, R::Matrix{S}, C::Vector{S}, Q::Matrix{S},
     Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
     s_0::Vector{S}, P_0::Matrix{S}, s_pred::Matrix{S}, P_pred::Array{S, 3};
@@ -76,7 +76,7 @@ function koopman_smoother(y::Matrix{Union{S, Missing}},
         s_0, P_0, s_pred, P_pred; Nt0 = Nt0)
 end
 
-function koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray{Union{S, Missing}},
+function koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray,
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
     Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
     s_0::Vector{S}, P_0::Matrix{S}, s_pred::Matrix{S}, P_pred::Array{S, 3};
@@ -183,7 +183,7 @@ where:
 - `s_dist`: `Ns` x `Nt` matrix of transition equation disturbances `r_t`
 - `y_dist`: `Ny` x `Nt` matrix of measurement equation disturbances `e_t`
 """
-function koopman_disturbance_smoother(y::AbstractArray{Union{S, Missing}},
+function koopman_disturbance_smoother(y::AbstractArray,
     T::Matrix{S}, R::Matrix{S}, Q::Matrix{S},
     Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
     s_pred::Matrix{S}, P_pred::Array{S, 3}; Nt0::Int = 0) where {S<:AbstractFloat}
@@ -194,7 +194,7 @@ function koopman_disturbance_smoother(y::AbstractArray{Union{S, Missing}},
         s_pred, P_pred; Nt0 = Nt0)
 end
 
-function koopman_disturbance_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray{Union{S, Missing}},
+function koopman_disturbance_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray,
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Qs::Vector{Matrix{S}},
     Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
     s_pred::Matrix{S}, P_pred::Array{S, 3}; Nt0::Int = 0) where {S<:AbstractFloat}
