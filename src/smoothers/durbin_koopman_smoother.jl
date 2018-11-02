@@ -71,7 +71,7 @@ where:
 - `s_smth`: `Ns` x `Nt` matrix of smoothed states `s_{t|T}`
 - `ϵ_smth`: `Ne` x `Nt` matrix of smoothed shocks `ϵ_{t|T}`
 """
-function durbin_koopman_smoother(y::AbstractArray,
+function durbin_koopman_smoother(y::AbstractMatrix,
     T::Matrix{S}, R::Matrix{S}, C::Vector{S},
     Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
     s_0::Vector{S}, P_0::Matrix{S};
@@ -83,7 +83,7 @@ function durbin_koopman_smoother(y::AbstractArray,
         Nt0 = Nt0, draw_states = draw_states)
 end
 
-function durbin_koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray,
+function durbin_koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractMatrix,
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
     Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
     s_0::Vector{S}, P_0::Matrix{S};
@@ -126,17 +126,18 @@ function durbin_koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::
         end
     end
 
-    # Replace y+ with NaNs wherever y has NaNs
+    # Replace y+ with missings wherever y has missings
     y_plus[ismissing.(y)] .= missing
 
     # Compute y* = y - y+
     y_star = y .- y_plus
 
-    # Cast to Matrix{Union{S, Missing}} to ensure
-    # conformity because for some reason
-    # arithmetic operators on two Matrix{Union{S, Missing}} returns
-    # a matrix of concrete type S.
-    y_star = convert(Matrix{Union{S, Missing}}, y_star)
+    # TEMP
+    # # Cast to Matrix{Union{S, Missing}} to ensure
+    # # conformity because for some reason
+    # # arithmetic operators on two Matrix{Union{S, Missing}} returns
+    # # a matrix of concrete type S.
+    # y_star = convert(Matrix{Union{S, Missing}}, y_star)
 
     # Run the Kalman filter on y*
     # Note that we pass in `zeros(Ny)` instead of `D` because the

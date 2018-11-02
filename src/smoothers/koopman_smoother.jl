@@ -64,7 +64,7 @@ where:
 - `s_smth`: `Ns` x `Nt` matrix of smoothed states `s_{t|T}`
 - `ϵ_smth`: `Ne` x `Nt` matrix of smoothed shocks `ϵ_{t|T}`
 """
-function koopman_smoother(y::AbstractArray,
+function koopman_smoother(y::AbstractMatrix,
     T::Matrix{S}, R::Matrix{S}, C::Vector{S}, Q::Matrix{S},
     Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
     s_0::Vector{S}, P_0::Matrix{S}, s_pred::Matrix{S}, P_pred::Array{S, 3};
@@ -76,7 +76,7 @@ function koopman_smoother(y::AbstractArray,
         s_0, P_0, s_pred, P_pred; Nt0 = Nt0)
 end
 
-function koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray,
+function koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractMatrix,
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
     Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
     s_0::Vector{S}, P_0::Matrix{S}, s_pred::Matrix{S}, P_pred::Array{S, 3};
@@ -217,12 +217,12 @@ function koopman_disturbance_smoother(regime_indices::Vector{AbstractRange{Int}}
         Z, D, E = Zs[i], Ds[i], Es[i]
 
         for t in reverse(regime_indices[i])
-            # Keep rows of measurement equation corresponding to non-NaN observables
-            nonnan = .!isnan.(y[:, t])
-            y_t = y[nonnan, t]
-            Z_t = Z[nonnan, :]
-            D_t = D[nonnan]
-            E_t = E[nonnan, nonnan]
+            # Keep rows of measurement equation corresponding to nonmissing observables
+            nonmissing = .!ismissing.(y[:, t])
+            y_t = y[nonmissing, t]
+            Z_t = Z[nonmissing, :]
+            D_t = D[nonmissing]
+            E_t = E[nonmissing, nonmissing]
 
             s_pred_t = s_pred[:, t]            # s_{t|t-1}
             P_pred_t = P_pred[:, :, t]         # P_{t|t-1} = Var s_{t|t-1}
@@ -236,7 +236,7 @@ function koopman_disturbance_smoother(regime_indices::Vector{AbstractRange{Int}}
             r_t = Z_t'*e_t + T'*r_t            # r_{t-1} = Z'*e_t + T'*r_t
 
             s_dist[:,      t] = r_t
-            y_dist[nonnan, t] = e_t
+            y_dist[nonmissing, t] = e_t
         end # of loop backward through this regime's periods
     end # of loop backward through regimes
 
