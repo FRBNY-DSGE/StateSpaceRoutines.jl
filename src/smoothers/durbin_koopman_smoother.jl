@@ -78,12 +78,12 @@ function durbin_koopman_smoother(y::AbstractMatrix,
     Nt0::Int = 0, draw_states::Bool = true) where {S<:AbstractFloat}
 
     Nt = size(y, 2)
-    durbin_koopman_smoother(AbstractRange{Int}[1:Nt], y, Matrix{S}[T], Matrix{S}[R], Vector{S}[C],
+    durbin_koopman_smoother(UnitRange{Int}[1:Nt], y, Matrix{S}[T], Matrix{S}[R], Vector{S}[C],
         Matrix{S}[Q], Matrix{S}[Z], Vector{S}[D], Matrix{S}[E], s_0, P_0;
         Nt0 = Nt0, draw_states = draw_states)
 end
 
-function durbin_koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractMatrix,
+function durbin_koopman_smoother(regime_indices::Vector{UnitRange{Int}}, y::AbstractMatrix,
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
     Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
     s_0::Vector{S}, P_0::Matrix{S};

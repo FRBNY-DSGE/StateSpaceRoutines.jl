@@ -71,12 +71,12 @@ function koopman_smoother(y::AbstractMatrix,
     Nt0::Int = 0) where {S<:AbstractFloat}
 
     Nt = size(y, 2)
-    koopman_smoother(AbstractRange{Int}[1:Nt], y, Matrix{S}[T], Matrix{S}[R], Vector{S}[C],
+    koopman_smoother(UnitRange{Int}[1:Nt], y, Matrix{S}[T], Matrix{S}[R], Vector{S}[C],
         Matrix{S}[Q], Matrix{S}[Z], Vector{S}[D], Matrix{S}[E],
         s_0, P_0, s_pred, P_pred; Nt0 = Nt0)
 end
 
-function koopman_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractMatrix,
+function koopman_smoother(regime_indices::Vector{UnitRange{Int}}, y::AbstractMatrix,
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
     Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
     s_0::Vector{S}, P_0::Matrix{S}, s_pred::Matrix{S}, P_pred::Array{S, 3};
@@ -189,12 +189,12 @@ function koopman_disturbance_smoother(y::AbstractArray,
     s_pred::Matrix{S}, P_pred::Array{S, 3}; Nt0::Int = 0) where {S<:AbstractFloat}
 
     Nt = size(y, 2)
-    koopman_disturbance_smoother(AbstractRange{Int}[1:Nt], y, Matrix{S}[T], Matrix{S}[R],
+    koopman_disturbance_smoother(UnitRange{Int}[1:Nt], y, Matrix{S}[T], Matrix{S}[R],
         Matrix{S}[Q], Matrix{S}[Z], Vector{S}[D], Matrix{S}[E],
         s_pred, P_pred; Nt0 = Nt0)
 end
 
-function koopman_disturbance_smoother(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray,
+function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Qs::Vector{Matrix{S}},
     Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
     s_pred::Matrix{S}, P_pred::Array{S, 3}; Nt0::Int = 0) where {S<:AbstractFloat}

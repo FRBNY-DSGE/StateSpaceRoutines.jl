@@ -111,7 +111,7 @@ Cov(ϵ_t, u_t) = 0
 
 **Method 2 only:**
 
-- `regime_indices`: `Vector{AbstractRange{Int}}` of length `n_regimes`, where
+- `regime_indices`: `Vector{UnitRange{Int}}` of length `n_regimes`, where
   `regime_indices[i]` indicates the time periods `t` in regime `i`
 - `Ts`: `Vector{Matrix{S}}` of `T` matrices for each regime
 - `Rs`
@@ -157,7 +157,7 @@ where:
 When `s_0` and `P_0` are omitted, they are computed using
 `init_stationary_states`.
 """
-function kalman_filter(regime_indices::Vector{AbstractRange{Int}}, y::AbstractArray,
+function kalman_filter(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}},
     Qs::Vector{Matrix{S}}, Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
     s_0::Vector{S} = Vector{S}(undef, 0), P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
