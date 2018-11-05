@@ -1,12 +1,7 @@
 path = dirname(@__FILE__)
 
 # Initialize arguments to function
-file = jldopen("$path/reference/kalman_filter_args.jld2", "r")
-y = read(file, "data")
-T, R, C    = read(file, "TTT"), read(file, "RRR"), read(file, "CCC")
-Q, Z, D, E = read(file, "QQ"), read(file, "ZZ"), read(file, "DD"), read(file, "EE")
-z0, P0   = read(file, "z0"), read(file, "P0")
-close(file)
+@load "$path/reference/kalman_filter_args.jld2" y T R C Q Z D E z0 P0
 
 # Kalman Filter (all arguments and no presample)
 out = kalman_filter(y, T, R, C, Q, Z, D, E, z0, P0)
@@ -53,12 +48,7 @@ out = kalman_filter(y, T, R, C, Q, Z, D, E, Nt0=4)
 end
 
 # Initialize arguments to for multi-regime Kalman Filter (ZLB)
-file = jldopen("$path/reference/kalman_filter_args_zlb.jld2")
-y = read(file, "data")
-Ts, Rs, Cs    = read(file, "Ts"), read(file, "Rs"), read(file, "Cs")
-Qs, Zs, Ds, Es = read(file, "Qs"), read(file, "Zs"), read(file, "Ds"), read(file, "Es")
-regime_inds = read(file, "regime_inds")
-close(file)
+@load "$path/reference/kalman_filter_args_zlb.jld2" y Ts Rs Cs Qs Zs Ds Es regime_inds
 
 out = kalman_filter(regime_inds, y, Ts, Rs, Cs, Qs, Zs, Ds, Es)
 @testset "Kalman Filter (Multi-regime/ZLB)" begin
