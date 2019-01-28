@@ -319,7 +319,8 @@ log-likelihood P(y_t | y_{1:t-1}) and assign to `k`.
 function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
                  return_loglh::Bool = true) where {S<:AbstractFloat}
     # Keep rows of measurement equation corresponding to non-missing observables
-    nonmissing = .!ismissing.(y_obs)
+    nonmissing = .!map(x -> ismissing(x) ? true : isnan(x), y_obs)
+
     y_obs = y_obs[nonmissing]
     Z = k.Z[nonmissing, :]
     D = k.D[nonmissing]
