@@ -6,7 +6,9 @@ function chand_recursion(y::Matrix{S},
                          T::Matrix{S}, R::Matrix{S}, C::Vector{S},
                          Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, H::Matrix{S},
                          s_pred::Vector{S} = Vector{S}(0), P_pred::Matrix{S} = Matrix{S}(0,0);
-                         allout::Bool = false, Nt0::Int = 0) where {S<:AbstractFloat}
+                         allout::Bool = false, Nt0::Int = 0, tol::Float64 = 0.0) where {S<:AbstractFloat}
+    converged = false
+
     # Dimensions
     Ns = size(T, 1) # number of states
     Ny, Nt = size(y) # number of periods of data
@@ -54,28 +56,36 @@ function chand_recursion(y::Matrix{S},
             end
         end
 
-        # Intermediate calculations to re-use
-        ZW_t = Z*W_t
-        MWpZp = M_t*(ZW_t')
-        TW_t = T*W_t
+        if !converged
+            # Intermediate calculations to re-use
+            ZW_t = Z*W_t
+            MWpZp = M_t*(ZW_t')
+            TW_t = T*W_t
 
-        # Step 3: Update forecast error variance F_{t+1} (Eq 19)
-        V_t1 = V_pred
-        invV_t1 = invV_pred
-        V_pred  = V_pred + ZW_t*MWpZp        # F_{t+1}
-        V_pred  = 0.5*(V_pred+V_pred')
-        invV_pred = inv(V_pred)
+            # Step 3: Update forecast error variance F_{t+1} (Eq 19)
+            V_t1 = V_pred
+            invV_t1 = invV_pred
+            V_pred  = V_pred + ZW_t*MWpZp        # F_{t+1}
+            V_pred  = 0.5*(V_pred+V_pred')
+            invV_pred = inv(V_pred)
 
-        # Step 4: Update Kalman Gain (Eq 20). Recall that kalgain = K_t * V_t⁻¹
-        # Kalgain_{t+1} = (Kalgain_t*V_{t-1} + T*W_t*M_t*W_t'*Z')V_t⁻¹
-        kal_gain = (kal_gain*V_t1 + TW_t*MWpZp)*invV_pred
+            # Step 4: Update Kalman Gain (Eq 20). Recall that kalgain = K_t * V_t⁻¹
+            # Kalgain_{t+1} = (Kalgain_t*V_{t-1} + T*W_t*M_t*W_t'*Z')V_t⁻¹
+            kal_gain1 = kal_gain
+            kal_gain = (kal_gain*V_t1 + TW_t*MWpZp)*invV_pred
 
-        # Step 5: Update W
-        W_t = TW_t - kal_gain*ZW_t    # W_{t+1}
+            # Step 5: Update W
+            W_t = TW_t - kal_gain*ZW_t    # W_{t+1}
 
-        # Step 6: Update M
-        M_t = M_t + MWpZp*invV_t1*MWpZp'     # M_{t+1}
-        M_t = 0.5*(M_t + M_t')
+            # Step 6: Update M
+            M_t = M_t + MWpZp*invV_t1*MWpZp'     # M_{t+1}
+            M_t = 0.5*(M_t + M_t')
+
+            if (maximum(abs.(kal_gain-kal_gain1)) < tol)
+                converged = true
+                @show "Converged"
+            end
+        end
     end
     loglh = remove_presample!(Nt0, loglh)
     if allout
