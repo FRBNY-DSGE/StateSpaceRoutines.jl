@@ -25,7 +25,8 @@ Outer constructor for the `KalmanFilter` type.
 """
 function KalmanFilter(T::Matrix{S}, R::Matrix{S}, C::Vector{S}, Q::Matrix{S},
                       Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
-                      s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0)) where {S<:AbstractFloat}
+                      s_0::Vector{S} = Vector{S}(0),
+                      P_0::Matrix{S} = Matrix{S}(0, 0)) where {S<:AbstractFloat}
     if isempty(s_0) || isempty(P_0)
         s_0, P_0 = init_stationary_states(T, R, C, Q)
     end
@@ -241,7 +242,7 @@ function kalman_filter(y::Matrix{S},
     # Initialize inputs and outputs
     k = KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0)
 
-    mynan = convert(S, NaN)
+    mynan  = convert(S, NaN)
     loglh  = return_loglh ? fill(mynan, Nt)         : Vector{S}(0)
     s_pred = return_pred  ? fill(mynan, Ns, Nt)     : Matrix{S}(0, 0)
     P_pred = return_pred  ? fill(mynan, Ns, Ns, Nt) : Array{S, 3}(0, 0, 0)
