@@ -2,12 +2,13 @@
 ```
 function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
                          Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, H::Matrix{S},
-                         s_pred::Vector{S} = Vector{S}(0), P_pred::Matrix{S} = Matrix{S}(0,0);
+                         s_pred::Vector{S} = Vector{S}(0),
+                         P_pred::Matrix{S} = Matrix{S}(0,0);
                          allout::Bool = false, Nt0::Int = 0,
                          tol::Float64 = 0.0) where {S<:AbstractFloat}
 ```
-Implementation of Chandrasekhar Recursions, a faster algorithm for likelihood evaluation in a
-linear Gaussian state space system. Based on code by Ed Herbst.
+Implementation of Chandrasekhar Recursions, a faster algorithm for likelihood
+evaluation in a linear Gaussian state space system. Based on code by Ed Herbst.
 
 State Transition equation:
 ```
@@ -21,7 +22,8 @@ Returns log-likelihood evaluation.
 """
 function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
                          Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, H::Matrix{S},
-                         s_pred::Vector{S} = Vector{S}(0), P_pred::Matrix{S} = Matrix{S}(0,0);
+                         s_pred::Vector{S} = Vector{S}(0),
+                         P_pred::Matrix{S} = Matrix{S}(0,0);
                          allout::Bool = false, Nt0::Int = 0,
                          tol::Float64 = 0.0) where {S<:AbstractFloat}
     converged = false
@@ -44,7 +46,7 @@ function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
 
     # We write ΔP in terms of W_t and M_t: ΔP = W_t * M_t * W_t'
     W_t      = T * P_pred * Z'   # (Eq 12)
-    M_t      = -invV_pred    # (Eq 13)
+    M_t      = -invV_pred        # (Eq 13)
     kal_gain = W_t * invV_pred
 
     # Initialize loglikelihoods to zeros so that the ones we don't update
@@ -59,12 +61,14 @@ function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
         yhat = Z * s_pred + D
         ν_t  = y[:, t] - yhat
 
-        # This is a symptom of a bad parameter draw: tells callee to simply redraw
+        # Symptom of a bad parameter draw: simply tells callee to redraw
         if !isposdef(V_pred)
             return NaN
         else
             loglh[t] = logpdf(MvNormal(zero_vec, V_pred), ν_t)
         end
+
+        if (t>1) @show loglh[t], loglh[t-1], abs(loglh[t]-loglh[t-1])/abs(loglh[t-1]) end
 
         # Step 2: Compute s_{t+1} using Eq. 5
         if t < Nt
@@ -87,7 +91,7 @@ function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
             V_pred    = 0.5 * (V_pred + V_pred')
             invV_pred = inv(V_pred)
 
-            # Step 4: Update Kalman Gain (Eq 20). Recall that kalgain = K_t * V_t⁻¹
+            # Step 4: Update Kalman Gain (Eq 20). Recall kalgain = K_t * V_t⁻¹
             # Kalgain_{t+1} = (Kalgain_t*V_{t-1} + T*W_t*M_t*W_t'*Z')V_t⁻¹
             kal_gain1 = kal_gain
             kal_gain  = (kal_gain * V_t1 + TW_t * MWpZp) * invV_pred
