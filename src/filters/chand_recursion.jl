@@ -36,16 +36,16 @@ function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
     end
 
     # V_{t|t-1} = Var(y_t|y_{1:t-1})
-    V_pred    = Z*P_pred*Z' + H
-    V_pred    = 0.5*(V_pred+V_pred')
+    V_pred    = Z * P_pred * Z' + H
+    V_pred    = 0.5 * (V_pred + V_pred')
     invV_pred = inv(V_pred)
 
     invV_t1 = invV_pred
 
     # We write ΔP in terms of W_t and M_t: ΔP = W_t * M_t * W_t'
-    W_t      = T*P_pred*Z'   # (Eq 12)
+    W_t      = T * P_pred * Z'   # (Eq 12)
     M_t      = -invV_pred    # (Eq 13)
-    kal_gain = W_t*invV_pred
+    kal_gain = W_t * invV_pred
 
     # Initialize loglikelihoods to zeros so that the ones we don't update
     # (those in presample) contribute zero towards sum of loglikelihoods.
@@ -70,21 +70,21 @@ function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
         if t < Nt
             s_pred = T * s_pred + kal_gain * ν_t
             if allout
-                P = P + W_t*M_t*W_t'
+                P = P + W_t * M_t * W_t'
             end
         end
 
         if !converged
             # Intermediate calculations to re-use
-            ZW_t  = Z*W_t
-            MWpZp = M_t*(ZW_t')
-            TW_t  = T*W_t
+            ZW_t  = Z * W_t
+            MWpZp = M_t * (ZW_t')
+            TW_t  = T * W_t
 
             # Step 3: Update forecast error variance F_{t+1} (Eq 19)
-            V_t1    = V_pred
-            invV_t1 = invV_pred
-            V_pred  = V_pred + ZW_t*MWpZp        # F_{t+1}
-            V_pred  = 0.5 * (V_pred + V_pred')
+            V_t1      = V_pred
+            invV_t1   = invV_pred
+            V_pred    = V_pred + ZW_t * MWpZp        # F_{t+1}
+            V_pred    = 0.5 * (V_pred + V_pred')
             invV_pred = inv(V_pred)
 
             # Step 4: Update Kalman Gain (Eq 20). Recall that kalgain = K_t * V_t⁻¹
@@ -93,14 +93,14 @@ function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
             kal_gain  = (kal_gain * V_t1 + TW_t * MWpZp) * invV_pred
 
             # Step 5: Update W
-            W_t = TW_t - kal_gain*ZW_t           # W_{t+1}
+            W_t = TW_t - kal_gain * ZW_t            # W_{t+1}
 
             # Step 6: Update M
-            M_t = M_t + MWpZp*invV_t1*MWpZp'     # M_{t+1}
-            M_t = 0.5*(M_t + M_t')
+            M_t = M_t + MWpZp * invV_t1 * MWpZp'    # M_{t+1}
+            M_t = 0.5 * (M_t + M_t')
 
             # 'Fast Kalman' Algorithm - shut off when tol = 0
-            if (maximum(abs.(kal_gain-kal_gain1)) < tol)
+            if (maximum(abs.(kal_gain - kal_gain1)) < tol)
                 converged = true
             end
         end
@@ -119,7 +119,7 @@ end
 
 function remove_presample!(Nt0::Int, loglh::Vector{S}) where {S<:AbstractFloat}
     out = remove_presample!(Nt0, loglh, Array{Float64, 2}(0,0),
-                            Array{Float64,3}(0,0,0), Array{Float64, 2}(0,0),
+                            Array{Float64, 3}(0,0,0), Array{Float64, 2}(0,0),
                             Array{Float64, 3}(0,0,0), outputs = [:loglh])
     return out[1]
 end
