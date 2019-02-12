@@ -96,7 +96,7 @@ function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
             M_t = 0.5 * (M_t + M_t')
 
             # 'Fast Kalman' Algorithm: by default shut off
-            if (maximum(abs.(kal_gain - kal_gain1)) < tol)
+            if (tol > 0.0) && (maximum(abs.(kal_gain - kal_gain1)) < tol)
                 converged = true
             end
         end
