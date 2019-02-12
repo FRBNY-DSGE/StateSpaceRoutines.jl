@@ -68,8 +68,6 @@ function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
             loglh[t] = logpdf(MvNormal(zero_vec, V_pred), ν_t)
         end
 
-        if (t>1) @show loglh[t], loglh[t-1], abs(loglh[t]-loglh[t-1])/abs(loglh[t-1]) end
-
         # Step 2: Compute s_{t+1} using Eq. 5
         if t < Nt
             s_pred = T * s_pred + kal_gain * ν_t
@@ -127,27 +125,3 @@ function remove_presample!(Nt0::Int, loglh::Vector{S}) where {S<:AbstractFloat}
                             Array{Float64, 3}(0,0,0), outputs = [:loglh])
     return out[1]
 end
-
-#=function chand_recursion(regime_indices::Vector{Range{Int}}, y::Matrix{S},
-                         Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}},
-                         Qs::Vector{Matrix{S}}, Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}},
-                         Es::Vector{Matrix{S}},
-                         s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0,0);
-                         outputs::Vector{Symbol} = [:loglh, :pred, :filt],
-                         Nt0::Int = 0) where {S<:AbstractFloat}
-    Ns = size(Ts[1], 1)
-    Nt = size(y, 2)
-    @assert first(regime_indices[1]) == 1
-    @assert last(regime_indices[end]) == Nt
-
-    loglh = Vector{S}(0)
-
-    for i=1:length(regime_indices)
-        ts = regime_indices[i]
-        loglh, loglh_i = chand_recursion(y[:ts], Ts[i], Rs[i], Cs[i], Qs[i], Zs[i], Ds[i], Es[i],
-                                         s_t, P_t; allout = true, Nt0 = 0)
-        loglh[ts] = loglh_i
-    end
-    loglh, _, _, _, _ = remove_presample!(Nt0, loglh, zeros(0), zeros(0), zeros(0), zeros(0))
-    return sum(loglh), loglh
-end =#
