@@ -206,7 +206,7 @@ function kalman_filter(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
 
         loglh_i, s_pred_i, P_pred_i, s_filt_i, P_filt_i, s_0, P_0, s_t, P_t =
             kalman_filter(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i], Zs[i], Ds[i], Es[i],
-                              s_t, P_t; outputs = outputs, Nt0 = 0)
+                              s_t, P_t; outputs = outputs, Nt0 = 0, tol = tol)
 
         if return_loglh
             loglh[ts] = loglh_i
@@ -351,7 +351,7 @@ function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
     end
 
     if size(k.PZV) == size(PZV)
-        if maximum(abs.(PZV - k.PZV)) < tol
+        if (tol > 0.0) && (maximum(abs.(PZV - k.PZV)) < tol)
             k.converged = true
         end
     end
