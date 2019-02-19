@@ -65,13 +65,15 @@ where `S<:AbstractFloat` and
 - `times::Vector{S}`: vector of runtimes per period t
 """
 function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Function,
-                                  F_ϵ::Distribution, F_u::Distribution, s_init::AbstractArray{S};
-                                  n_particles::Int = 1000, fixed_sched::Vector{S} = zeros(0),
-                                  r_star::S = 2.0, findroot::Function = bisection, xtol::S = 1e-3,
+                                  F_ϵ::Distribution, F_u::Distribution,
+                                  s_init::AbstractArray{S}; n_particles::Int = 1000,
+                                  fixed_sched::Vector{S} = zeros(0), r_star::S = 2.0,
+                                  findroot::Function = bisection, xtol::S = 1e-3,
                                   resampling_method = :multinomial, n_mh_steps::Int = 1,
                                   c_init::S = 0.3, target_accept_rate::S = 0.4,
                                   n_presample_periods::Int = 0, allout::Bool = true,
-                                  parallel::Bool = false, verbose::Symbol = :high) where S<:AbstractFloat
+                                  parallel::Bool = false,
+                                  verbose::Symbol = :high) where S<:AbstractFloat
     #--------------------------------------------------------------
     # Setup
     #--------------------------------------------------------------
@@ -157,8 +159,9 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                            Ψ, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
                            initialize = stage == 1, parallel = parallel)
 
-            φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t, r_star, stage;
-                           fixed_sched = fixed_sched, findroot = findroot, xtol = xtol)
+            φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
+                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot
+                           , xtol = xtol)
 
             if VERBOSITY[verbose] >= VERBOSITY[:high]
                 @show φ_new
@@ -170,7 +173,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             ### 2. Selection
             # Modifies s_t1_temp, s_t_nontemp, ϵ_t
-            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t; resampling_method = resampling_method)
+            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+                       resampling_method = resampling_method)
 
             loglh[t] += log(mean(inc_weights))
 
@@ -181,11 +185,11 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             end
 
             ### 3. Mutation
-
             # Modifies s_t_nontemp, ϵ_t
             if stage != 1
                 accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
-                                        s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps; parallel = parallel)
+                                        s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
+                                        parallel = parallel)
             end
 
             φ_old = φ_new

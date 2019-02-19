@@ -8,8 +8,9 @@ Mutate particles by taking Metropolis-Hastings steps in the `ϵ_t` space. This
 function modifies `s_t` and `ϵ_t` in place and returns `accept_rate`.
 """
 function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
-                   det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::Float64, y_t::Vector{Float64},
-                   s_t::M, s_t1::M, ϵ_t::M, c::Float64, n_mh_steps::Int;
+                   det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::Float64,
+                   y_t::Vector{Float64}, s_t::M, s_t1::M,
+                   ϵ_t::M, c::Float64, n_mh_steps::Int;
                    parallel::Bool = false) where M<:AbstractMatrix{Float64}
     # Sizes
     n_obs = size(y_t, 1)
@@ -54,7 +55,7 @@ function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Flo
     # Compute posterior at initial ϵ_t
     post_1 = fast_mvnormal_pdf(y_t - Ψ(s_t), scaled_det_HH, scaled_inv_HH)
     post_2 = fast_mvnormal_pdf(ϵ_t)
-    post = post_1 * post_2
+    post   = post_1 * post_2
 
     for j = 1:n_mh_steps
         # Draw ϵ_new and s_new
@@ -64,13 +65,13 @@ function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Flo
         # Calculate posterior
         post_new_1 = fast_mvnormal_pdf(y_t - Ψ(s_new), scaled_det_HH, scaled_inv_HH)
         post_new_2 = fast_mvnormal_pdf(ϵ_new)
-        post_new = post_new_1 * post_new_2
+        post_new   = post_new_1 * post_new_2
 
         # Calculate α, probability of accepting the new particle
         α = post_new / post
         if rand() < α
-            s_t = s_new
-            ϵ_t = ϵ_new
+            s_t  = s_new
+            ϵ_t  = ϵ_new
             post = post_new
             accept += 1
         end
