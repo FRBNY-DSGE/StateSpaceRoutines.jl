@@ -13,7 +13,8 @@ module StateSpaceRoutines
     export
 
         # filters/kalman_filter.jl
-        init_stationary_states, kalman_filter, chand_recursion,
+        init_stationary_states, kalman_filter, chand_recursion, kalman_filter_likelihood,
+        kalman_filter_all,
 
         # filters/tempered_particle_filter
         tempered_particle_filter, initialize_state_draws,

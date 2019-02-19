@@ -238,6 +238,24 @@ function kalman_filter(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S
                        outputs::Vector{Symbol} = [:loglh, :pred, :filt],
                        Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
 
+    println("AAAAHHH")
+    if outputs == [:loglh]
+        @show "A"
+        return kalman_filter_likelihood(y, T, R, C, Q, Z, D, E,
+                                        s_0 = s_0, P_0 = P_0, Nt0 = Nt0, tol = tol)
+    end
+    @show "C"
+    return kalman_filter_all(y, T, R, C, Q, Z, D, E,
+                             s_0 = s_0, P_0 = P_0, outputs = outputs, Nt0 = Nt0, tol = tol)
+end
+
+function kalman_filter_all(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
+                       Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
+                       s_0::Vector{S} = Vector{S}(undef, 0),
+                       P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
+                       outputs::Vector{Symbol} = [:loglh, :pred, :filt],
+                       Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
+
     # Determine outputs
     return_loglh = :loglh in outputs
     return_pred  = :pred  in outputs
@@ -297,6 +315,53 @@ function kalman_filter(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S
 
     return loglh, s_pred, P_pred, s_filt, P_filt, s_0, P_0, s_T, P_T
 end
+
+function kalman_filter_likelihood(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
+                                  Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
+                                  s_0::Vector{S} = Vector{S}(undef, 0),
+                                  P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
+                                  Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
+    println("B")
+    # Dimensions
+    Ns = size(T, 1) # number of states
+    Nt = size(y, 2) # number of periods of data
+
+    # Initialize inputs and outputs
+    k = KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0)
+
+    mynan = convert(S, NaN)
+    loglh = fill(mynan, Nt)
+
+    # Populate initial states
+    s_0 = k.s_t
+    P_0 = k.P_t
+
+    # Loop through periods t
+    for t = 1:Nt
+        # Forecast
+        forecast!(k)
+
+        # Update and compute log-likelihood
+        update!(k, y[:, t]; return_loglh = true, tol = tol)
+        loglh[t] = k.loglh_t
+
+        # Update s_0 and P_0 if Nt0 > 0
+        if t == Nt0
+            s_0 = k.s_t
+            P_0 = k.P_t
+        end
+    end
+
+    # Populate final states
+    s_T = k.s_t
+    P_T = k.P_t
+
+    # Remove presample periods
+    loglh = remove_presample!(Nt0, loglh)
+
+    return loglh
+end
+
 
 """
 ```
@@ -392,4 +457,11 @@ function remove_presample!(Nt0::Int, loglh::Vector{S},
         end
     end
     return loglh, s_pred, P_pred, s_filt, P_filt
+end
+
+function remove_presample!(Nt0::Int, loglh::Vector{S}) where {S<:AbstractFloat}
+    if Nt0 > 0
+        loglh  = loglh[(Nt0+1):end]
+    end
+    return loglh
 end
