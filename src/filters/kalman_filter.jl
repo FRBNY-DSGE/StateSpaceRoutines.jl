@@ -206,10 +206,10 @@ function kalman_filter(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
 
         loglh_i, s_pred_i, P_pred_i, s_filt_i, P_filt_i, s_0, P_0, s_t, P_t =
             kalman_filter(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i], Zs[i], Ds[i], Es[i],
-                              s_t, P_t; outputs = outputs, Nt0 = 0, tol = tol)
+                          s_t, P_t; outputs = outputs, Nt0 = 0, tol = tol)
 
         if return_loglh
-            loglh[ts] .= loglh_i
+            loglh[ts] = loglh_i
         end
         if return_pred
             s_pred[:,    ts] = s_pred_i
@@ -237,21 +237,6 @@ function kalman_filter(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S
                        P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
                        outputs::Vector{Symbol} = [:loglh, :pred, :filt],
                        Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
-
-    if outputs == [:loglh]
-        return kalman_likelihood(y, T, R, C, Q, Z, D, E, s_0 = s_0, P_0 = P_0,
-                                 Nt0 = Nt0, tol = tol)
-    end
-    return kalman_filtered_states(y, T, R, C, Q, Z, D, E, s_0 = s_0, P_0 = P_0,
-                                  outputs = outputs, Nt0 = Nt0, tol = tol)
-end
-
-function kalman_filtered_states(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
-                                Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
-                                s_0::Vector{S} = Vector{S}(undef, 0),
-                                P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
-                                outputs::Vector{Symbol} = [:loglh, :pred, :filt],
-                                Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
 
     # Determine outputs
     return_loglh = :loglh in outputs
@@ -313,10 +298,65 @@ function kalman_filtered_states(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C:
     return loglh, s_pred, P_pred, s_filt, P_filt, s_0, P_0, s_T, P_T
 end
 
+function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
+                           Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}},
+                           Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
+                           Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}},
+                           Es::Vector{Matrix{S}}, s_0::Vector{S} = Vector{S}(undef, 0),
+                           P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
+                           Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
+
+    # Dimensions
+    Nt = size(y, 2) # number of periods of data
+
+    @assert first(regime_indices[1]) == 1
+    @assert last(regime_indices[end]) == Nt
+
+    # Initialize inputs and outputs
+    k = KalmanFilter(Ts[1], Rs[1], Cs[1], Qs[1], Zs[1], Ds[1], Es[1], s_0, P_0)
+
+    mynan = convert(S, NaN)
+    loglh = fill(mynan, Nt)
+
+    # Iterate through regimes
+    s_t = k.s_t
+    P_t = k.P_t
+
+    for i = 1:length(regime_indices)
+        ts = regime_indices[i]
+        loglh[ts] = kalman_likelihood(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i],
+                                      Zs[i], Ds[i], Es[i], s_t, P_t; Nt0 = 0, tol = tol)
+        s_t = k.s_t
+        P_t = k.P_t
+    end
+
+    # Remove presample periods
+    loglh = remove_presample!(Nt0, loglh)
+
+    return loglh
+end
+
+#=
+function kalman_filter(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
+                       Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
+                       s_0::Vector{S} = Vector{S}(undef, 0),
+                       P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
+                       outputs::Vector{Symbol} = [:loglh, :pred, :filt],
+                       Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
+
+    if outputs == [:loglh]
+        return kalman_likelihood(y, T, R, C, Q, Z, D, E, s_0 = s_0, P_0 = P_0,
+                                 Nt0 = Nt0, tol = tol)
+    end
+    return kalman_filtered_states(y, T, R, C, Q, Z, D, E, s_0 = s_0, P_0 = P_0,
+                                  outputs = outputs, Nt0 = Nt0, tol = tol)
+end
+=#
+
 function kalman_likelihood(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
-                           Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S};
+                           Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
                            s_0::Vector{S} = Vector{S}(undef, 0),
-                           P_0::Matrix{S} = Matrix{S}(undef, 0, 0),
+                           P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
                            Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
     # Dimensions
     Nt = size(y, 2) # number of periods of data
