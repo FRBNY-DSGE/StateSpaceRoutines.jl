@@ -71,7 +71,7 @@ function init_stationary_states(T::Matrix{S}, R::Matrix{S}, C::Vector{S},
     else
         Ns = size(T, 1)
         s_0 = C
-        P_0 = 1e6 * eye(Ns)
+        P_0 = 1e6 * Matrix(1.0I, Ns, Ns)
     end
     return s_0, P_0
 end
