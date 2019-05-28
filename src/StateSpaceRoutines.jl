@@ -4,20 +4,26 @@ module StateSpaceRoutines
 
     using QuantEcon: solve_discrete_lyapunov
     using Distributions: Distribution, MvNormal, pdf, Weights, sample, logpdf
+    using LinearAlgebra, Statistics
     using Roots: fzero
-    using HDF5, JLD
+    using HDF5, JLD2
+    using Distributed
+    using SharedArrays
 
     export
 
         # filters/kalman_filter.jl
-        init_stationary_states, kalman_filter, chand_recursion,
+        init_stationary_states, kalman_filter, chand_recursion, kalman_likelihood,
+        kalman_filtered_states,
 
         # filters/tempered_particle_filter
         tempered_particle_filter, initialize_state_draws,
-        resample, solve_inefficiency, mutation, weight_kernel!, next_φ,correction!, selection!, mutation!, update_c,
+        resample, solve_inefficiency, mutation, weight_kernel!, next_φ,correction!,
+        selection!, mutation!, update_c,
 
         # smoothers/
-        hamilton_smoother, koopman_smoother, koopman_disturbance_smoother, carter_kohn_smoother, durbin_koopman_smoother
+        hamilton_smoother, koopman_smoother, koopman_disturbance_smoother,
+        carter_kohn_smoother, durbin_koopman_smoother
 
     const VERBOSITY = Dict(:none => 0, :low => 1, :high => 2)
 

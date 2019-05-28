@@ -1,26 +1,23 @@
 path = dirname(@__FILE__)
 
 # Initialize arguments to function
-h5 = h5open("$path/reference/kalman_filter_args.h5")
-for arg in ["data", "TTT", "RRR", "CCC", "QQ", "ZZ", "DD", "EE", "z0", "P0"]
-    eval(parse("$arg = read(h5, \"$arg\")"))
-end
-close(h5)
+@load "$path/reference/kalman_filter_args.jld2" y T R C Q Z D E z0 P0
 
-h5 = h5open("$path/reference/kalman_filter_out.h5")
-for arg in ["pred", "vpred", "filt", "vfilt"]
-    eval(parse("$arg = read(h5, \"$arg\")"))
-end
-close(h5)
+file  = h5open("$path/reference/kalman_filter_out.h5", "r")
+pred  = read(file, "pred")
+vpred = read(file, "vpred")
+filt  = read(file, "filt")
+vfilt = read(file, "vfilt")
+close(file)
 
 # Run smoothers
 states = Dict{Symbol, Matrix{Float64}}()
 shocks = Dict{Symbol, Matrix{Float64}}()
 
-states[:hamilton], shocks[:hamilton] = hamilton_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0)
-states[:koopman], shocks[:koopman] = koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0, pred, vpred)
-states[:carter_kohn], shocks[:carter_kohn] = carter_kohn_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0; draw_states = false)
-states[:durbin_koopman], shocks[:durbin_koopman] = durbin_koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0; draw_states = false)
+states[:hamilton], shocks[:hamilton] = hamilton_smoother(y, T, R, C, Q, Z, D, E, z0, P0)
+states[:koopman], shocks[:koopman] = koopman_smoother(y, T, R, C, Q, Z, D, E, z0, P0, pred, vpred)
+states[:carter_kohn], shocks[:carter_kohn] = carter_kohn_smoother(y, T, R, C, Q, Z, D, E, z0, P0; draw_states = false)
+states[:durbin_koopman], shocks[:durbin_koopman] = durbin_koopman_smoother(y, T, R, C, Q, Z, D, E, z0, P0; draw_states = false)
 
 # Check that last-period smoothed states equal last-period filtered states
 @testset "Ensure last smoothed state = the last filtered state" begin
@@ -42,8 +39,7 @@ end
 end
 
 # Make sure that simulation smoothers run with `draw_states` on
-carter_kohn_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0; draw_states = true)
-durbin_koopman_smoother(data, TTT, RRR, CCC, QQ, ZZ, DD, EE, z0, P0; draw_states = true)
-
+carter_kohn_smoother(y, T, R, C, Q, Z, D, E, z0, P0; draw_states = true)
+durbin_koopman_smoother(y, T, R, C, Q, Z, D, E, z0, P0; draw_states = true)
 
 nothing

@@ -18,13 +18,16 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                         φ_old::Float64, Ψ::Function, y_t::Vector{Float64},
                         s_t_nontemp::AbstractMatrix{Float64},
                         det_HH::Float64, inv_HH::Matrix{Float64};
-                        initialize::Bool = false, parallel::Bool = false) where V<:AbstractVector{Float64}
+                        initialize::Bool = false,
+                        parallel::Bool = false) where V<:AbstractVector{Float64}
     # Sizes
     n_particles = length(coeff_terms)
     n_obs = length(y_t)
 
-    @mypar parallel for i in 1:n_particles
-        error    = y_t - Ψ(s_t_nontemp[:, i])
+    #NOTE
+    #@mypar parallel for i = 1:n_particles
+    @sync @distributed for i in 1:n_particles
+       error    = y_t - Ψ(s_t_nontemp[:, i])
         sq_error = dot(error, inv_HH * error)
 
         if initialize
@@ -53,13 +56,15 @@ choose `φ_new` by setting InEff(φ_new) = r_star. Otherwise, return
 `fixed_sched[stage]`.
 """
 function next_φ(φ_old::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
-                n_obs::Int, r_star::Float64, stage::Int; fixed_sched::Vector{Float64} = Float64[],
-                findroot::Function = bisection, xtol::Float64 = 1e-3) where V<:AbstractVector{Float64}
+                n_obs::Int, r_star::Float64, stage::Int;
+                fixed_sched::Vector{Float64} = Float64[],
+                findroot::Function = bisection,
+                xtol::Float64 = 1e-3) where V<:AbstractVector{Float64}
 
     if isempty(fixed_sched)
         n_particles  = length(coeff_terms)
-        inc_weights  = Vector{Float64}(n_particles)
-        norm_weights = Vector{Float64}(n_particles)
+        inc_weights  = Vector{Float64}(undef, n_particles)
+        norm_weights = Vector{Float64}(undef, n_particles)
         ineff0(φ) =
             ineff!(inc_weights, norm_weights, φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs) - r_star
 
@@ -119,6 +124,7 @@ function ineff!(inc_weights::Vector{Float64}, norm_weights::Vector{Float64},
                 φ_new::Float64, coeff_terms::V, exp_1_terms::V, exp_2_terms::V,
                 n_obs::Int) where V<:AbstractVector{Float64}
 
-    correction!(inc_weights, norm_weights, φ_new, coeff_terms, exp_1_terms, exp_2_terms, n_obs)
+    correction!(inc_weights, norm_weights, φ_new, coeff_terms, exp_1_terms,
+                exp_2_terms, n_obs)
     return sum(norm_weights.^2) / length(norm_weights)
 end

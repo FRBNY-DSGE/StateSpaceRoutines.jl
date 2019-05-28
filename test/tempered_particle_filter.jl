@@ -1,15 +1,15 @@
+using JLD2
 # Read in from JLD
-data, TTT, RRR, CCC, ZZ, DD, F_ϵ, F_u, s_init = jldopen("reference/tpf_main_inputs.jld", "r") do file
-    read(file, "data"),
-    read(file, "TTT"),
-    read(file, "RRR"),
-    read(file, "CCC"),
-    read(file, "ZZ"),
-    read(file, "DD"),
-    read(file, "F_epsilon"),
-    read(file, "F_u"),
-    read(file, "s_init")
-end
+tpf_main_input = load("reference/tpf_main_inputs.jld2")
+data = tpf_main_input["data"]
+TTT = tpf_main_input["TTT"]
+RRR = tpf_main_input["RRR"]
+CCC = tpf_main_input["CCC"]
+ZZ = tpf_main_input["ZZ"]
+DD = tpf_main_input["DD"]
+F_ϵ = tpf_main_input["F_epsilon"]
+F_u = tpf_main_input["F_u"]
+s_init = tpf_main_input["s_init"]
 
 # Tune algorithm
 tuning = Dict(:r_star => 2., :c_init => 0.3, :target_accept_rate => 0.4,
@@ -22,10 +22,35 @@ tuning = Dict(:r_star => 2., :c_init => 0.3, :target_accept_rate => 0.4,
 Ψ(s_t::AbstractVector{Float64}) = ZZ*s_t + DD
 
 # Load in test inputs and outputs
-test_file_inputs = load("reference/tpf_aux_inputs.jld")
-test_file_outputs = load("reference/tpf_aux_outputs.jld")
+
+#test_file_inputs = JLD2.load("reference/tpf_aux_inputs.jld2")
+#=φ_old, norm_weights, coeff_terms, log_e_1_terms,
+log_e_2_terms, inc_weights, s_t_nontemp = jldopen("reference/tpf_aux_inputs.jld2","r") do file
+    read(file, "phi_old"),
+    read(file, "norm_weights"),
+    read(file, "coeff_terms"),
+    read(file, "log_e_1_terms"),
+    read(file, "log_e_2_terms"),
+    read(file, "inc_weights"),
+    read(file, "s_t_nontemp")
+end
+HH = cov(F_u)
+=#
+test_file_inputs = load("reference/tpf_aux_inputs.jld2")
+test_file_outputs = load("reference/tpf_aux_outputs.jld2")
 
 ## Correction and Associated Auxiliary Function Tests
+#=
+φ_old = test_file_inputs["phi_old"]
+norm_weights = test_file_inputs["norm_weights"]
+coeff_terms = test_file_inputs["coeff_terms"]
+log_e_1_terms = test_file_inputs["log_e_1_terms"]
+log_e_2_terms = test_file_inputs["log_e_2_terms"]
+inc_weights = test_file_inputs["inc_weights"]
+
+HH = cov(F_u)
+s_t_nontemp = test_file_inputs["s_t_nontemp"]
+=#
 φ_old = test_file_inputs["phi_old"]
 norm_weights = test_file_inputs["norm_weights"]
 coeff_terms = test_file_inputs["coeff_terms"]
@@ -52,7 +77,7 @@ end
 s_t1_temp = test_file_inputs["s_t1_temp"]
 ϵ_t = test_file_inputs["eps_t"]
 
-srand(47)
+Random.seed!(47)
 selection!(norm_weights, s_t1_temp, s_t_nontemp,ϵ_t, resampling_method = tuning[:resampling_method])
 @testset "Selection Tests" begin
     @test s_t1_temp[1] ≈ test_file_outputs["s_t1_temp"][1]
@@ -66,7 +91,7 @@ accept_rate = test_file_inputs["accept_rate"]
 c = test_file_inputs["c"]
 
 c = update_c(c, accept_rate, tuning[:target_accept_rate])
-srand(47)
+Random.seed!(47)
 mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps])
 
 @testset "Mutation Tests" begin
@@ -75,11 +100,12 @@ mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_te
 end
 
 ## Whole TPF Tests
-srand(47)
+Random.seed!(47)
 out_no_parallel = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = false)
-srand(47)
+Random.seed!(47)
 out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true)
 @testset "TPF tests" begin
     @test out_no_parallel[1] ≈ -302.99967306704133
-    @test out_parallel_one_worker[1] ≈ -306.8211172094595
+    # This is different than in Julia6 because @distributed seeds differently than @parallel
+    @test out_parallel_one_worker[1] ≈ -303.64727963725073 #Julia 6 was: -306.8211172094595
 end

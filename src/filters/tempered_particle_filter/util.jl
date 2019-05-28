@@ -1,7 +1,7 @@
-macro mypar(parallel, ex)
-    return :( $(esc(parallel)) ? (@sync @parallel $(esc(ex))) : $(esc(ex)) )
+#=macro mypar(parallel, ex)
+    return :( $(esc(parallel)) ? (@sync @distributed $(esc(ex))) : $(esc(ex)) )
 end
-
+=#
 function bisection(f::Function, a::Number, b::Number;
                    xtol::AbstractFloat = 1e-1, maxiter::Int = 1000)
     fa = f(a)
@@ -11,7 +11,7 @@ function bisection(f::Function, a::Number, b::Number;
     while b-a > xtol
         i += 1
         i == maxiter && throw("Max number of iterations exceeded")
-        c = (a+b)/2
+        c  = (a+b)/2
         fc = f(c)
         if fc ≈ 0
             break

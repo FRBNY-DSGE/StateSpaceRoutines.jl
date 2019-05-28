@@ -1,8 +1,8 @@
-#=
+using LinearAlgebra
+"""
 This code is loosely based on a routine originally copyright Federal Reserve Bank of Atlanta
 and written by Iskander Karibzhanov.
-=#
-
+"""
 mutable struct KalmanFilter{S<:AbstractFloat}
     T::Matrix{S}
     R::Matrix{S}
@@ -27,14 +27,15 @@ Outer constructor for the `KalmanFilter` type.
 """
 function KalmanFilter(T::Matrix{S}, R::Matrix{S}, C::Vector{S}, Q::Matrix{S},
                       Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
-                      s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0),
-                      converged::Bool = false, PZV::Matrix{S} = Matrix{S}(0,0)) where {S<:AbstractFloat}
-
+                      s_0::Vector{S} = Vector{S}(undef, 0),
+                      P_0::Matrix{S} = Matrix{S}(undef, 0, 0),
+                      converged::Bool = false,
+                      PZV::Matrix{S} = Matrix{S}(undef, 0, 0)) where {S<:AbstractFloat}
     if isempty(s_0) || isempty(P_0)
         s_0, P_0 = init_stationary_states(T, R, C, Q)
     end
 
-    return KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0, NaN, false, PZV)
+    return KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0, NaN, converged, PZV)
 end
 
 """
@@ -46,8 +47,8 @@ Compute the initial state `s_0` and state covariance matrix `P_0` under the
 stationarity condition:
 
 ```
-s_0  = (I - T)\C
-P_0 = reshape(I - kron(T, T))\vec(R*Q*R'), Ns, Ns)
+s_0  =  (I - T) \\ C
+P_0 = reshape(I - kron(T, T)) \\ vec(R*Q*R'), Ns, Ns)
 ```
 
 where:
@@ -63,14 +64,14 @@ vector estimate is set to `C` and its covariance matrix is given by `1e6 * I`.
 """
 function init_stationary_states(T::Matrix{S}, R::Matrix{S}, C::Vector{S},
                                 Q::Matrix{S}) where {S<:AbstractFloat}
-    e, _ = eig(T)
+    e = eigvals(T)
     if all(abs.(e) .< 1)
         s_0 = (UniformScaling(1) - T)\C
         P_0 = solve_discrete_lyapunov(T, R*Q*R')
     else
         Ns = size(T, 1)
         s_0 = C
-        P_0 = 1e6 * eye(Ns)
+        P_0 = 1e6 * Matrix(1.0I, Ns, Ns)
     end
     return s_0, P_0
 end
@@ -115,7 +116,7 @@ Cov(ϵ_t, u_t) = 0
 
 **Method 2 only:**
 
-- `regime_indices`: `Vector{Range{Int}}` of length `n_regimes`, where
+- `regime_indices`: `Vector{UnitRange{Int}}` of length `n_regimes`, where
   `regime_indices[i]` indicates the time periods `t` in regime `i`
 - `Ts`: `Vector{Matrix{S}}` of `T` matrices for each regime
 - `Rs`
@@ -161,12 +162,14 @@ where:
 When `s_0` and `P_0` are omitted, they are computed using
 `init_stationary_states`.
 """
-function kalman_filter(regime_indices::Vector{Range{Int}}, y::Matrix{S},
-    Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}},
-    Qs::Vector{Matrix{S}}, Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
-    s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0);
-    outputs::Vector{Symbol} = [:loglh, :pred, :filt],
-    Nt0::Int = 0, tol::Float64= 0.0) where {S<:AbstractFloat}
+function kalman_filter(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
+                       Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}},
+                       Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
+                       Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}},
+                       Es::Vector{Matrix{S}}, s_0::Vector{S} = Vector{S}(undef, 0),
+                       P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
+                       outputs::Vector{Symbol} = [:loglh, :pred, :filt],
+                       Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
 
     # Determine outputs
     return_loglh = :loglh in outputs
@@ -184,11 +187,11 @@ function kalman_filter(regime_indices::Vector{Range{Int}}, y::Matrix{S},
     k = KalmanFilter(Ts[1], Rs[1], Cs[1], Qs[1], Zs[1], Ds[1], Es[1], s_0, P_0)
 
     mynan = convert(S, NaN)
-    s_pred = return_pred  ? fill(mynan, Ns, Nt)     : Matrix{S}(0, 0)
-    P_pred = return_pred  ? fill(mynan, Ns, Ns, Nt) : Array{S, 3}(0, 0, 0)
-    s_filt = return_filt  ? fill(mynan, Ns, Nt)     : Matrix{S}(0, 0)
-    P_filt = return_filt  ? fill(mynan, Ns, Ns, Nt) : Array{S, 3}(0, 0, 0)
-    loglh  = return_loglh ? fill(mynan, Nt)         : Vector{S}(0)
+    s_pred = return_pred  ? fill(mynan, Ns, Nt)     : Matrix{S}(undef, 0, 0)
+    P_pred = return_pred  ? fill(mynan, Ns, Ns, Nt) : Array{S, 3}(undef, 0, 0, 0)
+    s_filt = return_filt  ? fill(mynan, Ns, Nt)     : Matrix{S}(undef, 0, 0)
+    P_filt = return_filt  ? fill(mynan, Ns, Ns, Nt) : Array{S, 3}(undef, 0, 0, 0)
+    loglh  = return_loglh ? fill(mynan, Nt)         : Vector{S}(undef, 0)
 
     # Populate s_0 and P_0
     s_0 = k.s_t
@@ -200,9 +203,11 @@ function kalman_filter(regime_indices::Vector{Range{Int}}, y::Matrix{S},
 
     for i = 1:length(regime_indices)
         ts = regime_indices[i]
+
         loglh_i, s_pred_i, P_pred_i, s_filt_i, P_filt_i, s_0, P_0, s_t, P_t =
             kalman_filter(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i], Zs[i], Ds[i], Es[i],
-                              s_t, P_t; outputs = outputs, Nt0 = 0)
+                          s_t, P_t; outputs = outputs, Nt0 = 0, tol = tol)
+
         if return_loglh
             loglh[ts] = loglh_i
         end
@@ -226,12 +231,12 @@ function kalman_filter(regime_indices::Vector{Range{Int}}, y::Matrix{S},
     return loglh, s_pred, P_pred, s_filt, P_filt, s_0, P_0, s_T, P_T
 end
 
-function kalman_filter(y::Matrix{S},
-    T::Matrix{S}, R::Matrix{S}, C::Vector{S},
-    Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
-    s_0::Vector{S} = Vector{S}(0), P_0::Matrix{S} = Matrix{S}(0, 0);
-    outputs::Vector{Symbol} = [:loglh, :pred, :filt],
-    Nt0::Int = 0, tol::Float64 = 0.0) where {S<:AbstractFloat}
+function kalman_filter(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
+                       Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
+                       s_0::Vector{S} = Vector{S}(undef, 0),
+                       P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
+                       outputs::Vector{Symbol} = [:loglh, :pred, :filt],
+                       Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
 
     # Determine outputs
     return_loglh = :loglh in outputs
@@ -245,12 +250,12 @@ function kalman_filter(y::Matrix{S},
     # Initialize inputs and outputs
     k = KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0)
 
-    mynan  = convert(S, NaN)
-    loglh  = return_loglh ? fill(mynan, Nt)         : Vector{S}(0)
-    s_pred = return_pred  ? fill(mynan, Ns, Nt)     : Matrix{S}(0, 0)
-    P_pred = return_pred  ? fill(mynan, Ns, Ns, Nt) : Array{S, 3}(0, 0, 0)
-    s_filt = return_filt  ? fill(mynan, Ns, Nt)     : Matrix{S}(0, 0)
-    P_filt = return_filt  ? fill(mynan, Ns, Ns, Nt) : Array{S, 3}(0, 0, 0)
+    mynan = convert(S, NaN)
+    loglh  = return_loglh ? fill(mynan, Nt)         : Vector{S}(undef, 0)
+    s_pred = return_pred  ? fill(mynan, Ns, Nt)     : Matrix{S}(undef, 0, 0)
+    P_pred = return_pred  ? fill(mynan, Ns, Ns, Nt) : Array{S, 3}(undef, 0, 0, 0)
+    s_filt = return_filt  ? fill(mynan, Ns, Nt)     : Matrix{S}(undef, 0, 0)
+    P_filt = return_filt  ? fill(mynan, Ns, Ns, Nt) : Array{S, 3}(undef, 0, 0, 0)
 
     # Populate initial states
     s_0 = k.s_t
@@ -293,6 +298,92 @@ function kalman_filter(y::Matrix{S},
     return loglh, s_pred, P_pred, s_filt, P_filt, s_0, P_0, s_T, P_T
 end
 
+function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
+                           Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}},
+                           Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
+                           Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}},
+                           Es::Vector{Matrix{S}}, s_0::Vector{S} = Vector{S}(undef, 0),
+                           P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
+                           Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
+
+    # Dimensions
+    Nt = size(y, 2) # number of periods of data
+
+    @assert first(regime_indices[1]) == 1
+    @assert last(regime_indices[end]) == Nt
+
+    # Initialize inputs and outputs
+    k = KalmanFilter(Ts[1], Rs[1], Cs[1], Qs[1], Zs[1], Ds[1], Es[1], s_0, P_0)
+
+    mynan = convert(S, NaN)
+    loglh = fill(mynan, Nt)
+
+    # Iterate through regimes
+    s_t = k.s_t
+    P_t = k.P_t
+
+    for i = 1:length(regime_indices)
+        ts = regime_indices[i]
+        loglh[ts] = kalman_likelihood(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i],
+                                      Zs[i], Ds[i], Es[i], s_t, P_t; Nt0 = 0, tol = tol)
+        s_t = k.s_t
+        P_t = k.P_t
+    end
+
+    # Remove presample periods
+    loglh = remove_presample!(Nt0, loglh)
+
+    return loglh
+end
+
+#=
+function kalman_filter(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
+                       Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
+                       s_0::Vector{S} = Vector{S}(undef, 0),
+                       P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
+                       outputs::Vector{Symbol} = [:loglh, :pred, :filt],
+                       Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
+
+    if outputs == [:loglh]
+        return kalman_likelihood(y, T, R, C, Q, Z, D, E, s_0 = s_0, P_0 = P_0,
+                                 Nt0 = Nt0, tol = tol)
+    end
+    return kalman_filtered_states(y, T, R, C, Q, Z, D, E, s_0 = s_0, P_0 = P_0,
+                                  outputs = outputs, Nt0 = Nt0, tol = tol)
+end
+=#
+
+function kalman_likelihood(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
+                           Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
+                           s_0::Vector{S} = Vector{S}(undef, 0),
+                           P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
+                           Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
+    # Dimensions
+    Nt = size(y, 2) # number of periods of data
+
+    # Initialize inputs and outputs
+    k = KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0)
+
+    mynan = convert(S, NaN)
+    loglh = fill(mynan, Nt)
+
+    # Loop through periods t
+    for t = 1:Nt
+        # Forecast
+        forecast!(k)
+
+        # Update and compute log-likelihood
+        update!(k, y[:, t]; return_loglh = true, tol = tol)
+        loglh[t] = k.loglh_t
+    end
+
+    # Remove presample periods
+    loglh = remove_presample!(Nt0, loglh)
+
+    return loglh
+end
+
+
 """
 ```
 forecast!(k::KalmanFilter)
@@ -302,7 +393,7 @@ Compute the one-step-ahead states s_{t|t-1} and state covariances P_{t|t-1} and
 assign to `k`.
 """
 function forecast!(k::KalmanFilter{S}) where {S<:AbstractFloat}
-    T, R, C, Q = k.T, k.R, k.C, k.Q
+    T, R, C, Q     = k.T, k.R, k.C, k.Q
     s_filt, P_filt = k.s_t, k.P_t
 
     k.s_t = T*s_filt + C         # s_{t|t-1} = T*s_{t-1|t-1} + C
@@ -318,32 +409,35 @@ update!(k::KalmanFilter{S}, y_obs)
 Compute the filtered states s_{t|t} and state covariances P_{t|t}, and the
 log-likelihood P(y_t | y_{1:t-1}) and assign to `k`.
 """
-function update!(k::KalmanFilter{S}, y_obs::Vector{S};
-                 return_loglh::Bool = true, tol::Float64 = 0.0) where {S<:AbstractFloat}
-    # Keep rows of measurement equation corresponding to non-NaN observables
-    nonnan = .!isnan.(y_obs)
-    y_obs = y_obs[nonnan]
-    Z = k.Z[nonnan, :]
-    D = k.D[nonnan]
-    E = k.E[nonnan, nonnan]
-    Ny = length(y_obs)
+function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
+                 return_loglh::Bool = true, tol::S = 0.0) where {S<:AbstractFloat}
+
+    # Keep rows of measurement equation corresponding to non-missing observables
+    nonmissing = .!map(x -> ismissing(x) ? true : isnan(x), y_obs)
+
+    y_obs = y_obs[nonmissing]
+    Z     = k.Z[nonmissing, :]
+    D     = k.D[nonmissing]
+    E     = k.E[nonmissing, nonmissing]
+
+    Ny    = length(y_obs)
 
     s_pred = k.s_t
     P_pred = k.P_t
 
-    y_pred = Z*s_pred + D         # y_{t|t-1} = Z*s_{t|t-1} + D
+    y_pred = Z*s_pred + D             # y_{t|t-1} = Z*s_{t|t-1} + D
 
-    V_pred = Z*P_pred*Z' + E      # V_{t|t-1} = Var y_{t|t-1} = Z*P_{t|t-1}*Z' + E
-    V_pred = (V_pred + V_pred')/2
+    V_pred     = Z*P_pred*Z' + E      # V_{t|t-1} = Var y_{t|t-1} = Z*P_{t|t-1}*Z' + E
+    V_pred     = (V_pred + V_pred')/2
     V_pred_inv = inv(V_pred)
-    dy = y_obs - y_pred           # dy = y_t - y_{t|t-1} = prediction error
+    dy         = y_obs - y_pred       # dy = y_t - y_{t|t-1} (prediction error)
 
     if !k.converged
         PZV = P_pred'*Z'*V_pred_inv
     end
 
     if size(k.PZV) == size(PZV)
-        if maximum(abs.(PZV - k.PZV)) < tol
+        if (tol > 0.0) && (maximum(abs.(PZV - k.PZV)) < tol)
             k.converged = true
         end
     end
@@ -353,7 +447,8 @@ function update!(k::KalmanFilter{S}, y_obs::Vector{S};
     k.P_t = P_pred - PZV*Z*P_pred # P_{t|t} = P_{t|t-1} - P_{t|t-1}'*Z'/V_{t|t-1}*Z*P_{t|t-1}
 
     if return_loglh
-        k.loglh_t = -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2 # p(y_t | y_{1:t-1})
+        # p(y_t | y_{1:t-1})
+        k.loglh_t = -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2
     end
     return nothing
 end
@@ -366,9 +461,9 @@ remove_presample!(Nt0, loglh, s_pred, P_pred, s_filt, P_filt)
 Remove the first `Nt0` periods from all other input arguments and return.
 """
 function remove_presample!(Nt0::Int, loglh::Vector{S},
-                           s_pred::Matrix{S}, P_pred::Array{S, 3},
-                           s_filt::Matrix{S}, P_filt::Array{S, 3};
-                           outputs::Vector{Symbol} = [:loglh, :pred, :filt]) where {S<:AbstractFloat}
+        s_pred::Matrix{S}, P_pred::Array{S, 3},
+        s_filt::Matrix{S}, P_filt::Array{S, 3};
+        outputs::Vector{Symbol} = [:loglh, :pred, :filt]) where {S<:AbstractFloat}
     if Nt0 > 0
         if :loglh in outputs
             loglh  = loglh[(Nt0+1):end]
@@ -383,4 +478,11 @@ function remove_presample!(Nt0::Int, loglh::Vector{S},
         end
     end
     return loglh, s_pred, P_pred, s_filt, P_filt
+end
+
+function remove_presample!(Nt0::Int, loglh::Vector{S}) where {S<:AbstractFloat}
+    if Nt0 > 0
+        return loglh[(Nt0+1):end]
+    end
+    return loglh
 end

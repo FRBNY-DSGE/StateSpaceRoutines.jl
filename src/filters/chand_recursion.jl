@@ -22,15 +22,16 @@ Returns log-likelihood evaluation.
 """
 function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
                          Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, H::Matrix{S},
-                         s_pred::Vector{S} = Vector{S}(0),
-                         P_pred::Matrix{S} = Matrix{S}(0,0);
-                         allout::Bool = false, Nt0::Int = 0,
-                         tol::Float64 = 0.0) where {S<:AbstractFloat}
-    converged = false
-
+                         s_pred::Vector{S} = Vector{S}(undef, 0),
+                         P_pred::Matrix{S} = Matrix{S}(undef, 0,0);
+                         allout::Bool = true, Nt0::Int = 0,
+                         tol::S = 0.0) where {S<:AbstractFloat}
     # Dimensions
     Ns     = size(T, 1) # number of states
     Ny, Nt = size(y)    # number of periods of data
+
+    # Variable for 'Fast Kalman' algorithm
+    converged = false
 
     # Initialize s_pred and P_pred
     if isempty(s_pred) || isempty(P_pred)
@@ -41,32 +42,25 @@ function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
     V_pred    = Z * P_pred * Z' + H
     V_pred    = 0.5 * (V_pred + V_pred')
     invV_pred = inv(V_pred)
-
-    invV_t1 = invV_pred
+    invV_t1   = invV_pred
 
     # We write ΔP in terms of W_t and M_t: ΔP = W_t * M_t * W_t'
-    W_t      = T * P_pred * Z'   # (Eq 12)
-    M_t      = -invV_pred        # (Eq 13)
+    W_t      = T * P_pred * Z' # (Eq 12)
+    M_t      = -invV_pred      # (Eq 13)
     kal_gain = W_t * invV_pred
 
     # Initialize loglikelihoods to zeros so that the ones we don't update
     # (those in presample) contribute zero towards sum of loglikelihoods.
-    loglh    = Vector{Float64}(Nt)
+    loglh    = Vector{Float64}(undef, Nt)
     zero_vec = zeros(Ny)
     ν_t      = zero_vec
     P        = P_pred
 
     for t in 1:Nt
         # Step 1: Compute forecast error, ν_t and evaluate likelihoood
-        yhat = Z * s_pred + D
-        ν_t  = y[:, t] - yhat
-
-        # Symptom of a bad parameter draw: simply tells callee to redraw
-        if !isposdef(V_pred)
-            return NaN
-        else
-            loglh[t] = logpdf(MvNormal(zero_vec, V_pred), ν_t)
-        end
+        yhat     = Z * s_pred + D
+        ν_t      = y[:, t] - yhat
+        loglh[t] = logpdf(MvNormal(zero_vec, V_pred), ν_t)
 
         # Step 2: Compute s_{t+1} using Eq. 5
         if t < Nt
@@ -85,7 +79,7 @@ function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
             # Step 3: Update forecast error variance F_{t+1} (Eq 19)
             V_t1      = V_pred
             invV_t1   = invV_pred
-            V_pred    = V_pred + ZW_t * MWpZp        # F_{t+1}
+            V_pred    = V_pred + ZW_t * MWpZp    # F_{t+1}
             V_pred    = 0.5 * (V_pred + V_pred')
             invV_pred = inv(V_pred)
 
@@ -95,14 +89,14 @@ function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
             kal_gain  = (kal_gain * V_t1 + TW_t * MWpZp) * invV_pred
 
             # Step 5: Update W
-            W_t = TW_t - kal_gain * ZW_t            # W_{t+1}
+            W_t = TW_t - kal_gain * ZW_t         # W_{t+1}
 
             # Step 6: Update M
-            M_t = M_t + MWpZp * invV_t1 * MWpZp'    # M_{t+1}
+            M_t = M_t + MWpZp * invV_t1 * MWpZp' # M_{t+1}
             M_t = 0.5 * (M_t + M_t')
 
-            # 'Fast Kalman' Algorithm - shut off when tol = 0
-            if (maximum(abs.(kal_gain - kal_gain1)) < tol)
+            # 'Fast Kalman' Algorithm: by default shut off
+            if (tol > 0.0) && (maximum(abs.(kal_gain - kal_gain1)) < tol)
                 converged = true
             end
         end
@@ -115,13 +109,14 @@ function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
         P_TT = P - P' * Z' * invV_t1 * Z * P
         return sum(loglh), loglh, s_TT, P_TT
     else
-        return sum(loglh)
+        return loglh
     end
 end
 
 function remove_presample!(Nt0::Int, loglh::Vector{S}) where {S<:AbstractFloat}
-    out = remove_presample!(Nt0, loglh, Array{Float64, 2}(0,0),
-                            Array{Float64, 3}(0,0,0), Array{Float64, 2}(0,0),
-                            Array{Float64, 3}(0,0,0), outputs = [:loglh])
+    out = remove_presample!(Nt0, loglh, Array{Float64, 2}(undef, 0,0),
+                            Array{Float64,3}(undef, 0,0,0),
+                            Array{Float64, 2}(undef, 0,0),
+                            Array{Float64, 3}(undef, 0,0,0), outputs = [:loglh])
     return out[1]
 end
