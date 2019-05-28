@@ -133,13 +133,6 @@ function durbin_koopman_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abst
     # Compute y* = y - y+
     y_star = y .- y_plus
 
-    # TEMP
-    # # Cast to Matrix{Union{S, Missing}} to ensure
-    # # conformity because for some reason
-    # # arithmetic operators on two Matrix{Union{S, Missing}} returns
-    # # a matrix of concrete type S.
-    # y_star = convert(Matrix{Union{S, Missing}}, y_star)
-
     # Run the Kalman filter on y*
     # Note that we pass in `zeros(Ny)` instead of `D` because the
     # measurement equation for y* has no constant term
