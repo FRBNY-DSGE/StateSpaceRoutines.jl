@@ -1,7 +1,0 @@
-julia 0.7
-Distributions
-LinearAlgebra
-Roots
-QuantEcon
-HDF5
-JLD2
