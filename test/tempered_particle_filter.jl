@@ -22,35 +22,9 @@ tuning = Dict(:r_star => 2., :c_init => 0.3, :target_accept_rate => 0.4,
 Ψ(s_t::AbstractVector{Float64}) = ZZ*s_t + DD
 
 # Load in test inputs and outputs
-
-#test_file_inputs = JLD2.load("reference/tpf_aux_inputs.jld2")
-#=φ_old, norm_weights, coeff_terms, log_e_1_terms,
-log_e_2_terms, inc_weights, s_t_nontemp = jldopen("reference/tpf_aux_inputs.jld2","r") do file
-    read(file, "phi_old"),
-    read(file, "norm_weights"),
-    read(file, "coeff_terms"),
-    read(file, "log_e_1_terms"),
-    read(file, "log_e_2_terms"),
-    read(file, "inc_weights"),
-    read(file, "s_t_nontemp")
-end
-HH = cov(F_u)
-=#
 test_file_inputs = load("reference/tpf_aux_inputs.jld2")
 test_file_outputs = load("reference/tpf_aux_outputs.jld2")
 
-## Correction and Associated Auxiliary Function Tests
-#=
-φ_old = test_file_inputs["phi_old"]
-norm_weights = test_file_inputs["norm_weights"]
-coeff_terms = test_file_inputs["coeff_terms"]
-log_e_1_terms = test_file_inputs["log_e_1_terms"]
-log_e_2_terms = test_file_inputs["log_e_2_terms"]
-inc_weights = test_file_inputs["inc_weights"]
-
-HH = cov(F_u)
-s_t_nontemp = test_file_inputs["s_t_nontemp"]
-=#
 φ_old = test_file_inputs["phi_old"]
 norm_weights = test_file_inputs["norm_weights"]
 coeff_terms = test_file_inputs["coeff_terms"]
@@ -107,5 +81,5 @@ out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_in
 @testset "TPF tests" begin
     @test out_no_parallel[1] ≈ -302.99967306704133
     # This is different than in Julia6 because @distributed seeds differently than @parallel
-    @test out_parallel_one_worker[1] ≈ -303.64727963725073 #Julia 6 was: -306.8211172094595
+    @test out_parallel_one_worker[1] ≈ -303.64727963725073 # Julia 6 was: -306.8211172094595
 end

@@ -138,7 +138,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
         # Initialize s_t_nontemp and ϵ_t for this period
         @sync @distributed for i in 1:n_particles
-        #@mypar parallel for i in 1:n_particles
             ϵ_t[:, i] = rand(F_ϵ)
             s_t_nontemp[:, i] = Φ(s_t1_temp[:, i], ϵ_t[:, i])
         end

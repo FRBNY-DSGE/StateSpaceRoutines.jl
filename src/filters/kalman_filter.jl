@@ -336,23 +336,6 @@ function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractAr
     return loglh
 end
 
-#=
-function kalman_filter(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
-                       Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
-                       s_0::Vector{S} = Vector{S}(undef, 0),
-                       P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
-                       outputs::Vector{Symbol} = [:loglh, :pred, :filt],
-                       Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
-
-    if outputs == [:loglh]
-        return kalman_likelihood(y, T, R, C, Q, Z, D, E, s_0 = s_0, P_0 = P_0,
-                                 Nt0 = Nt0, tol = tol)
-    end
-    return kalman_filtered_states(y, T, R, C, Q, Z, D, E, s_0 = s_0, P_0 = P_0,
-                                  outputs = outputs, Nt0 = Nt0, tol = tol)
-end
-=#
-
 function kalman_likelihood(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
                            Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
                            s_0::Vector{S} = Vector{S}(undef, 0),
@@ -461,9 +444,9 @@ remove_presample!(Nt0, loglh, s_pred, P_pred, s_filt, P_filt)
 Remove the first `Nt0` periods from all other input arguments and return.
 """
 function remove_presample!(Nt0::Int, loglh::Vector{S},
-        s_pred::Matrix{S}, P_pred::Array{S, 3},
-        s_filt::Matrix{S}, P_filt::Array{S, 3};
-        outputs::Vector{Symbol} = [:loglh, :pred, :filt]) where {S<:AbstractFloat}
+                           s_pred::Matrix{S}, P_pred::Array{S, 3},
+                           s_filt::Matrix{S}, P_filt::Array{S, 3};
+                           outputs::Vector{Symbol} = [:loglh, :pred, :filt]) where {S<:AbstractFloat}
     if Nt0 > 0
         if :loglh in outputs
             loglh  = loglh[(Nt0+1):end]
