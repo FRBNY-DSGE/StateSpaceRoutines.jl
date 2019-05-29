@@ -1,3 +1,10 @@
+# StateSpaceRoutines.jl v0.2.0 Release Notes
+
+## New features and enhancements
+- Add option to specify a likelihood convergence tolerance (the keyword argument, `tol`) for the `kalman_filter` and `chand_recursion`.
+- Save the `PZV` matrix in the `KalmanFilter` type, (`P_pred' * Z' * inv(V_pred)`), for state and state variance-covariance matrix updating without needing to recompute that matrix product.
+- Write an additional `kalman_likelihood` set of methods for obtaining only the likelihood from the kalman filter. While `kalman_filter` can already do so, `kalman_likelihood` is optimized for performance, as it does not instantiate empty return values.
+
 # StateSpaceRoutines.jl v0.1.1 Release Notes
 
 ## Performance changes
