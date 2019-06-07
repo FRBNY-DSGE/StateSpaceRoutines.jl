@@ -27,6 +27,7 @@ module StateSpaceRoutines
 
     const VERBOSITY = Dict(:none => 0, :low => 1, :high => 2)
 
+    include("filters/util.jl")
     include("filters/kalman_filter.jl")
     include("filters/chand_recursion.jl")
     include("filters/tempered_particle_filter/util.jl")

@@ -112,11 +112,3 @@ function chand_recursion(y::Matrix{S}, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
         return loglh
     end
 end
-
-function remove_presample!(Nt0::Int, loglh::Vector{S}) where {S<:AbstractFloat}
-    out = remove_presample!(Nt0, loglh, Array{Float64, 2}(undef, 0,0),
-                            Array{Float64,3}(undef, 0,0,0),
-                            Array{Float64, 2}(undef, 0,0),
-                            Array{Float64, 3}(undef, 0,0,0), outputs = [:loglh])
-    return out[1]
-end
