@@ -1,7 +1,8 @@
 """
 ```
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, y_t,
-    s_t_nontemp, det_HH, inv_HH; initialize = false, parallel = false)
+    s_t_nontemp, det_HH, inv_HH; initialize = false, parallel = false,
+    dynamic_measurement = false, poolmodel = false)
 ```
 
 The outputs of the weight_kernel function are meant to speed up the adaptive φ
@@ -25,20 +26,18 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
     n_particles = length(coeff_terms)
     n_obs = length(y_t)
 
-    if dynamic_measurement
+    if poolmodel
         @sync @distributed for i in 1:n_particles
-            error = 0.
-            sq_error = 0.
-
             if initialize
-                coeff_terms[i] = 0.
-                log_e_1_terms[i] = 0.
-                log_e_2_terms[i] = 0.
+                # Initialization step (using 2π instead of φ_old)
+                coeff_terms[i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
             else
                 coeff_terms[i] = (φ_old)^(-n_obs/2)
-                log_e_1_terms[i] = 0.
-                log_e_2_terms[i] = 0.
             end
+
+            # PoolModel directly computes measurement likelihood
+            log_e_1_terms[i] = log(Ψ(s_t_nontempered[:, i]))
+            log_e_2_terms[i] = 0. # set to 1
         end
     else
         @sync @distributed for i in 1:n_particles
@@ -82,7 +81,8 @@ function next_φ(φ_old::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_term
         inc_weights  = Vector{Float64}(undef, n_particles)
         norm_weights = Vector{Float64}(undef, n_particles)
         ineff0(φ) =
-            ineff!(inc_weights, norm_weights, φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs) - r_star
+            ineff!(inc_weights, norm_weights, φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs;
+                   dynamic_measurement = dynamic_measurement, poolmodel = poolmodel) - r_star
 
         if stage == 1 || (sign(ineff0(φ_old)) != sign(ineff0(1.0)))
             # Solve for optimal φ if either
@@ -101,7 +101,7 @@ end
 """
 ```
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms,
-    log_e_2_terms, n_obs)
+     log_e_2_terms, n_obs)
 ```
 
 Compute (and modify in-place) incremental weights w̃ₜʲ and normalized weights W̃ₜʲ:
