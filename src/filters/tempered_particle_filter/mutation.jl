@@ -57,16 +57,11 @@ function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Flo
     accept = 0
 
     # Compute posterior at initial ϵ_t
-    if dynamic_measurement
-        if poolmodel
-            Ψ1 = x -> Ψ(x) # likelihood, when making fully dynamic, we need to adjust this
-        else
-            Ψ1 = x -> Ψ(x; likelihood = true) # may change this decision later
-        end
+    if poolmodel
+        post_1 = Ψ(s_t) # PoolModel measurement eq is likelihood
     else
-        Ψ1 = x -> fast_mvnormal_pdf(y_t - Ψ(x), scaled_det_HH, scaled_inv_HH)
+        post_1 = fast_mvnormal_pdf(y_t - Ψ(s_t), scaled_det_HH, scaled_inv_HH)
     end
-    post_1 = Ψ1(s_t)
     post_2 = fast_mvnormal_pdf(ϵ_t)
     post   = post_1 * post_2
 
@@ -76,8 +71,8 @@ function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Flo
         s_new = Φ(s_t1, ϵ_new)
 
         # Calculate posterior
-        # post_new_1 = fast_mvnormal_pdf(y_t - Ψ(s_new), scaled_det_HH, scaled_inv_HH)
-        post_new_1 = Ψ1(s_new)
+        post_new_1 = poolmodel ? Ψ(s_new) : fast_mvnormal_pdf(y_t - Ψ(s_new),
+                                                              scaled_det_HH, scaled_inv_HH)
         post_new_2 = fast_mvnormal_pdf(ϵ_new)
         post_new   = post_new_1 * post_new_2
 
