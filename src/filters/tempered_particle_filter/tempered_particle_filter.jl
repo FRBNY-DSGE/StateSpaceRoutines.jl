@@ -140,7 +140,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         n_obs_t    = length(y_t)
         Ψ_t        = dynamic_measurement ? (x,t) -> Ψ(x,t)[nonmissing]: x -> Ψ(x)[nonmissing]
         HH_t       = HH[nonmissing, nonmissing]
-        inv_HH_t   = inv(HH_t)
+        inv_HH_t   = poolmodel ? 0 : inv(HH_t) # poolmodel -> don't need HH
         det_HH_t   = det(HH_t)
 
         # Initialize s_t_nontemp and ϵ_t for this period
