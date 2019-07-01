@@ -11,7 +11,9 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
                    det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::Float64,
                    y_t::Vector{Float64}, s_t::M, s_t1::M,
                    ϵ_t::M, c::Float64, n_mh_steps::Int;
-                   parallel::Bool = false) where M<:AbstractMatrix{Float64}
+                   parallel::Bool = false,
+                   dynamic_measurement::Bool = false,
+                   poolmodel::Bool = false) where M<:AbstractMatrix{Float64}
     # Sizes
     n_obs = size(y_t, 1)
     n_particles = size(ϵ_t, 2)
@@ -30,7 +32,8 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
     @sync @distributed for i in 1:n_particles
         s_t[:,i], ϵ_t[:,i], accept_vec[i] =
             mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1[:,i], s_t[:,i], ϵ_t[:,i],
-                    scaled_det_HH, scaled_inv_HH, n_mh_steps)
+                    scaled_det_HH, scaled_inv_HH, n_mh_steps;
+                     dynamic_measurement = dynamic_measurement)
     end
 
     # Calculate and return acceptance rate
@@ -48,13 +51,21 @@ the new `s_t`, `ϵ_t`, and the number of acceptances `accept`.
 """
 function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Float64},
                   s_t1::Vector{Float64}, s_t::Vector{Float64}, ϵ_t::Vector{Float64},
-                  scaled_det_HH::Float64, scaled_inv_HH::Matrix{Float64}, n_mh_steps::Int)
+                  scaled_det_HH::Float64, scaled_inv_HH::Matrix{Float64}, n_mh_steps::Int;
+                  dynamic_measurement::Bool = false, poolmodel::Bool = false)
     accept = 0
 
     # Compute posterior at initial ϵ_t
-    post_1 = fast_mvnormal_pdf(y_t - Ψ(s_t), scaled_det_HH, scaled_inv_HH)
-    post_2 = fast_mvnormal_pdf(ϵ_t)
-    post   = post_1 * post_2
+    if dynamic_measurement
+        if poolmodel
+            Ψ1 = x -> Ψ(x) # likelihood, when making fully dynamic, we need to adjust this
+        else
+            Ψ1 = x -> Ψ(x; likelihood = true) # may change this decision later
+        end
+    else
+        Ψ1 = x -> fast_mvnormal_pdf(y_t - Ψ(x), scaled_det_HH, scaled_inv_HH)
+    end
+    post_1 = Ψ1(s_t
 
     for j = 1:n_mh_steps
         # Draw ϵ_new and s_new

@@ -19,25 +19,43 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                         s_t_nontemp::AbstractMatrix{Float64},
                         det_HH::Float64, inv_HH::Matrix{Float64};
                         initialize::Bool = false,
-                        parallel::Bool = false) where V<:AbstractVector{Float64}
+                        parallel::Bool = false,
+                        dynamic_measurement::Bool = false) where V<:AbstractVector{Float64}
     # Sizes
     n_particles = length(coeff_terms)
     n_obs = length(y_t)
 
-    @sync @distributed for i in 1:n_particles
-       error    = y_t - Ψ(s_t_nontemp[:, i])
-        sq_error = dot(error, inv_HH * error)
+    if dynamic_measurement
+        @sync @distributed for i in 1:n_particles
+            error = 0.
+            sq_error = 0.
 
-        if initialize
-            # Initialization step (using 2π instead of φ_old)
-            coeff_terms[i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
-            log_e_1_terms[i] = 0.
-            log_e_2_terms[i] = -1/2 * sq_error
-        else
-            # Non-initialization step (tempering and final iteration)
-            coeff_terms[i]   = (φ_old)^(-n_obs/2)
-            log_e_1_terms[i] = -1/2 * (-φ_old) * sq_error
-            log_e_2_terms[i] = -1/2 * sq_error
+            if initialize
+                coeff_terms[i] = 0.
+                log_e_1_terms[i] = 0.
+                log_e_2_terms[i] = 0.
+            else
+                coeff_terms[i] = (φ_old)^(-n_obs/2)
+                log_e_1_terms[i] = 0.
+                log_e_2_terms[i] = 0.
+            end
+        end
+    else
+        @sync @distributed for i in 1:n_particles
+            error    = y_t - Ψ(s_t_nontemp[:, i])
+            sq_error = dot(error, inv_HH * error)
+
+            if initialize
+                # Initialization step (using 2π instead of φ_old)
+                coeff_terms[i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
+                log_e_1_terms[i] = 0.
+                log_e_2_terms[i] = -1/2 * sq_error
+            else
+                # Non-initialization step (tempering and final iteration)
+                coeff_terms[i]   = (φ_old)^(-n_obs/2)
+                log_e_1_terms[i] = -1/2 * (-φ_old) * sq_error
+                log_e_2_terms[i] = -1/2 * sq_error
+            end
         end
     end
     return nothing

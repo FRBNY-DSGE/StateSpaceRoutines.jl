@@ -73,7 +73,9 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                                   c_init::S = 0.3, target_accept_rate::S = 0.4,
                                   n_presample_periods::Int = 0, allout::Bool = true,
                                   parallel::Bool = false,
-                                  verbose::Symbol = :high) where S<:AbstractFloat
+                                  verbose::Symbol = :high,
+                                  dynamic_measurement::Bool = false,
+                                  poolmodel::Bool = false) where S<:AbstractFloat
     #--------------------------------------------------------------
     # Setup
     #--------------------------------------------------------------
@@ -136,7 +138,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         nonmissing = isfinite.(y_t)
         y_t        = y_t[nonmissing]
         n_obs_t    = length(y_t)
-        Ψ_t        = x -> Ψ(x)[nonmissing]
+        Ψ_t        = dynamic_measurement ? (x,t) -> Ψ(x,t)[nonmissing]: x -> Ψ(x)[nonmissing]
         HH_t       = HH[nonmissing, nonmissing]
         inv_HH_t   = inv(HH_t)
         det_HH_t   = det(HH_t)
@@ -160,8 +162,10 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             ### 1. Correction
             # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
             weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
-                           Ψ, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
-                           initialize = stage == 1, parallel = parallel)
+                           x -> Ψ(x,t), y_t, s_t_nontemp, det_HH_t, inv_HH_t;
+                           initialize = stage == 1, parallel = parallel,
+                           dynamic_measurement = dynamic_measurement,
+                           poolmodel = poolmodel)
 
             φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
                            r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
@@ -193,7 +197,9 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             if stage != 1
                 accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
                                         s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
-                                        parallel = parallel)
+                                        parallel = parallel,
+                                        dynamic_measurement = dynamic_measurement,
+                                        poolmodel)
             end
 
             φ_old = φ_new
