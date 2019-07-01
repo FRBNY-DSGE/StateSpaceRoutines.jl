@@ -199,7 +199,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                                         s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
                                         parallel = parallel,
                                         dynamic_measurement = dynamic_measurement,
-                                        poolmodel)
+                                        poolmodel = poolmodel)
             end
 
             φ_old = φ_new

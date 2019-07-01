@@ -33,7 +33,8 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
         s_t[:,i], ϵ_t[:,i], accept_vec[i] =
             mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1[:,i], s_t[:,i], ϵ_t[:,i],
                     scaled_det_HH, scaled_inv_HH, n_mh_steps;
-                     dynamic_measurement = dynamic_measurement)
+                     dynamic_measurement = dynamic_measurement,
+                     poolmodel = poolmodel)
     end
 
     # Calculate and return acceptance rate
@@ -65,7 +66,9 @@ function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Flo
     else
         Ψ1 = x -> fast_mvnormal_pdf(y_t - Ψ(x), scaled_det_HH, scaled_inv_HH)
     end
-    post_1 = Ψ1(s_t
+    post_1 = Ψ1(s_t)
+    post_2 = fast_mvnormal_pdf(ϵ_t)
+    post   = post_1 * post_2
 
     for j = 1:n_mh_steps
         # Draw ϵ_new and s_new
@@ -73,7 +76,8 @@ function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Flo
         s_new = Φ(s_t1, ϵ_new)
 
         # Calculate posterior
-        post_new_1 = fast_mvnormal_pdf(y_t - Ψ(s_new), scaled_det_HH, scaled_inv_HH)
+        # post_new_1 = fast_mvnormal_pdf(y_t - Ψ(s_new), scaled_det_HH, scaled_inv_HH)
+        post_new_1 = Ψ1(s_new)
         post_new_2 = fast_mvnormal_pdf(ϵ_new)
         post_new   = post_new_1 * post_new_2
 
