@@ -19,8 +19,8 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                         s_t_nontemp::AbstractMatrix{Float64},
                         det_HH::Float64, inv_HH::Matrix{Float64};
                         initialize::Bool = false,
-                        parallel::Bool = false,
-                        dynamic_measurement::Bool = false) where V<:AbstractVector{Float64}
+                        parallel::Bool = false, dynamic_measurement::Bool = false,
+                        poolmodel::Bool = false) where V<:AbstractVector{Float64}
     # Sizes
     n_particles = length(coeff_terms)
     n_obs = length(y_t)
