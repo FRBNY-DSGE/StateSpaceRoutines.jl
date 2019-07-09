@@ -18,7 +18,7 @@ This function modifies `coeff_terms`, `log_e_1_terms`, and `log_e_2_terms`.
 function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                         φ_old::Float64, Ψ::Function, y_t::Vector{Float64},
                         s_t_nontemp::AbstractMatrix{Float64},
-                        det_HH::Float64, inv_HH::Matrix{Float64};
+                        det_HH::Float64, inv_HH::Matrix{Float64}, t::Int64 = -1e3;
                         initialize::Bool = false,
                         parallel::Bool = false, dynamic_measurement::Bool = false,
                         poolmodel::Bool = false) where V<:AbstractVector{Float64}
@@ -36,7 +36,7 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
             end
 
             # PoolModel directly computes measurement likelihood
-            log_e_1_terms[i] = log(Ψ(s_t_nontempered[:, i]))
+            log_e_1_terms[i] = log(Ψ(s_t_nontempered[:, i],t))
             log_e_2_terms[i] = 0. # set to 1
         end
     else
@@ -81,8 +81,7 @@ function next_φ(φ_old::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_term
         inc_weights  = Vector{Float64}(undef, n_particles)
         norm_weights = Vector{Float64}(undef, n_particles)
         ineff0(φ) =
-            ineff!(inc_weights, norm_weights, φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs;
-                   dynamic_measurement = dynamic_measurement, poolmodel = poolmodel) - r_star
+            ineff!(inc_weights, norm_weights, φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs) - r_star
 
         if stage == 1 || (sign(ineff0(φ_old)) != sign(ineff0(1.0)))
             # Solve for optimal φ if either
