@@ -27,33 +27,67 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
     n_obs = length(y_t)
 
     if poolmodel
-        @sync @distributed for i in 1:n_particles
-            if initialize
-                # Initialization step (using 2π instead of φ_old)
-                coeff_terms[i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
-            else
-                coeff_terms[i] = (φ_old)^(-n_obs/2)
-            end
+        if parallel
+            @sync @distributed for i in 1:n_particles
+                if initialize
+                    # Initialization step (using 2π instead of φ_old)
+                    coeff_terms[i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
+                else
+                    coeff_terms[i] = (φ_old)^(-n_obs/2)
+                end
 
-            # PoolModel directly computes measurement likelihood
-            log_e_1_terms[i] = log(Ψ(s_t_nontempered[:, i],t))
-            log_e_2_terms[i] = 0. # set to 1
+                # PoolModel directly computes measurement likelihood
+                log_e_1_terms[i] = log(Ψ(s_t_nontempered[:, i],t))
+                log_e_2_terms[i] = 0. # set to 1
+            end
+        else
+            for i in 1:n_particles
+                if initialize
+                    # Initialization step (using 2π instead of φ_old)
+                    coeff_terms[i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
+                else
+                    coeff_terms[i] = (φ_old)^(-n_obs/2)
+                end
+
+                # PoolModel directly computes measurement likelihood
+                log_e_1_terms[i] = log(Ψ(s_t_nontempered[:, i],t))
+                log_e_2_terms[i] = 0. # set to 1
+            end
         end
     else
-        @sync @distributed for i in 1:n_particles
-            error    = y_t - Ψ(s_t_nontemp[:, i])
-            sq_error = dot(error, inv_HH * error)
+        if parallel
+            @sync @distributed for i in 1:n_particles
+                error    = y_t - Ψ(s_t_nontemp[:, i])
+                sq_error = dot(error, inv_HH * error)
 
-            if initialize
-                # Initialization step (using 2π instead of φ_old)
-                coeff_terms[i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
-                log_e_1_terms[i] = 0.
-                log_e_2_terms[i] = -1/2 * sq_error
-            else
-                # Non-initialization step (tempering and final iteration)
-                coeff_terms[i]   = (φ_old)^(-n_obs/2)
-                log_e_1_terms[i] = -1/2 * (-φ_old) * sq_error
-                log_e_2_terms[i] = -1/2 * sq_error
+                if initialize
+                    # Initialization step (using 2π instead of φ_old)
+                    coeff_terms[i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
+                    log_e_1_terms[i] = 0.
+                    log_e_2_terms[i] = -1/2 * sq_error
+                else
+                    # Non-initialization step (tempering and final iteration)
+                    coeff_terms[i]   = (φ_old)^(-n_obs/2)
+                    log_e_1_terms[i] = -1/2 * (-φ_old) * sq_error
+                    log_e_2_terms[i] = -1/2 * sq_error
+                end
+            end
+        else
+           for i in 1:n_particles
+                error    = y_t - Ψ(s_t_nontemp[:, i])
+                sq_error = dot(error, inv_HH * error)
+
+                if initialize
+                    # Initialization step (using 2π instead of φ_old)
+                    coeff_terms[i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
+                    log_e_1_terms[i] = 0.
+                    log_e_2_terms[i] = -1/2 * sq_error
+                else
+                    # Non-initialization step (tempering and final iteration)
+                    coeff_terms[i]   = (φ_old)^(-n_obs/2)
+                    log_e_1_terms[i] = -1/2 * (-φ_old) * sq_error
+                    log_e_2_terms[i] = -1/2 * sq_error
+                end
             end
         end
     end

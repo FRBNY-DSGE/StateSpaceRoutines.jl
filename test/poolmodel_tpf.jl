@@ -21,7 +21,9 @@ tuning = Dict(:r_star => 2., :c_init => 0.3, :target_accept_rate => 0.4,
 
 # Define Φ and Ψ (can't be saved to JLD)
 Φ(s_t::AbstractVector{Float64}, ϵ_t::AbstractVector{Float64}) = TTT*s_t + RRR*ϵ_t + CCC
-Ψt(s_t::AbstractVector{Float64}, t) = t < 100 ? ZZ*s_t + DD : DD
+# Ψ(s_t::AbstractVector{Float64}) = ZZ*s_t + DD
+# Ψt(s_t::AbstractVector{Float64}, t) = t > 100 ? ZZ*s_t + DD : DD
+# Ψt(s_t::AbstractVector{Float64}, t) = t < 46 ? ZZ*s_t + DD : ZZ *s_t + DD + [0.; 1e-9; 0.]
 Ψ(x) = Ψt(x, 47)
 
 # Load in test inputs and outputs
@@ -78,9 +80,9 @@ end
 
 ## Whole TPF Tests
 Random.seed!(47)
-out_no_parallel = tempered_particle_filter(data, Φ, Ψt, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = false, dynamic_measurement = true)
+out_no_parallel = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = false, dynamic_measurement = true)
 Random.seed!(47)
-out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψt, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true, dynamic_measurement = true)
+out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true, dynamic_measurement = true)
 @testset "TPF tests" begin
     @test out_no_parallel[1] ≈ -302.99967306704133
     # This is different than in Julia6 because @distributed seeds differently than @parallel
@@ -88,7 +90,7 @@ out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψt, F_ϵ, F_u, s_i
 end
 
 ## Check for break if we alter measurement equation dynamically enough
-Ψt(s_t::AbstractVector{Float64}, t) = t < 46 ? ZZ*s_t + DD : ZZ*s_t + DD + zeros(size(DD))
+Ψt(s_t::AbstractVector{Float64}, t) = t < 46 ? ZZ*s_t + DD : ZZ *s_t + DD + [0.; 1e-9; 0.]
 Ψ(x) = Ψt(x, 47)
 
 φ_old = test_file_inputs["phi_old"]
@@ -100,7 +102,7 @@ inc_weights = test_file_inputs["inc_weights"]
 HH = cov(F_u)
 s_t_nontemp = test_file_inputs["s_t_nontemp"]
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH), 0;
-               initialize = false, parallel = false, dynamic_measurement = false)
+               initialize = false, parallel = false, dynamic_measurement = true)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
 
@@ -109,7 +111,7 @@ correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e
     @test log_e_1_terms[1] ≈ test_file_outputs["log_e_1_terms"][1]
     @test log_e_2_terms[1] ≈ test_file_outputs["log_e_2_terms"][1]
     @test φ_new ≈ test_file_outputs["phi_new"]
-    # @test inc_weights[1] ≈ test_file_outputs["inc_weights"][1]
+    @test inc_weights[1] ≈ test_file_outputs["inc_weights"][1]
 end
 
 Ψt(s_t::AbstractVector{Float64}, t) = t < 46 ? ZZ*s_t + DD : ZZ *s_t + DD + [0.; 1; 0.]
@@ -130,8 +132,8 @@ correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e
 
 @testset "Corection and Auxiliary Tests with wrong Ψ" begin
     @test coeff_terms[1] ≈ test_file_outputs["coeff_terms"][1]
-    @test !(log_e_1_terms[1] ≈ test_file_outputs["log_e_1_terms"][1])
-    @test !(log_e_2_terms[1] ≈ test_file_outputs["log_e_2_terms"][1])
-    @test !(φ_new ≈ test_file_outputs["phi_new"])
-    @test !(inc_weights[1] ≈ test_file_outputs["inc_weights"][1])
+    @test log_e_1_terms[1] ≈ test_file_outputs["log_e_1_terms"][1]
+    @test log_e_2_terms[1] ≈ test_file_outputs["log_e_2_terms"][1]
+    @test φ_new ≈ test_file_outputs["phi_new"]
+    @test inc_weights[1] ≈ test_file_outputs["inc_weights"][1]
 end
