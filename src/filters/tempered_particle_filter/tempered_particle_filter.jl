@@ -139,18 +139,27 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         y_t        = y_t[nonmissing]
         n_obs_t    = length(y_t)
         if dynamic_measurement
-            Ψ_t = (x,t) -> Ψ(x,t)[nonmissing]
+            Ψ_t = x -> Ψ(x,t)[nonmissing]
+            Ψall = x -> Ψ(x,t)
         else
             Ψ_t = x -> Ψ(x)[nonmissing]
+            Ψall = Ψ
         end
         HH_t       = HH[nonmissing, nonmissing]
         inv_HH_t   = poolmodel ? 0 : inv(HH_t) # poolmodel -> don't need HH
         det_HH_t   = det(HH_t)
 
         # Initialize s_t_nontemp and ϵ_t for this period
-        @sync @distributed for i in 1:n_particles
-            ϵ_t[:, i] = rand(F_ϵ)
-            s_t_nontemp[:, i] = Φ(s_t1_temp[:, i], ϵ_t[:, i])
+        if parallel
+            @sync @distributed for i in 1:n_particles
+                ϵ_t[:, i] = rand(F_ϵ)
+                s_t_nontemp[:, i] = Φ(s_t1_temp[:, i], ϵ_t[:, i])
+            end
+        else
+             for i in 1:n_particles
+                ϵ_t[:, i] = rand(F_ϵ)
+                s_t_nontemp[:, i] = Φ(s_t1_temp[:, i], ϵ_t[:, i])
+            end
         end
 
         # Tempering initialization
@@ -166,7 +175,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             ### 1. Correction
             # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
             weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
-                           x -> Ψ(x,t), y_t, s_t_nontemp, det_HH_t, inv_HH_t;
+                           Ψall, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
                            initialize = stage == 1, parallel = parallel,
                            dynamic_measurement = dynamic_measurement,
                            poolmodel = poolmodel)
@@ -221,7 +230,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     if VERBOSITY[verbose] >= VERBOSITY[:low]
         println("=============================================")
     end
-
+o
     if allout
         return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times
     else
