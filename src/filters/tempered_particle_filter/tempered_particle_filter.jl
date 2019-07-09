@@ -225,7 +225,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     if VERBOSITY[verbose] >= VERBOSITY[:low]
         println("=============================================")
     end
-o
+
     if allout
         return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times
     else

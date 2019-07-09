@@ -6,6 +6,7 @@ my_tests = [
             "chand_recursion"
             "tempered_particle_filter"
             "smoothers"
+            "dyn_measure_tpf"
             ]
 
 for test in my_tests
