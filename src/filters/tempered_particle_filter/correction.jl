@@ -18,7 +18,7 @@ This function modifies `coeff_terms`, `log_e_1_terms`, and `log_e_2_terms`.
 function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                         φ_old::Float64, Ψ::Function, y_t::Vector{Float64},
                         s_t_nontemp::AbstractMatrix{Float64},
-                        det_HH::Float64, inv_HH::Matrix{Float64}, t::Int64 = -1e3;
+                        det_HH::Float64, inv_HH::Matrix{Float64}, t::Int64 = -1000;
                         initialize::Bool = false,
                         parallel::Bool = false, dynamic_measurement::Bool = false,
                         poolmodel::Bool = false) where V<:AbstractVector{Float64}

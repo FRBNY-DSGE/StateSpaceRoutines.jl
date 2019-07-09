@@ -1,4 +1,4 @@
-using JLD2, FileIO, Statistics, StateSpaceRoutines, Test
+using JLD2, FileIO, StateSpaceRoutines, Test, PDMats
 # Read in from JLD
 tpf_main_input = load("reference/tpf_main_inputs.jld2")
 data = tpf_main_input["data"]
@@ -19,9 +19,10 @@ tuning = Dict(:r_star => 2., :c_init => 0.3, :target_accept_rate => 0.4,
 
 # Define Φ and Ψ (can't be saved to JLD)
 Φ(s_t::AbstractVector{Float64}, ϵ_t::AbstractVector{Float64}) = TTT*s_t + RRR*ϵ_t + CCC
-Ψ(s_t::AbstractVector{Float64}) = ZZ*s_t + DD
-Ψ1(s_t::AbstractVector{Float64}, t) = t > 100 ? ZZ*s_t + DD : DD
-Ψ2(s_t::AbstractVector{Float64}, t) = t > 79 ? ZZ*s_t + DD : ZZ *s_t + DD + [.1e-3; zeros(length(DD)-1)]
+# Ψ(s_t::AbstractVector{Float64}) = ZZ*s_t + DD
+# Ψt(s_t::AbstractVector{Float64}, t) = t > 100 ? ZZ*s_t + DD : DD
+Ψt(s_t::AbstractVector{Float64}, t) = t < 46 ? ZZ*s_t + DD : ZZ *s_t + DD + 1000 .* ones(length(DD))
+Ψ(x) = Ψt(x, 47)
 
 # Load in test inputs and outputs
 test_file_inputs = load("reference/tpf_aux_inputs.jld2")
@@ -33,13 +34,11 @@ coeff_terms = test_file_inputs["coeff_terms"]
 log_e_1_terms = test_file_inputs["log_e_1_terms"]
 log_e_2_terms = test_file_inputs["log_e_2_terms"]
 inc_weights = test_file_inputs["inc_weights"]
-HH = Statistics.cov(F_u.Σ.mat)
+HH = cov(F_u)
 s_t_nontemp = test_file_inputs["s_t_nontemp"]
 
-# weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, x -> Ψ(x,47), data[:, 47], s_t_nontemp, det(HH), inv(HH), 0;
-#                initialize = false, parallel = false, dynamic_measurement = true)
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH), 0;
-               initialize = false, parallel = false, dynamic_measurement = false)
+               initialize = false, parallel = false, dynamic_measurement = true)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
 
@@ -50,7 +49,6 @@ correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e
     @test φ_new ≈ test_file_outputs["phi_new"]
     @test inc_weights[1] ≈ test_file_outputs["inc_weights"][1]
 end
-@assert false
 
 ## Selection Tests
 s_t1_temp = test_file_inputs["s_t1_temp"]
@@ -71,7 +69,7 @@ c = test_file_inputs["c"]
 
 c = update_c(c, accept_rate, tuning[:target_accept_rate])
 Random.seed!(47)
-mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps])
+mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps]; dynamic_measurement = true)
 
 @testset "Mutation Tests" begin
     @test s_t_nontemp[1] ≈ test_file_outputs["s_t_nontemp_mutation"][1]
