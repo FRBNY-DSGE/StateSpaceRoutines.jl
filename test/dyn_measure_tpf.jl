@@ -37,12 +37,13 @@ inc_weights = test_file_inputs["inc_weights"]
 HH = cov(F_u)
 s_t_nontemp = test_file_inputs["s_t_nontemp"]
 
-weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH), 0;
+weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
                initialize = false, parallel = false, dynamic_measurement = true)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
+
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
 
-@testset "Corection and Auxiliary Tests" begin
+@testset "Correction and Auxiliary Tests" begin
     @test coeff_terms[1] ≈ test_file_outputs["coeff_terms"][1]
     @test log_e_1_terms[1] ≈ test_file_outputs["log_e_1_terms"][1]
     @test log_e_2_terms[1] ≈ test_file_outputs["log_e_2_terms"][1]
@@ -50,7 +51,34 @@ correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e
     @test inc_weights[1] ≈ test_file_outputs["inc_weights"][1]
 end
 
+# Incorrect measurement equation
+Ψt(s_t::AbstractVector{Float64}, t) = t < 46 ? ZZ*s_t + DD : ZZ*s_t + DD + [0.; 5e-2; 0.];
+Ψ(x) = Ψt(x, 47)
+
+φ_old = test_file_inputs["phi_old"]
+norm_weights = test_file_inputs["norm_weights"]
+coeff_terms = test_file_inputs["coeff_terms"]
+log_e_1_terms = test_file_inputs["log_e_1_terms"]
+log_e_2_terms = test_file_inputs["log_e_2_terms"]
+inc_weights = test_file_inputs["inc_weights"]
+HH = cov(F_u)
+s_t_nontemp = test_file_inputs["s_t_nontemp"]
+
+weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
+               initialize = false, parallel = false, dynamic_measurement = true)
+φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
+
+correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
+@testset "Correction and Auxiliary Tests with Dynamically Wrong Measurement Equation" begin
+    @test !(log_e_1_terms[1] ≈ test_file_outputs["log_e_1_terms"][1])
+    @test !(log_e_2_terms[1] ≈ test_file_outputs["log_e_2_terms"][1])
+    @test !(φ_new ≈ test_file_outputs["phi_new"])
+    @test !(inc_weights[1] ≈ test_file_outputs["inc_weights"][1])
+end
+
 ## Selection Tests
+Ψt(s_t::AbstractVector{Float64}, t) = t < 100 ? ZZ*s_t + DD : DD
+Ψ(x) = Ψt(x, 47)
 s_t1_temp = test_file_inputs["s_t1_temp"]
 ϵ_t = test_file_inputs["eps_t"]
 
@@ -87,51 +115,4 @@ out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψt, F_ϵ, F_u, s_i
     @test out_parallel_one_worker[1] ≈ -303.64727963725073 # Julia 6 was: -306.8211172094595
 end
 
-## Check for break if we alter measurement equation dynamically enough
-Ψt(s_t::AbstractVector{Float64}, t) = t < 46 ? ZZ*s_t + DD : ZZ*s_t + DD + zeros(size(DD))
-Ψ(x) = Ψt(x, 47)
-
-φ_old = test_file_inputs["phi_old"]
-norm_weights = test_file_inputs["norm_weights"]
-coeff_terms = test_file_inputs["coeff_terms"]
-log_e_1_terms = test_file_inputs["log_e_1_terms"]
-log_e_2_terms = test_file_inputs["log_e_2_terms"]
-inc_weights = test_file_inputs["inc_weights"]
-HH = cov(F_u)
-s_t_nontemp = test_file_inputs["s_t_nontemp"]
-weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH), 0;
-               initialize = false, parallel = false, dynamic_measurement = false)
-φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
-correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
-
-@testset "Corection and Auxiliary Tests with slightly wrong Ψ" begin
-    @test coeff_terms[1] ≈ test_file_outputs["coeff_terms"][1]
-    @test log_e_1_terms[1] ≈ test_file_outputs["log_e_1_terms"][1]
-    @test log_e_2_terms[1] ≈ test_file_outputs["log_e_2_terms"][1]
-    @test φ_new ≈ test_file_outputs["phi_new"]
-    # @test inc_weights[1] ≈ test_file_outputs["inc_weights"][1]
-end
-
-Ψt(s_t::AbstractVector{Float64}, t) = t < 46 ? ZZ*s_t + DD : ZZ *s_t + DD + [0.; 1; 0.]
-Ψ(x) = Ψt(x, 47)
-
-φ_old = test_file_inputs["phi_old"]
-norm_weights = test_file_inputs["norm_weights"]
-coeff_terms = test_file_inputs["coeff_terms"]
-log_e_1_terms = test_file_inputs["log_e_1_terms"]
-log_e_2_terms = test_file_inputs["log_e_2_terms"]
-inc_weights = test_file_inputs["inc_weights"]
-HH = cov(F_u)
-s_t_nontemp = test_file_inputs["s_t_nontemp"]
-weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH), 0;
-               initialize = false, parallel = false, dynamic_measurement = true)
-φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
-correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
-
-@testset "Corection and Auxiliary Tests with wrong Ψ" begin
-    @test coeff_terms[1] ≈ test_file_outputs["coeff_terms"][1]
-    @test !(log_e_1_terms[1] ≈ test_file_outputs["log_e_1_terms"][1])
-    @test !(log_e_2_terms[1] ≈ test_file_outputs["log_e_2_terms"][1])
-    @test !(φ_new ≈ test_file_outputs["phi_new"])
-    @test !(inc_weights[1] ≈ test_file_outputs["inc_weights"][1])
-end
+nothing
