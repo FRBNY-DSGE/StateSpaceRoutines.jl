@@ -1,5 +1,4 @@
-using JLD2, FileIO, Statistics, StateSpaceRoutines, Test, PDMats
-using LinearAlgebra, Distributions, Random
+using JLD2
 
 # Read in from JLD
 tpf_main_input = load("reference/tpf_main_inputs.jld2")
@@ -52,8 +51,8 @@ correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e
 end
 
 # Incorrect measurement equation
-Ψt(s_t::AbstractVector{Float64}, t) = t < 46 ? ZZ*s_t + DD : ZZ*s_t + DD + [0.; 5e-2; 0.];
-Ψ(x) = Ψt(x, 47)
+Ψtinc(s_t::AbstractVector{Float64}, t) = t < 46 ? ZZ*s_t + DD : ZZ*s_t + DD + [0.; 1; 0.];
+Ψinc(x) = Ψtinc(x, 47)
 
 φ_old = test_file_inputs["phi_old"]
 norm_weights = test_file_inputs["norm_weights"]
@@ -64,7 +63,7 @@ inc_weights = test_file_inputs["inc_weights"]
 HH = cov(F_u)
 s_t_nontemp = test_file_inputs["s_t_nontemp"]
 
-weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
+weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψinc, data[:, 47], s_t_nontemp, det(HH), inv(HH);
                initialize = false, parallel = false, dynamic_measurement = true)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 
