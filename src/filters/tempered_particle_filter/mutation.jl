@@ -68,7 +68,7 @@ function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Flo
 
     # Compute posterior at initial ϵ_t
     if poolmodel
-        post_1 = Ψ(s_t) # PoolModel measurement eq is likelihood
+        post_1 = exp(Ψ(s_t)) # PoolModel measurement eq is log likelihood, so exponentiate
     else
         post_1 = fast_mvnormal_pdf(y_t - Ψ(s_t), scaled_det_HH, scaled_inv_HH)
     end
@@ -81,7 +81,7 @@ function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Flo
         s_new = Φ(s_t1, ϵ_new)
 
         # Calculate posterior
-        post_new_1 = poolmodel ? Ψ(s_new) : fast_mvnormal_pdf(y_t - Ψ(s_new),
+        post_new_1 = poolmodel ? exp(Ψ(s_new)) : fast_mvnormal_pdf(y_t - Ψ(s_new),
                                                               scaled_det_HH, scaled_inv_HH)
         post_new_2 = fast_mvnormal_pdf(ϵ_new)
         post_new   = post_new_1 * post_new_2

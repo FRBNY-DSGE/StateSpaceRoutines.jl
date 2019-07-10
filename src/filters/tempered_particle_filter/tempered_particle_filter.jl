@@ -90,8 +90,25 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     n_obs, T  = size(data)
     n_shocks  = length(F_ϵ)
     n_states  = size(s_init, 1)
-    QQ        = cov(F_ϵ)
-    HH        = cov(F_u)
+    QQerr = false
+    HHerr = false
+    try
+        QQ = cov(F_ϵ)
+    catch
+        QQerr = true
+    end
+    try
+        HH = cov(F_u)
+    catch
+        HHerr = true
+    end
+    if QQerr
+        QQ = F_ϵ.σ * ones(1,1)
+    end
+    if HHerr
+        HH = zeros(1,1)
+    end
+    @assert @isdefined HH
 
     # Initialize output vectors
     loglh = zeros(T)
@@ -139,15 +156,15 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         y_t        = y_t[nonmissing]
         n_obs_t    = length(y_t)
         if dynamic_measurement
-            Ψ_t = x -> Ψ(x,t)[nonmissing]
+            Ψ_t  = x -> Ψ(x,t)[nonmissing]
             Ψall = x -> Ψ(x,t)
         else
-            Ψ_t = x -> Ψ(x)[nonmissing]
+            Ψ_t  = x -> Ψ(x)[nonmissing]
             Ψall = Ψ
         end
-        HH_t       = HH[nonmissing, nonmissing]
-        inv_HH_t   = poolmodel ? 0 : inv(HH_t) # poolmodel -> don't need HH
-        det_HH_t   = det(HH_t)
+        HH_t     = poolmodel ? HH : HH[nonmissing, nonmissing] # poolmodel -> keep missing is ok
+        inv_HH_t = poolmodel ? zeros(1,1) : inv(HH_t) # poolmodel -> don't need inv__HH
+        det_HH_t = poolmodel ? 0. : det(HH_t) # poolmodel -> don't need det_HH
 
         # Initialize s_t_nontemp and ϵ_t for this period
         if parallel
