@@ -78,27 +78,33 @@ true_inc_wt = φ_new^(1/2) * coeff_terms[1] * exp(log_e_1_terms[1]) * exp(φ_new
     @test φ_new ≈ 1.0 # test_file_outputs["phi_new"]
     @test inc_weights[1] ≈ true_inc_wt # test_file_outputs["inc_weights"][1]
 end
-@assert false
+
 
 ## Mutation Tests
-QQ = cov(F_ϵ)
+# s_t1_temp = test_file_inputs["s_t1_temp"]
+s_t1_temp = [.49; .51] * ones(1,1000)
+ϵ_t = reshape(test_file_inputs["eps_t"][1,:], 1, 1000)
+QQ = F_ϵ.σ * ones(1,1)
 accept_rate = test_file_inputs["accept_rate"]
 c = test_file_inputs["c"]
 
 c = update_c(c, accept_rate, tuning[:target_accept_rate])
 Random.seed!(47)
-mutation!(Φ, Ψ47, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps]; dynamic_measurement = true, poolmodel = true)
+StateSpaceRoutines.mutation!(Φ, Ψ47, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps]; dynamic_measurement = true, poolmodel = true)
 
 @testset "Mutation Tests" begin
-    @test s_t_nontemp[1] ≈ test_file_outputs["s_t_nontemp_mutation"][1]
-    @test ϵ_t[1] ≈ test_file_outputs["eps_t_mutation"][1]
+    @test s_t_nontemp[1] ≈ 0.2699446459556935 # test_file_outputs["s_t_nontemp_mutation"][1]
+    @test ϵ_t[1] ≈ -0.693335270423147625246545 # test_file_outputs["eps_t_mutation"][1]
 end
 
 ## Whole TPF Tests
 Random.seed!(47)
+s_init = reshape(rand(Uniform(.4, .6), 1000), 1, 1000)
+s_init = [s_init; 1 .- s_init]
 out_no_parallel = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = false, dynamic_measurement = true, poolmodel = true)
 Random.seed!(47)
 out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true, dynamic_measurement = true, poolmodel = true)
+@assert false
 @testset "TPF tests" begin
     @test out_no_parallel[1] ≈ -302.99967306704133
     # This is different than in Julia6 because @distributed seeds differently than @parallel
