@@ -101,10 +101,9 @@ end
 Random.seed!(47)
 s_init = reshape(rand(Uniform(.4, .6), 1000), 1, 1000)
 s_init = [s_init; 1 .- s_init]
-out_no_parallel = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = false, dynamic_measurement = true, poolmodel = true)
+out_no_parallel = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none,fixed_sched = [1.], parallel = false, dynamic_measurement = true, poolmodel = true)
 Random.seed!(47)
-out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true, dynamic_measurement = true, poolmodel = true)
-@assert false
+out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, fixed_sched = [1.], parallel = true, dynamic_measurement = true, poolmodel = true)
 @testset "TPF tests" begin
     @test out_no_parallel[1] ≈ -302.99967306704133
     # This is different than in Julia6 because @distributed seeds differently than @parallel
