@@ -1,6 +1,4 @@
 using Statistics, DSGE, DSGEModels, CSV, Dates
-# using JLD2, FileIO, Statistics, StateSpaceRoutines, Test, PDMats
-# using LinearAlgebra, Distributions, Random, DSGE, DSGEModels, CSV, Dates
 
 # Read in from JLD
 m805 = Model805()
@@ -23,9 +21,6 @@ m = PoolModel(Dict(:Model805 => y805, :Model904 => y904), 4,
                Dict(:Model805 => lppd_805, :Model904 => lppd_904),
                [m805, m904])
 data = zeros(1,get_periods(m))
-# tempered_particle_filter(data, get_Φ(m), get_Ψ(m), get_F_ϵ(m),
-#                          get_F_u(m), draw_prior(m); parallel = false,
-#                          dynamic_measurement = true, poolmodel = true)
 
 # tpf_main_input = load("reference/tpf_main_inputs_poolmodel.jld2")
 # data     = tpf_main_input["data"]
@@ -37,11 +32,7 @@ data = zeros(1,get_periods(m))
 # s_init = tpf_main_input["s_init"]
 
 # Define transition eq, measurement eq, and shock distributions
-Φ = get_Φ(m)
-Ψ = get_Ψ(m)
-Ψ47(x) = get_Ψ(m)(x,47)
-F_ϵ = get_F_ϵ(m)
-F_u = get_F_u(m)
+Ψ47_pm(x) = get_Ψ(m)(x,47)
 
 # Tune algorithm
 tuning = Dict(:r_star => 2., :c_init => 0.3, :target_accept_rate => 0.4,
@@ -64,7 +55,8 @@ HH = ones(1,1)
 # s_t_nontemp = test_file_inputs["s_t_nontemp"]
 s_t_nontemp = [.5; .5] * ones(1,1000) # this might be desirable since all particles same then
 
-weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ47, data[:, 47], s_t_nontemp, det(HH), inv(HH); initialize = false, parallel = false,
+Random.seed!(1793)
+weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ47_pm, data[:, 47], s_t_nontemp, det(HH), inv(HH); initialize = false, parallel = false,
                dynamic_measurement = true, poolmodel = true)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
@@ -80,17 +72,43 @@ true_inc_wt = φ_new^(1/2) * coeff_terms[1] * exp(log_e_1_terms[1]) * exp(φ_new
     @test inc_weights[1] ≈ true_inc_wt # test_file_outputs["inc_weights"][1]
 end
 
+φ_old = test_file_inputs["phi_old"]
+# φ_old = (2 * pi)^(-1/2)
+norm_weights = test_file_inputs["norm_weights"]
+coeff_terms = test_file_inputs["coeff_terms"]
+log_e_1_terms = test_file_inputs["log_e_1_terms"]
+log_e_2_terms = test_file_inputs["log_e_2_terms"]
+inc_weights = test_file_inputs["inc_weights"]
+s_t_nontemp0 = [.5; .5] * ones(1, 999)
+s_t_nontemp = hcat(s_t_nontemp0, [.49; .51])
+weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ47_pm, data[:, 47], s_t_nontemp, det(HH), inv(HH); initialize = false, parallel = false,
+               dynamic_measurement = true, poolmodel = true)
+φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
+correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
+true_inc_wt = φ_new^(1/2) * (coeff_terms[1] * exp(log_e_1_terms[1])
+                             * exp(φ_new * log_e_2_terms[1]) * 999/1000
+                             + coeff_terms[end] * exp(log_e_1_terms[end])
+                             * exp(φ_new * log_e_2_terms[end]) * 1/1000)
+
+@testset "Ensure different states lead to different measurement errors" begin
+    @test norm_weights[1] != norm_weights[end]
+    @test log_e_1_terms[1] != log_e_1_terms[end]
+    @test log_e_2_terms[1] != log_e_2_terms[end]
+    @test inc_weights[1] != inc_weights[end]
+    @test true_inc_wt == mean(inc_weights)
+end
+
 ## Mutation Tests
 # s_t1_temp = test_file_inputs["s_t1_temp"]
 s_t1_temp = [.49; .51] * ones(1,1000)
 ϵ_t = reshape(test_file_inputs["eps_t"][1,:], 1, 1000)
-QQ = F_ϵ.σ * ones(1,1)
+QQ = get_F_ϵ(m).σ * ones(1,1)
 accept_rate = test_file_inputs["accept_rate"]
 c = test_file_inputs["c"]
 
 c = update_c(c, accept_rate, tuning[:target_accept_rate])
 Random.seed!(47)
-StateSpaceRoutines.mutation!(Φ, Ψ47, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps]; dynamic_measurement = true, poolmodel = true)
+StateSpaceRoutines.mutation!(get_Φ(m), Ψ47_pm, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps]; dynamic_measurement = true, poolmodel = true)
 @testset "Mutation Tests" begin
     @test s_t_nontemp[1] ≈ 0.2699446459556935 # test_file_outputs["s_t_nontemp_mutation"][1]
     @test ϵ_t[1] ≈ -0.693335270423147625246545 # test_file_outputs["eps_t_mutation"][1]
@@ -100,9 +118,9 @@ end
 Random.seed!(47)
 s_init = reshape(rand(Uniform(.4, .6), 1000), 1, 1000)
 s_init = [s_init; 1 .- s_init]
-out_no_parallel = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none,fixed_sched = [1.], parallel = false, dynamic_measurement = true, poolmodel = true)
+out_no_parallel = tempered_particle_filter(data, get_Φ(m), get_Ψ(m), get_F_ϵ(m), get_F_u(m), s_init; tuning..., verbose = :none,fixed_sched = [1.], parallel = false, dynamic_measurement = true, poolmodel = true)
 Random.seed!(47)
-out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, fixed_sched = [1.], parallel = true, dynamic_measurement = true, poolmodel = true)
+out_parallel_one_worker = tempered_particle_filter(data, get_Φ(m), get_Ψ(m), get_F_ϵ(m), get_F_u(m), s_init; tuning..., verbose = :none, fixed_sched = [1.], parallel = true, dynamic_measurement = true, poolmodel = true)
 @testset "TPF tests" begin
     @test out_no_parallel[1] ≈ -423.17791042050027
     @test out_parallel_one_worker[1] ≈ -423.2233360059381
