@@ -117,14 +117,7 @@ function next_φ(φ_old::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_term
         ineff0(φ) =
             ineff!(inc_weights, norm_weights, φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs) - r_star
 
-        if true
-            if (sign(ineff0(φ_old)) != sign(ineff0(1.0)))
-                return findroot(ineff0, φ_old, 1.0, xtol = xtol)
-            else
-                print("we got here\n")
-                return 1.0
-            end
-        elseif stage == 1 || (sign(ineff0(φ_old)) != sign(ineff0(1.0)))
+        if stage == 1 || (sign(ineff0(φ_old)) != sign(ineff0(1.0)))
             # Solve for optimal φ if either
             # 1. First stage
             # 2. Sign change from ineff0(φ_old) to ineff0(1.0)
