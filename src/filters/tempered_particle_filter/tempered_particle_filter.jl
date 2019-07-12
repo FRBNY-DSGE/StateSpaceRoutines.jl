@@ -119,7 +119,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     if get_t_posterior_dist
         t_norm_weights = Matrix{Float64}(undef,n_particles,T)
         t_posterior_dist = Dict{Int64,Matrix{Float64}}()
-        t1_posterior_dist = Dict{Int64,Matrix{Float64}}()
     end
 
     # Initialize working variables
@@ -247,7 +246,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             # save the normalized weights in the column for period t
             t_norm_weights[:,t] = norm_weights
             t_posterior_dist[t] = copy(s_t_nontemp)
-            t1_posterior_dist[t] = copy(s_t1_temp)
         end
 
         times[t] = time_ns() - begin_time
@@ -264,7 +262,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     end
 
     if get_t_posterior_dist && allout
-        return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times, t_posterior_dist, t1_posterior_dist, t_norm_weights
+        return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times, t_posterior_dist, t_norm_weights
     elseif get_t_posterior_dist
         return sum(loglh[n_presample_periods + 1:end]), t_posterior_dist, t_norm_weights
     elseif allout
