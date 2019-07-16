@@ -72,7 +72,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                                   resampling_method = :multinomial, n_mh_steps::Int = 1,
                                   c_init::S = 0.3, target_accept_rate::S = 0.4,
                                   n_presample_periods::Int = 0, allout::Bool = true,
-                                  parallel::Bool = false, get_t_posterior_dist::Bool = false,
+                                  parallel::Bool = false, get_t_particle_dist::Bool = false,
                                   verbose::Symbol = :high,
                                   dynamic_measurement::Bool = false,
                                   poolmodel::Bool = false) where S<:AbstractFloat
@@ -116,9 +116,9 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
     # Initialize matrix of normalized weight per particle by time period
     # and a matrix of the particle locations, if desired by user
-    if get_t_posterior_dist
+    if get_t_particle_dist
         t_norm_weights = Matrix{Float64}(undef,n_particles,T)
-        t_posterior_dist = Dict{Int64,Matrix{Float64}}()
+        t_particle_dist = Dict{Int64,Matrix{Float64}}()
     end
 
     # Initialize working variables
@@ -242,10 +242,10 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             φ_old = φ_new
         end # of loop over stages
 
-        if get_t_posterior_dist
+        if get_t_particle_dist
             # save the normalized weights in the column for period t
             t_norm_weights[:,t] = norm_weights
-            t_posterior_dist[t] = copy(s_t_nontemp)
+            t_particle_dist[t] = copy(s_t_nontemp)
         end
 
         times[t] = time_ns() - begin_time
@@ -261,10 +261,10 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         println("=============================================")
     end
 
-    if get_t_posterior_dist && allout
-        return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times, t_posterior_dist, t_norm_weights
-    elseif get_t_posterior_dist
-        return sum(loglh[n_presample_periods + 1:end]), t_posterior_dist, t_norm_weights
+    if get_t_particle_dist && allout
+        return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times, t_particle_dist, t_norm_weights
+    elseif get_t_particle_dist
+        return sum(loglh[n_presample_periods + 1:end]), t_particle_dist, t_norm_weights
     elseif allout
         return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times
     else
