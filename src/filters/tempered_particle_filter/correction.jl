@@ -33,11 +33,11 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                     # Initialization step (using 2π instead of φ_old)
                     coeff_terms[i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
                     log_e_1_terms[i] = 0.
-                    log_e_2_terms[i] = Ψ(s_t_nontemp[:,i]) # log pred dens passed -> log scale already
+                    log_e_2_terms[i] = log(Ψ(s_t_nontemp[:,i])) # pred dens passed -> log it
                 else
                     coeff_terms[i] = (φ_old)^(-n_obs/2)
-                    log_e_1_terms[i] = -φ_old * Ψ(s_t_nontemp[:,i])
-                    log_e_2_terms[i] = Ψ(s_t_nontemp[:,i])
+                    log_e_1_terms[i] = -φ_old * log(Ψ(s_t_nontemp[:,i]))
+                    log_e_2_terms[i] = log(Ψ(s_t_nontemp[:,i]))
                 end
             end
         else
@@ -46,11 +46,11 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                     # Initialization step (using 2π instead of φ_old)
                     coeff_terms[i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
                     log_e_1_terms[i] = 0.
-                    log_e_2_terms[i] = Ψ(s_t_nontemp[:,i]) # log pred dens passed -> log scale already
+                    log_e_2_terms[i] = log(Ψ(s_t_nontemp[:,i]))
                 else
                     coeff_terms[i] = (φ_old)^(-n_obs/2)
-                    log_e_1_terms[i] = -φ_old * Ψ(s_t_nontemp[:,i])
-                    log_e_2_terms[i] = Ψ(s_t_nontemp[:,i])
+                    log_e_1_terms[i] = -φ_old * log(Ψ(s_t_nontemp[:,i]))
+                    log_e_2_terms[i] = log(Ψ(s_t_nontemp[:,i]))
                 end
             end
         end
