@@ -28,7 +28,6 @@ m = PoolModel(Dict(:Model805 => y805, :Model904 => y904), 4,
 
 # Load in test inputs and outputs
 test_file_inputs = load("reference/tpf_aux_inputs.jld2")
-test_file_outputs = load("reference/tpf_aux_outputs.jld2")
 test_file_outputs_pm = load("reference/tpf_aux_outputs_poolmodel.jld2")
 
 φ_old = test_file_inputs["phi_old"]
@@ -63,8 +62,8 @@ coeff_terms = test_file_inputs["coeff_terms"]
 log_e_1_terms = test_file_inputs["log_e_1_terms"]
 log_e_2_terms = test_file_inputs["log_e_2_terms"]
 inc_weights = test_file_inputs["inc_weights"]
-s_t_nontemp0 = [.5; .5] * ones(1, 999)
-s_t_nontemp = hcat(s_t_nontemp0, [.49; .51])
+s_t_nontemp0 = [.5; .5] * ones(1, 900)
+s_t_nontemp = hcat(s_t_nontemp0, repeat([.49; .51], 1, 100))
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ47_pm, data[:, 47],
                s_t_nontemp, det(HH), inv(HH);
                initialize = false, parallel = false,
@@ -72,16 +71,16 @@ weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ47_pm, data[
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
 true_inc_wt = φ_new^(1/2) * (coeff_terms[1] * exp(log_e_1_terms[1])
-                             * exp(φ_new * log_e_2_terms[1]) * 999/1000
+                             * exp(φ_new * log_e_2_terms[1]) * 900/1000
                              + coeff_terms[end] * exp(log_e_1_terms[end])
-                             * exp(φ_new * log_e_2_terms[end]) * 1/1000)
+                             * exp(φ_new * log_e_2_terms[end]) * 100/1000)
 
 @testset "Ensure different states lead to different measurement errors" begin
     @test norm_weights[1] != norm_weights[end]
     @test log_e_1_terms[1] != log_e_1_terms[end]
     @test log_e_2_terms[1] != log_e_2_terms[end]
     @test inc_weights[1] != inc_weights[end]
-    @test true_inc_wt == mean(inc_weights)
+    @test true_inc_wt != mean(inc_weights)
 end
 
 ## Mutation Tests
