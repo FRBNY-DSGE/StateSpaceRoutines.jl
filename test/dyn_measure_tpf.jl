@@ -37,7 +37,7 @@ HH = cov(F_u)
 s_t_nontemp = test_file_inputs["s_t_nontemp"]
 
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
-               initialize = false, parallel = false, dynamic_measurement = true)
+               initialize = false, parallel = false)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
@@ -64,7 +64,7 @@ HH = cov(F_u)
 s_t_nontemp = test_file_inputs["s_t_nontemp"]
 
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψinc, data[:, 47], s_t_nontemp, det(HH), inv(HH);
-               initialize = false, parallel = false, dynamic_measurement = true)
+               initialize = false, parallel = false)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
@@ -96,7 +96,7 @@ c = test_file_inputs["c"]
 
 c = update_c(c, accept_rate, tuning[:target_accept_rate])
 Random.seed!(47)
-mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps]; dynamic_measurement = true)
+StateSpaceRoutines.mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps])
 
 @testset "Mutation Tests" begin
     @test s_t_nontemp[1] ≈ test_file_outputs["s_t_nontemp_mutation"][1]
