@@ -1,5 +1,4 @@
-using StateSpaceRoutines
-using Test, HDF5, JLD2, FileIO, LinearAlgebra, PDMats, Distributions, Random
+using StateSpaceRoutines, Test, HDF5, JLD2, FileIO, LinearAlgebra, PDMats, Distributions, Random, DSGE
 
 my_tests = [
             "kalman_filter"

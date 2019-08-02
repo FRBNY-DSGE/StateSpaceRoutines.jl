@@ -140,7 +140,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     # If not using a dynamic measurement equation, then define measurement equation
     # applying to all states, even if they are missing (but not time variables)
     if !dynamic_measurement
-        Ψ_allstates = Φ
+        Ψ_allstates = Ψ
     end
 
     #--------------------------------------------------------------
