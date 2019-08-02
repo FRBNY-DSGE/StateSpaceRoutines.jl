@@ -1,7 +1,7 @@
 """
 ```
 mutation!(Φ, Ψ, QQ, det_HH, inv_HH, φ_new, y_t, s_t, s_t1, ϵ_t, c, n_mh_steps;
-    parallel = false)
+    parallel = false, poolmodel = false)
 ```
 
 Mutate particles by taking Metropolis-Hastings steps in the `ϵ_t` space. This
@@ -12,7 +12,6 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
                    y_t::Vector{Float64}, s_t::M, s_t1::M,
                    ϵ_t::M, c::Float64, n_mh_steps::Int;
                    parallel::Bool = false,
-                   dynamic_measurement::Bool = false,
                    poolmodel::Bool = false) where M<:AbstractMatrix{Float64}
     # Sizes
     n_obs = size(y_t, 1)
@@ -34,7 +33,6 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
             s_t[:,i], ϵ_t[:,i], accept_vec[i] =
                 mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1[:,i], s_t[:,i], ϵ_t[:,i],
                          scaled_det_HH, scaled_inv_HH, n_mh_steps;
-                         dynamic_measurement = dynamic_measurement,
                          poolmodel = poolmodel)
         end
     else
@@ -42,7 +40,6 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
             s_t[:,i], ϵ_t[:,i], accept_vec[i] =
                 mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1[:,i], s_t[:,i], ϵ_t[:,i],
                          scaled_det_HH, scaled_inv_HH, n_mh_steps;
-                         dynamic_measurement = dynamic_measurement,
                          poolmodel = poolmodel)
         end
     end
@@ -54,7 +51,8 @@ end
 
 """
 ```
-mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1, s_t, ϵ_t, scaled_det_HH, scaled_inv_HH, n_mh_steps)
+mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1, s_t, ϵ_t, scaled_det_HH,
+    scaled_inv_HH, n_mh_steps; poolmodel = false)
 ```
 
 Take `n_mh_steps` many steps in the `ϵ_t` space for a single particle. Returns
@@ -63,7 +61,7 @@ the new `s_t`, `ϵ_t`, and the number of acceptances `accept`.
 function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Float64},
                   s_t1::Vector{Float64}, s_t::Vector{Float64}, ϵ_t::Vector{Float64},
                   scaled_det_HH::Float64, scaled_inv_HH::Matrix{Float64}, n_mh_steps::Int;
-                  dynamic_measurement::Bool = false, poolmodel::Bool = false)
+                  poolmodel::Bool = false)
     accept = 0
 
     # Compute posterior at initial ϵ_t

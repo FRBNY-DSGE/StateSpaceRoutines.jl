@@ -2,7 +2,7 @@
 ```
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, y_t,
     s_t_nontemp, det_HH, inv_HH; initialize = false, parallel = false,
-    dynamic_measurement = false, poolmodel = false)
+    poolmodel = false)
 ```
 
 The outputs of the weight_kernel function are meant to speed up the adaptive φ
@@ -20,7 +20,7 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                         s_t_nontemp::AbstractMatrix{Float64},
                         det_HH::Float64, inv_HH::Matrix{Float64};
                         initialize::Bool = false,
-                        parallel::Bool = false, dynamic_measurement::Bool = false,
+                        parallel::Bool = false,
                         poolmodel::Bool = false) where V<:AbstractVector{Float64}
     # Sizes
     n_particles = length(coeff_terms)

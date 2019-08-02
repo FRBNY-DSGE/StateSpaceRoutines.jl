@@ -4,7 +4,8 @@ tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; verbose = :high,
     n_particles = 1000, fixed_sched = [], r_star = 2, findroot = bisection,
     xtol = 1e-3, resampling_method = :multionial, n_mh_steps = 1, c_init = 0.3,
     target_accept_rate = 0.4, n_presample_periods = 0, allout = true,
-    parallel = false, verbose = :low)
+    parallel = false, verbose = :low,
+    dynamic_measurement = false, poolmodle = fa)
 ```
 
 ### Inputs
@@ -136,6 +137,12 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     c = c_init
     accept_rate = target_accept_rate
 
+    # If not using a dynamic measurement equation, then define measurement equation
+    # applying to all states, even if they are missing (but not time variables)
+    if !dynamic_measurement
+        Ψ_allstates = Φ
+    end
+
     #--------------------------------------------------------------
     # Main Algorithm: Tempered Particle Filter
     #--------------------------------------------------------------
@@ -154,18 +161,26 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         # Remove rows/columns of series with NaN values
         y_t = data[:, t]
 
+        # Handle measurement equation
+        if !(poolmodel || dynamic_measurement)
+            Ψ_t  = x -> Ψ(x)[nonmissing]
+        elseif poolmodel && dynamic_measurement
+            Ψ_t = x -> Ψ(x,y_t,t)[nonmissing]
+            Ψ_allstates = x -> Ψ(x,y_t,t)
+        elseif poolmodel
+            Ψ_t = x -> Ψ(x,y_t)[nonmissing]
+            Ψ_allstates = x -> Ψ(x,y_t)
+        else
+            Ψ_t  = x -> Ψ(x,t)[nonmissing]
+            Ψ_allstates = x -> Ψ(x,t)
+        end
+
+        # Adjust other values to remove rows/columns with NaN values
         nonmissing = isfinite.(y_t)
         y_t        = y_t[nonmissing]
         n_obs_t    = length(y_t)
-        if dynamic_measurement
-            Ψ_t  = x -> Ψ(x,t)[nonmissing]
-            Ψall = x -> Ψ(x,t)
-        else
-            Ψ_t  = x -> Ψ(x)[nonmissing]
-            Ψall = Ψ
-        end
         HH_t     = poolmodel ? HH : HH[nonmissing, nonmissing] # poolmodel -> keep missing is ok
-        inv_HH_t = poolmodel ? zeros(1,1) : inv(HH_t) # poolmodel -> don't need inv__HH
+        inv_HH_t = poolmodel ? zeros(1,1) : inv(HH_t) # poolmodel -> don't need inv_HH
         det_HH_t = poolmodel ? 0. : det(HH_t) # poolmodel -> don't need det_HH
 
         # Initialize s_t_nontemp and ϵ_t for this period
@@ -194,14 +209,13 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             ### 1. Correction
             # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
             weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
-                           Ψall, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
+                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
                            initialize = stage == 1, parallel = parallel,
-                           dynamic_measurement = dynamic_measurement,
                            poolmodel = poolmodel)
 
             φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
-                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot
-                           , xtol = xtol)
+                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
+                           xtol = xtol)
 
             if VERBOSITY[verbose] >= VERBOSITY[:high]
                 @show φ_new
@@ -230,7 +244,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                 accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
                                         s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
                                         parallel = parallel,
-                                        dynamic_measurement = dynamic_measurement,
                                         poolmodel = poolmodel)
             end
 
