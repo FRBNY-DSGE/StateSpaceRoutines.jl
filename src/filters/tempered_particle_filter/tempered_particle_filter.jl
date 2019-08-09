@@ -96,13 +96,18 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     times = zeros(T)
 
     # Initialize working variables
-    s_t1_temp     = parallel ? SharedMatrix{Float64}(copy(s_init)) : Matrix{Float64}(copy(s_init))
-    s_t_nontemp   = parallel ? SharedMatrix{Float64}(n_states, n_particles) : Matrix{Float64}(undef, n_states, n_particles)
-    ϵ_t           = parallel ? SharedMatrix{Float64}(n_shocks, n_particles) : Matrix{Float64}(undef, n_shocks, n_particles)
-
-    coeff_terms   = parallel ? SharedVector{Float64}(n_particles) : Vector{Float64}(undef, n_particles)
-    log_e_1_terms = parallel ? SharedVector{Float64}(n_particles) : Vector{Float64}(undef, n_particles)
-    log_e_2_terms = parallel ? SharedVector{Float64}(n_particles) : Vector{Float64}(undef, n_particles)
+    s_t1_temp     = parallel ? SharedMatrix{Float64}(copy(s_init)) :
+        Matrix{Float64}(copy(s_init))
+    s_t_nontemp   = parallel ? SharedMatrix{Float64}(n_states, n_particles) :
+        Matrix{Float64}(undef, n_states, n_particles)
+    ϵ_t           = parallel ? SharedMatrix{Float64}(n_shocks, n_particles) :
+        Matrix{Float64}(undef, n_shocks, n_particles)
+    coeff_terms   = parallel ? SharedVector{Float64}(n_particles) :
+        Vector{Float64}(undef, n_particles)
+    log_e_1_terms = parallel ? SharedVector{Float64}(n_particles) :
+        Vector{Float64}(undef, n_particles)
+    log_e_2_terms = parallel ? SharedVector{Float64}(n_particles) :
+        Vector{Float64}(undef, n_particles)
 
     inc_weights   = Vector{Float64}(undef, n_particles)
     norm_weights  = Vector{Float64}(undef, n_particles)
@@ -159,8 +164,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                            initialize = stage == 1, parallel = parallel)
 
             φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
-                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot
-                           , xtol = xtol)
+                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
+                           xtol = xtol)
 
             if VERBOSITY[verbose] >= VERBOSITY[:high]
                 @show φ_new
