@@ -5,7 +5,7 @@ tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; verbose = :high,
     xtol = 1e-3, resampling_method = :multionial, n_mh_steps = 1, c_init = 0.3,
     target_accept_rate = 0.4, n_presample_periods = 0, allout = true,
     parallel = false, verbose = :low,
-    dynamic_measurement = false, poolmodle = fa)
+    dynamic_measurement = false, poolmodel = false)
 ```
 
 ### Inputs
