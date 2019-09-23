@@ -13,7 +13,7 @@ mutable struct KalmanFilter{S<:Real}
     E::Matrix{S}
     s_t::Vector{S} # s_{t|t-1} or s_{t|t}
     P_t::Matrix{S} # P_{t|t-1} or P_{t|t}
-    loglh_t::AbstractFloat     # P(y_t | y_{1:t})
+    loglh_t::Real     # P(y_t | y_{1:t})
     converged::Bool
     PZV::Matrix{S}
 end
@@ -63,16 +63,22 @@ is stationary. When the preceding formula cannot be applied, the initial state
 vector estimate is set to `C` and its covariance matrix is given by `1e6 * I`.
 """
 function init_stationary_states(T::Matrix{S}, R::Matrix{S}, C::Vector{S},
-                                Q::Matrix{S}) where {S<:Real}
-    # e = eigvals(T)
-    # if all(abs.(e) .< 1)
-        s_0 = (UniformScaling(1) - T)\C
+                                Q::Matrix{S};
+                                check_is_stationary::Bool = true) where {S<:Real}
+    if check_is_stationary
+        e = eigvals(T)
+        if all(abs.(e) .< 1)
+            s_0 = (UniformScaling(1) - T)\C
+            P_0 = solve_discrete_lyapunov(T, R*Q*R')
+        else
+            Ns = size(T, 1)
+            s_0 = C
+            P_0 = 1e6 * Matrix(1.0I, Ns, Ns)
+        end
+    else
+        s_0 = (Matrix{eltype(T)}(I, size(T)...) - T)\C
         P_0 = solve_discrete_lyapunov(T, R*Q*R')
-    # else
-    #     Ns = size(T, 1)
-    #     s_0 = C
-    #     P_0 = 1e6 * Matrix(1.0I, Ns, Ns)
-    # end
+    end
     return s_0, P_0
 end
 
