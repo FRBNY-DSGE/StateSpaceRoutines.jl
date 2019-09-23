@@ -13,7 +13,7 @@ mutable struct KalmanFilter{S<:Real}
     E::Matrix{S}
     s_t::Vector{S} # s_{t|t-1} or s_{t|t}
     P_t::Matrix{S} # P_{t|t-1} or P_{t|t}
-    loglh_t::Real     # P(y_t | y_{1:t})
+    loglh_t::U where {U<:Real}     # P(y_t | y_{1:t})
     converged::Bool
     PZV::Matrix{S}
 end
