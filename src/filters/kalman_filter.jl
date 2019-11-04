@@ -3,19 +3,19 @@ using LinearAlgebra
 This code is loosely based on a routine originally copyright Federal Reserve Bank of Atlanta
 and written by Iskander Karibzhanov.
 """
-mutable struct KalmanFilter{S<:Real}
-    T::Matrix{S}
-    R::Matrix{S}
-    C::Vector{S}
-    Q::Matrix{S}
-    Z::Matrix{S}
-    D::Vector{S}
-    E::Matrix{S}
-    s_t::Vector{S} # s_{t|t-1} or s_{t|t}
-    P_t::Matrix{S} # P_{t|t-1} or P_{t|t}
-    loglh_t::U where {U<:Real}     # P(y_t | y_{1:t})
+mutable struct KalmanFilter{S<:Number}
+    T::AbstractMatrix{S}
+    R::AbstractMatrix{S}
+    C::AbstractVector{S}
+    Q::AbstractMatrix{S}
+    Z::AbstractMatrix{S}
+    D::AbstractVector{S}
+    E::AbstractMatrix{S}
+    s_t::AbstractVector{S} # s_{t|t-1} or s_{t|t}
+    P_t::AbstractMatrix{S} # P_{t|t-1} or P_{t|t}
+    loglh_t::U where {U<:Number}     # P(y_t | y_{1:t})
     converged::Bool
-    PZV::Matrix{S}
+    PZV::AbstractMatrix{S}
 end
 
 """
@@ -25,12 +25,12 @@ KalmanFilter(T, R, C, Q, Z, D, E, [s_0, P_0])
 
 Outer constructor for the `KalmanFilter` type.
 """
-function KalmanFilter(T::Matrix{S}, R::Matrix{S}, C::Vector{S}, Q::Matrix{S},
-                      Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
-                      s_0::Vector{S} = Vector{S}(undef, 0),
-                      P_0::Matrix{S} = Matrix{S}(undef, 0, 0),
+function KalmanFilter(T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVector{S}, Q::AbstractMatrix{S},
+                      Z::AbstractMatrix{S}, D::AbstractVector{S}, E::AbstractMatrix{S},
+                      s_0::AbstractVector{S} = Vector{S}(undef, 0),
+                      P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0),
                       converged::Bool = false,
-                      PZV::Matrix{S} = Matrix{S}(undef, 0, 0)) where {S<:Real}
+                      PZV::AbstractMatrix{S} = Matrix{S}(undef, 0, 0)) where {S<:Real}
     if isempty(s_0) || isempty(P_0)
         s_0, P_0 = init_stationary_states(T, R, C, Q)
     end
@@ -82,13 +82,34 @@ function init_stationary_states(T::Matrix{S}, R::Matrix{S}, C::Vector{S},
     return s_0, P_0
 end
 
+function init_stationary_states(T::TrackedMatrix{S}, R::TrackedMatrix{S}, C::TrackedVector{S},
+                                Q::TrackedMatrix{S};
+                                check_is_stationary::Bool = true) where {S<:Real}
+    mat_type = return_tracker_parameter_type(T)
+    if check_is_stationary
+        e = eigvals(T)
+        if all(abs.(e) .< 1)
+            s_0 = (UniformScaling(1) - T)\C
+            P_0 = solve_discrete_lyapunov(T, R*Q*R')
+        else
+            Ns = size(T, 1)
+            s_0 = C
+            P_0 = 1e6 * Matrix(1.0I, Ns, Ns)
+        end
+    else
+        s_0 = (Matrix{mat_type}(I, size(T)...) - T)\C
+        P_0 = solve_discrete_lyapunov(T, R*Q*R')
+    end
+    return s_0, P_0
+end
+
 """
 ```
-kalman_filter(y, T, R, C, Q, Z, D, E, s_0 = Vector(), P_0 = Matrix();
+kalman_filter(y, T, R, C, Q, Z, D, E, s_0 = AbstractVector(), P_0 = Matrix();
     outputs = [:loglh, :pred, :filt], Nt0 = 0)
 
 kalman_filter(regime_indices, y, Ts, Rs, Cs, Qs, Zs, Ds, Es,
-    s_0 = Vector(), P_0 = Matrix(); outputs = [:loglh, :pred, :filt],
+    s_0 = AbstractVector(), P_0 = Matrix(); outputs = [:loglh, :pred, :filt],
     Nt0 = 0)
 ```
 
@@ -122,9 +143,9 @@ Cov(ϵ_t, u_t) = 0
 
 **Method 2 only:**
 
-- `regime_indices`: `Vector{UnitRange{Int}}` of length `n_regimes`, where
+- `regime_indices`: `AbstractVector{UnitRange{Int}}` of length `n_regimes`, where
   `regime_indices[i]` indicates the time periods `t` in regime `i`
-- `Ts`: `Vector{Matrix{S}}` of `T` matrices for each regime
+- `Ts`: `AbstractVector{Matrix{S}}` of `T` matrices for each regime
 - `Rs`
 - `Cs`
 - `Qs`
@@ -169,12 +190,12 @@ When `s_0` and `P_0` are omitted, they are computed using
 `init_stationary_states`.
 """
 function kalman_filter(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
-                       Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}},
-                       Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
-                       Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}},
-                       Es::Vector{Matrix{S}}, s_0::Vector{S} = Vector{S}(undef, 0),
-                       P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
-                       outputs::Vector{Symbol} = [:loglh, :pred, :filt],
+                       Ts::Vector{AbstractMatrix{S}}, Rs::Vector{AbstractMatrix{S}},
+                       Cs::Vector{AbstractVector{S}}, Qs::Vector{AbstractMatrix{S}},
+                       Zs::Vector{AbstractMatrix{S}}, Ds::Vector{AbstractVector{S}},
+                       Es::Vector{AbstractMatrix{S}}, s_0::AbstractVector{S} = Vector{S}(undef, 0),
+                       P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
+                       outputs::AbstractVector{Symbol} = [:loglh, :pred, :filt],
                        Nt0::Int = 0, tol::AbstractFloat = 0.0) where {S<:Real}
 
     # Determine outputs
@@ -237,11 +258,11 @@ function kalman_filter(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
     return loglh, s_pred, P_pred, s_filt, P_filt, s_0, P_0, s_T, P_T
 end
 
-function kalman_filter(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
-                       Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
-                       s_0::Vector{S} = Vector{S}(undef, 0),
-                       P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
-                       outputs::Vector{Symbol} = [:loglh, :pred, :filt],
+function kalman_filter(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVector{S},
+                       Q::AbstractMatrix{S}, Z::AbstractMatrix{S}, D::AbstractVector{S}, E::AbstractMatrix{S},
+                       s_0::AbstractVector{S} = Vector{S}(undef, 0),
+                       P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
+                       outputs::AbstractVector{Symbol} = [:loglh, :pred, :filt],
                        Nt0::Int = 0, tol::AbstractFloat = 0.0) where {S<:Real}
 
     # Determine outputs
@@ -305,11 +326,11 @@ function kalman_filter(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S
 end
 
 function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
-                           Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}},
-                           Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
-                           Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}},
-                           Es::Vector{Matrix{S}}, s_0::Vector{S} = Vector{S}(undef, 0),
-                           P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
+                           Ts::Vector{AbstractMatrix{S}}, Rs::Vector{AbstractMatrix{S}},
+                           Cs::Vector{AbstractVector{S}}, Qs::Vector{AbstractMatrix{S}},
+                           Zs::Vector{AbstractMatrix{S}}, Ds::Vector{AbstractVector{S}},
+                           Es::Vector{AbstractMatrix{S}}, s_0::AbstractVector{S} = Vector{S}(undef, 0),
+                           P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
                            Nt0::Int = 0, tol::AbstractFloat = 0.0) where {S<:Real}
 
     # Dimensions
@@ -355,6 +376,37 @@ function kalman_likelihood(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vect
 
     mynan = convert(S, NaN)
     loglh = fill(mynan, Nt)
+
+    # Loop through periods t
+    for t = 1:Nt
+        # Forecast
+        forecast!(k)
+
+        # Update and compute log-likelihood
+        update!(k, y[:, t]; return_loglh = true, tol = tol)
+        loglh[t] = k.loglh_t
+    end
+
+    # Remove presample periods
+    loglh = remove_presample!(Nt0, loglh)
+
+    return loglh
+end
+
+function kalman_likelihood(y::AbstractArray, T::TrackedMatrix{S}, R::TrackedMatrix{S},
+                           C::TrackedVector{S}, Q::TrackedMatrix{S}, Z::TrackedMatrix{S},
+                           D::TrackedVector{S}, E::TrackedMatrix{S},
+                           s_0::TrackedVector{S} = param(Vector{S}(undef, 0)),
+                           P_0::TrackedMatrix{S} = param(Matrix{S}(undef, 0, 0));
+                           Nt0::Int = 0, tol::AbstractFloat = 0.0) where {S<:Real}
+    # Dimensions
+    Nt = size(y, 2) # number of periods of data
+
+    # Initialize inputs and outputs
+    k = KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0)
+
+    mynan = convert(S, NaN)
+    loglh = fill(Tracker.TrackedReal{S}(mynan), Nt)
 
     # Loop through periods t
     for t = 1:Nt
