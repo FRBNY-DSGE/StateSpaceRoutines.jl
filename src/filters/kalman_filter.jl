@@ -190,10 +190,10 @@ When `s_0` and `P_0` are omitted, they are computed using
 `init_stationary_states`.
 """
 function kalman_filter(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
-                       Ts::Vector{AbstractMatrix{S}}, Rs::Vector{AbstractMatrix{S}},
-                       Cs::Vector{AbstractVector{S}}, Qs::Vector{AbstractMatrix{S}},
-                       Zs::Vector{AbstractMatrix{S}}, Ds::Vector{AbstractVector{S}},
-                       Es::Vector{AbstractMatrix{S}}, s_0::AbstractVector{S} = Vector{S}(undef, 0),
+                       Ts::Vector{<:AbstractMatrix{S}}, Rs::Vector{<:AbstractMatrix{S}},
+                       Cs::Vector{<:AbstractVector{S}}, Qs::Vector{<:AbstractMatrix{S}},
+                       Zs::Vector{<:AbstractMatrix{S}}, Ds::Vector{<:AbstractVector{S}},
+                       Es::Vector{<:AbstractMatrix{S}}, s_0::AbstractVector{S} = Vector{S}(undef, 0),
                        P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
                        outputs::AbstractVector{Symbol} = [:loglh, :pred, :filt],
                        Nt0::Int = 0, tol::AbstractFloat = 0.0) where {S<:Real}
@@ -326,10 +326,10 @@ function kalman_filter(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix
 end
 
 function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
-                           Ts::Vector{AbstractMatrix{S}}, Rs::Vector{AbstractMatrix{S}},
-                           Cs::Vector{AbstractVector{S}}, Qs::Vector{AbstractMatrix{S}},
-                           Zs::Vector{AbstractMatrix{S}}, Ds::Vector{AbstractVector{S}},
-                           Es::Vector{AbstractMatrix{S}}, s_0::AbstractVector{S} = Vector{S}(undef, 0),
+                           Ts::Vector{<:AbstractMatrix{S}}, Rs::Vector{<:AbstractMatrix{S}},
+                           Cs::Vector{<:AbstractVector{S}}, Qs::Vector{<:AbstractMatrix{S}},
+                           Zs::Vector{<:AbstractMatrix{S}}, Ds::Vector{<:AbstractVector{S}},
+                           Es::Vector{<:AbstractMatrix{S}}, s_0::AbstractVector{S} = Vector{S}(undef, 0),
                            P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
                            Nt0::Int = 0, tol::AbstractFloat = 0.0) where {S<:Real}
 
