@@ -20,3 +20,9 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 julia = "0.7, 1"
+
+[extras]
+DSGE = "6cf23378-2c47-544c-b0c3-6efefe57ca11"
+
+[targets]
+test = ["DSGE"]
