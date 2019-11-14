@@ -1,3 +1,10 @@
+# StateSpaceRoutines.jl v0.2.1 Release Notes
+
+## New features and enhancements
+- Methods are modified to accept `Real` types, enabling compatibility with autodifferentiation techniques.
+- Removed dependence on QuantEcon package, resolves error loading package in Julia v1.1.
+- Allows compatibility with `PoolModel` type.
+
 # StateSpaceRoutines.jl v0.2.0 Release Notes
 
 ## New features and enhancements
