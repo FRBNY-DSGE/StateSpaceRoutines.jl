@@ -8,7 +8,7 @@ Remove the first `Nt0` periods from all other input arguments and return.
 function remove_presample!(Nt0::Int, loglh::Vector{S},
                            s_pred::Matrix{S}, P_pred::Array{S, 3},
                            s_filt::Matrix{S}, P_filt::Array{S, 3};
-                           outputs::Vector{Symbol} = [:loglh, :pred, :filt]) where {S<:AbstractFloat}
+                           outputs::Vector{Symbol} = [:loglh, :pred, :filt]) where {S<:Real}
     if Nt0 > 0
         if :loglh in outputs
             loglh  = loglh[(Nt0+1):end]
@@ -25,7 +25,7 @@ function remove_presample!(Nt0::Int, loglh::Vector{S},
     return loglh, s_pred, P_pred, s_filt, P_filt
 end
 
-function remove_presample!(Nt0::Int, loglh::Vector{S}) where {S<:AbstractFloat}
+function remove_presample!(Nt0::Int, loglh::Vector{S}) where {S<:Real}
     if Nt0 > 0
         return loglh[(Nt0+1):end]
     end

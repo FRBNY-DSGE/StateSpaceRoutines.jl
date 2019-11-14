@@ -63,15 +63,42 @@ is stationary. When the preceding formula cannot be applied, the initial state
 vector estimate is set to `C` and its covariance matrix is given by `1e6 * I`.
 """
 function init_stationary_states(T::Matrix{S}, R::Matrix{S}, C::Vector{S},
-                                Q::Matrix{S}) where {S<:AbstractFloat}
-    e = eigvals(T)
-    if all(abs.(e) .< 1)
-        s_0 = (UniformScaling(1) - T)\C
-        P_0 = solve_discrete_lyapunov(T, R*Q*R')
+                                Q::Matrix{S};
+                                check_is_stationary::Bool = true) where {S<:Real}
+    if check_is_stationary
+        e = eigvals(T)
+        if all(abs.(e) .< 1)
+            s_0 = (UniformScaling(1) - T)\C
+            P_0 = solve_discrete_lyapunov(T, R*Q*R')
+        else
+            Ns = size(T, 1)
+            s_0 = C
+            P_0 = 1e6 * Matrix(1.0I, Ns, Ns)
+        end
     else
-        Ns = size(T, 1)
-        s_0 = C
-        P_0 = 1e6 * Matrix(1.0I, Ns, Ns)
+        s_0 = (Matrix{eltype(T)}(I, size(T)...) - T)\C
+        P_0 = solve_discrete_lyapunov(T, R*Q*R')
+    end
+    return s_0, P_0
+end
+
+function init_stationary_states(T::TrackedMatrix{S}, R::TrackedMatrix{S}, C::TrackedVector{S},
+                                Q::TrackedMatrix{S};
+                                check_is_stationary::Bool = true) where {S<:Real}
+    mat_type = return_tracker_parameter_type(T)
+    if check_is_stationary
+        e = eigvals(T)
+        if all(abs.(e) .< 1)
+            s_0 = (UniformScaling(1) - T)\C
+            P_0 = solve_discrete_lyapunov(T, R*Q*R')
+        else
+            Ns = size(T, 1)
+            s_0 = C
+            P_0 = 1e6 * Matrix(1.0I, Ns, Ns)
+        end
+    else
+        s_0 = (Matrix{mat_type}(I, size(T)...) - T)\C
+        P_0 = solve_discrete_lyapunov(T, R*Q*R')
     end
     return s_0, P_0
 end
@@ -361,7 +388,7 @@ function kalman_likelihood(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vect
                            Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
                            s_0::Vector{S} = Vector{S}(undef, 0),
                            P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
-                           Nt0::Int = 0, tol::S = 0.0) where {S<:AbstractFloat}
+                           Nt0::Int = 0, tol::AbstractFloat = 0.0) where {S<:Real}
     # Dimensions
     Nt = size(y, 2) # number of periods of data
 
@@ -427,7 +454,7 @@ forecast!(k::KalmanFilter)
 Compute the one-step-ahead states s_{t|t-1} and state covariances P_{t|t-1} and
 assign to `k`.
 """
-function forecast!(k::KalmanFilter{S}) where {S<:AbstractFloat}
+function forecast!(k::KalmanFilter{S}) where {S<:Real}
     T, R, C, Q     = k.T, k.R, k.C, k.Q
     s_filt, P_filt = k.s_t, k.P_t
 
@@ -445,7 +472,7 @@ Compute the filtered states s_{t|t} and state covariances P_{t|t}, and the
 log-likelihood P(y_t | y_{1:t-1}) and assign to `k`.
 """
 function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
-                 return_loglh::Bool = true, tol::S = 0.0) where {S<:AbstractFloat}
+                 return_loglh::Bool = true, tol::AbstractFloat = 0.0) where {S<:Real}
 
     # Keep rows of measurement equation corresponding to non-missing observables
     nonmissing = .!map(x -> ismissing(x) ? true : isnan(x), y_obs)
