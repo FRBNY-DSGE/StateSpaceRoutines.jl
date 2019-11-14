@@ -490,7 +490,7 @@ function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
     y_pred = Z*s_pred + D             # y_{t|t-1} = Z*s_{t|t-1} + D
 
     V_pred     = Z*P_pred*Z' + E      # V_{t|t-1} = Var y_{t|t-1} = Z*P_{t|t-1}*Z' + E
-    V_pred     = (V_pred + V_pred')/2
+    V_pred     = (V_pred + V_pred')/2 # V_pred should be symmetric; this guarantees symmetry and divides by 2 so entries aren't double
     V_pred_inv = inv(V_pred)
     dy         = y_obs - y_pred       # dy = y_t - y_{t|t-1} (prediction error)
 
