@@ -103,27 +103,6 @@ function init_stationary_states(T::TrackedMatrix{S}, R::TrackedMatrix{S}, C::Tra
     return s_0, P_0
 end
 
-function init_stationary_states(T::TrackedMatrix{S}, R::TrackedMatrix{S}, C::TrackedVector{S},
-                                Q::TrackedMatrix{S};
-                                check_is_stationary::Bool = true) where {S<:Real}
-    mat_type = return_tracker_parameter_type(T)
-    if check_is_stationary
-        e = eigvals(T)
-        if all(abs.(e) .< 1)
-            s_0 = (UniformScaling(1) - T)\C
-            P_0 = solve_discrete_lyapunov(T, R*Q*R')
-        else
-            Ns = size(T, 1)
-            s_0 = C
-            P_0 = 1e6 * Matrix(1.0I, Ns, Ns)
-        end
-    else
-        s_0 = (Matrix{mat_type}(I, size(T)...) - T)\C
-        P_0 = solve_discrete_lyapunov(T, R*Q*R')
-    end
-    return s_0, P_0
-end
-
 """
 ```
 kalman_filter(y, T, R, C, Q, Z, D, E, s_0 = AbstractVector(), P_0 = Matrix();
