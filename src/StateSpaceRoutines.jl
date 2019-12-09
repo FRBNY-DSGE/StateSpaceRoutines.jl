@@ -3,7 +3,7 @@ isdefined(Base, :__precompile__) && __precompile__(false)
 module StateSpaceRoutines
 
     using Distributions: Distribution, MvNormal, pdf, Weights, sample, logpdf
-    using Flux.Tracker
+    using Tracker
     using LinearAlgebra, Statistics
     using Roots: fzero
     using HDF5, JLD2
