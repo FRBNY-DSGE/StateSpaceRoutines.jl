@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/FRBNY-DSGE/StateSpaceRoutines.jl.svg)](https://travis-ci.org/FRBNY-DSGE/StateSpaceRoutines.jl)
 
-This package implements some common routines for state-space models. The provided algorithms include:
+This package implements some common routines for state-space models. Provided algorithms include:
 
 - Kalman filter (`kalman_filter`)
 - Tempered particle filter (`tempered_particle_filter`): ["Tempered Particle Filtering"](https://federalreserve.gov/econresdata/feds/2016/files/2016072pap.pdf) (2016)
@@ -23,7 +23,7 @@ pkg> add StateSpaceRoutines
 ## Versioning
 `StateSpaceRoutines.jl` is currently compatible with Julia `v1.0` and `v1.1`.
 
-To use `StateSpaceRoutines.jl` with Julia version `0.7`, please check out tag `0.2.0`. To do this, click on the drop-down menu that reads `branch: master` on the left-hand side of the page. Select `tags`, then `v0.2.0`.  If you've already cloned the repo, you can simply run `git checkout v0.2.0`.
+To use `StateSpaceRoutines.jl` with Julia `v0.7`, please check out tag `0.2.0`. To do this, click on the drop-down menu that reads `branch: master` on the left-hand side of the page. Select `tags`, then `v0.2.0`.  If you've already cloned the repo, you can simply run `git checkout v0.2.0`.
 
 ## Linear Estimation
 
