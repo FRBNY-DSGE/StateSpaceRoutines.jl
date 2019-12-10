@@ -2,9 +2,7 @@
 
 [![Build Status](https://travis-ci.org/FRBNY-DSGE/StateSpaceRoutines.jl.svg)](https://travis-ci.org/FRBNY-DSGE/StateSpaceRoutines.jl)
 
-This package implements some common routines for state-space models.
-
-The provided algorithms are:
+This package implements some common routines for state-space models. The provided algorithms include:
 
 - Kalman filter (`kalman_filter`)
 - Tempered particle filter (`tempered_particle_filter`): ["Tempered Particle Filtering"](https://federalreserve.gov/econresdata/feds/2016/files/2016072pap.pdf) (2016)
@@ -15,27 +13,17 @@ The provided algorithms are:
   + `carter_kohn_smoother`: C.K. Carter and R. Kohn, ["On Gibbs Sampling for State Space Models"](https://www.jstor.org/stable/2337125) (_Biometrika_, 1994)
   + `durbin_koopman_smoother`: J. Durbin and S.J. Koopman, ["A Simple and Efficient Simulation Smoother for State Space Time Series Analysis"](https://www.jstor.org/stable/4140605) (_Biometrika_, 2002)
 
-## Nonlinear Estimation
+## Installation
+`StateSpaceRoutines.jl` is a registered Julia package in the [`General`](https://github.com/JuliaRegistries/General) registry.  To install, open your Julia REPL, type `]` (enter package manager), and run
 
-The tempered particle filter is a particle filtering method which can approximate the log-likelihood value implied by a general (potentially non-linear) state space system with the following representation:
-
-### General State Space System
+```julia
+pkg> add StateSpaceRoutines
 ```
-s_{t+1} = Φ(s_t, ϵ_t)        (transition equation)
-y_t     = Ψ(s_t) + u_t       (measurement equation)
 
-ϵ_t ∼ F_ϵ(∙; θ)
-u_t ∼ N(0, E)
-Cov(ϵ_t, u_t) = 0
-```
-- The documentation and code are located in [src/filters/tempered_particle_filter](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/master/src/filters/tempered_particle_filter).
-- The example is located in [docs/examples/tempered_particle_filter](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/master/docs/examples/tempered_particle_filter)
+## Versioning
+`StateSpaceRoutines.jl` is currently compatible with Julia `v1.0` and `v1.1`.
 
-
-
-
-
-
+To use `StateSpaceRoutines.jl` with Julia version `0.7`, please check out tag `0.2.0`. To do this, click on the drop-down menu that reads `branch: master` on the left-hand side of the page. Select `tags`, then `v0.2.0`.  If you've already cloned the repo, you can simply run `git checkout v0.2.0`.
 
 ## Linear Estimation
 
@@ -64,15 +52,6 @@ durbin_koopman_smoother(y, T, R, C, Q, Z, D, E, s_0, P_0; Nt0 = 0, draw_states =
 
 For more information, see the docstring for each function (e.g. enter `?kalman_filter` in the REPL).
 
-
-
-
-
-
-
-
-
-
 ### Regime-Switching Methods
 
 All of the provided algorithms can handle time-varying state-space systems. To do this, define `regime_indices`, a `Vector{Range{Int64}}` of length `n_regimes`, where `regime_indices[i]` indicates the range of periods `t` in regime `i`. Let `T_i`, `R_i`, etc. denote the state-space matrices in regime `i`. Then the state space is given by:
@@ -96,7 +75,23 @@ carter_kohn_smoother(regime_indices, y, Ts, Rs, Cs, Qs, Zs, Ds, Es, s_0, P_0; Nt
 durbin_koopman_smoother(regime_indices, y, Ts, Rs, Cs, Qs, Zs, Ds, Es, s_0, P_0; Nt0 = 0, draw_states = true)
 ```
 
-# Disclaimer
+## Nonlinear Estimation
+
+The tempered particle filter is a particle filtering method which can approximate the log-likelihood value implied by a general (potentially non-linear) state space system with the following representation:
+
+### General State Space System
+```
+s_{t+1} = Φ(s_t, ϵ_t)        (transition equation)
+y_t     = Ψ(s_t) + u_t       (measurement equation)
+
+ϵ_t ∼ F_ϵ(∙; θ)
+u_t ∼ N(0, E)
+Cov(ϵ_t, u_t) = 0
+```
+- The documentation and code are located in [src/filters/tempered_particle_filter](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/master/src/filters/tempered_particle_filter).
+- The example is located in [docs/examples/tempered_particle_filter](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/master/docs/examples/tempered_particle_filter)
+
+## Disclaimer
 Copyright Federal Reserve Bank of New York. You may reproduce, use, modify, make derivative works of, and distribute and this code in whole or in part so long as you keep this notice in the documentation associated with any distributed works. Neither the name of the Federal Reserve Bank of New York (FRBNY) nor the names of any of the authors may be used to endorse or promote works derived from this code without prior written permission. Portions of the code attributed to third parties are subject to applicable third party licenses and rights. By your use of this code you accept this license and any applicable third party license.
 
 THIS CODE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT ANY WARRANTIES OR CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY WARRANTIES OR CONDITIONS OF TITLE, NON-INFRINGEMENT, MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, EXCEPT TO THE EXTENT THAT THESE DISCLAIMERS ARE HELD TO BE LEGALLY INVALID. FRBNY IS NOT, UNDER ANY CIRCUMSTANCES, LIABLE TO YOU FOR DAMAGES OF ANY KIND ARISING OUT OF OR IN CONNECTION WITH USE OF OR INABILITY TO USE THE CODE, INCLUDING, BUT NOT LIMITED TO DIRECT, INDIRECT, INCIDENTAL, CONSEQUENTIAL, PUNITIVE, SPECIAL OR EXEMPLARY DAMAGES, WHETHER BASED ON BREACH OF CONTRACT, BREACH OF WARRANTY, TORT OR OTHER LEGAL OR EQUITABLE THEORY, EVEN IF FRBNY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES OR LOSS AND REGARDLESS OF WHETHER SUCH DAMAGES OR LOSS IS FORESEEABLE.
