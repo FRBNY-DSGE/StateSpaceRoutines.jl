@@ -5,6 +5,7 @@
 This package implements some common routines for state-space models. Provided algorithms include:
 
 - Kalman filter (`kalman_filter`)
+- Chandrasekhar recursions (`chand_recursion`): ["Using the "Chandrasekhar Recursions" for Likelihood Evaluation of DSGE Models"](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2976646) (2012)
 - Tempered particle filter (`tempered_particle_filter`): ["Tempered Particle Filtering"](https://federalreserve.gov/econresdata/feds/2016/files/2016072pap.pdf) (2016)
 - Kalman smoothers:
   + `hamilton_smoother`: James Hamilton, [_Time Series Analysis_](https://www.amazon.com/Time-Analysis-James-Douglas-Hamilton/dp/0691042896) (1994)
@@ -42,6 +43,7 @@ Cov(ϵ_t, u_t) = 0
 
 ```
 kalman_filter(y, T, R, C, Q, Z, D, E, s_0 = Vector(), P_0 = Matrix(); outputs = [:loglh, :pred, :filt], Nt0 = 0)
+chand_recursion(y, T, R, C, Q, Z, D, E, s_pred = Vector(), P_pred = Matrix(); allout = false, Nt0 = 0, tol = 0.0)
 tempered_particle_filter(y, Φ, Ψ, F_ϵ, F_u, s_init; verbose = :high, include_presample = true, fixed_sched = [], r_star = 2, c = 0.3, accept_rate = 0.4, target = 0.4, xtol = 0, resampling_method = :systematic, N_MH = 1, n_particles = 1000, Nt0 = 0, adaptive = true, allout = true, parallel = false)
 
 hamilton_smoother(y, T, R, C, Q, Z, D, E, s_0, P_0; Nt0 = 0)
