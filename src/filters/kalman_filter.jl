@@ -349,12 +349,31 @@ function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractAr
     s_t = k.s_t
     P_t = k.P_t
 
-    for i = 1:length(regime_indices)
-        ts = regime_indices[i]
-        loglh[ts] = kalman_likelihood(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i],
-                                      Zs[i], Ds[i], Es[i], s_t, P_t; Nt0 = 0, tol = tol)
-        s_t = k.s_t
-        P_t = k.P_t
+  #=  @show length(Qs)
+    @show length(Ts)
+    @show regime_indices
+    @show findall(Ts[1] .!= Ts[2])
+    @show findall(Rs[1] .!= Rs[2])
+   # @show Cs[1][(Cs[1] .== Cs[2])
+    @show findall(Qs[1] .!= Qs[2])
+    @show Qs[1][19:24, 19:24]
+    @show Qs[2][19:24, 19:24]
+   # @show Zs[1][(Zs[1] .== Zs[2])
+   # @show Ds[1][(Ds[1] .== Ds[2])
+   # @show (Es[1] .== Es[2])=#
+
+    if length(regime_indices) == 1
+        loglh = kalman_likelihood(y, Ts[1], Rs[1], Cs[1], Qs[1],
+                                  Zs[1], Ds[1], Es[1], s_t, P_t;
+                                  Nt0 = 0, tol = tol, switching = false)
+    else
+        for i = 1:length(regime_indices)
+#            @show s_t
+            ts = regime_indices[i]
+            loglh[ts], s_t, P_t = kalman_likelihood(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i],
+                                                    Zs[i], Ds[i], Es[i], s_t, P_t;
+                                                    Nt0 = 0, tol = tol, switching = true)
+        end
     end
 
     # Remove presample periods
@@ -367,7 +386,8 @@ function kalman_likelihood(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vect
                            Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
                            s_0::Vector{S} = Vector{S}(undef, 0),
                            P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
-                           Nt0::Int = 0, tol::AbstractFloat = 0.0) where {S<:Real}
+                           Nt0::Int = 0, tol::AbstractFloat = 0.0,
+                           switching::Bool = true) where {S<:Real}
     # Dimensions
     Nt = size(y, 2) # number of periods of data
 
@@ -390,7 +410,11 @@ function kalman_likelihood(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vect
     # Remove presample periods
     loglh = remove_presample!(Nt0, loglh)
 
-    return loglh
+    if switching
+        return loglh, k.s_t, k.P_t
+    else
+        return loglh
+    end
 end
 
 function kalman_likelihood(y::AbstractArray, T::TrackedMatrix{S}, R::TrackedMatrix{S},
