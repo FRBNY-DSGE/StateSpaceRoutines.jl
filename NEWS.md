@@ -1,3 +1,9 @@
+# StateSpaceRoutines.jl v0.3.1 Release Notes
+
+## Patches
+- Fix Kalman filter regime-switching bug
+- Don't export resample method; assists with compatibility in DSGE.jl
+
 # StateSpaceRoutines.jl v0.3.0 Release Notes
 
 ## New features and enhancements
