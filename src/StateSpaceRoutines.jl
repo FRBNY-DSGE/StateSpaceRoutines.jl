@@ -18,7 +18,7 @@ module StateSpaceRoutines
 
         # filters/tempered_particle_filter
         tempered_particle_filter, initialize_state_draws,
-        resample, solve_inefficiency, mutation, weight_kernel!, next_φ,correction!,
+        solve_inefficiency, mutation, weight_kernel!, next_φ,correction!,
         selection!, mutation!, update_c,
 
         # smoothers/
