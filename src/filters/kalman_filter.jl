@@ -349,26 +349,12 @@ function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractAr
     s_t = k.s_t
     P_t = k.P_t
 
-  #=  @show length(Qs)
-    @show length(Ts)
-    @show regime_indices
-    @show findall(Ts[1] .!= Ts[2])
-    @show findall(Rs[1] .!= Rs[2])
-   # @show Cs[1][(Cs[1] .== Cs[2])
-    @show findall(Qs[1] .!= Qs[2])
-    @show Qs[1][19:24, 19:24]
-    @show Qs[2][19:24, 19:24]
-   # @show Zs[1][(Zs[1] .== Zs[2])
-   # @show Ds[1][(Ds[1] .== Ds[2])
-   # @show (Es[1] .== Es[2])=#
-
     if length(regime_indices) == 1
         loglh = kalman_likelihood(y, Ts[1], Rs[1], Cs[1], Qs[1],
                                   Zs[1], Ds[1], Es[1], s_t, P_t;
                                   Nt0 = 0, tol = tol, switching = false)
     else
         for i = 1:length(regime_indices)
-#            @show s_t
             ts = regime_indices[i]
             loglh[ts], s_t, P_t = kalman_likelihood(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i],
                                                     Zs[i], Ds[i], Es[i], s_t, P_t;
