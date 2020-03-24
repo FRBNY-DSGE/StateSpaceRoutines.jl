@@ -481,6 +481,7 @@ function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
     V_pred     = Z*P_pred*Z' + E      # V_{t|t-1} = Var y_{t|t-1} = Z*P_{t|t-1}*Z' + E
     V_pred     = (V_pred + V_pred')/2 # V_pred should be symmetric; this guarantees symmetry and divides by 2 so entries aren't double
     V_pred_inv = inv(V_pred)
+
     dy         = y_obs - y_pred       # dy = y_t - y_{t|t-1} (prediction error)
 
     if !k.converged
@@ -499,7 +500,16 @@ function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
 
     if return_loglh
         # p(y_t | y_{1:t-1})
-        k.loglh_t = -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2
+        try
+            k.loglh_t = -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2
+        catch e
+            if det(V_pred) < 0
+                # V_pred should be positive definite b/c it is a covariance matrix
+                throw(PredStateVarCovMatrixError())
+            else
+                rethrow(e)
+            end
+        end
     end
     return nothing
 end

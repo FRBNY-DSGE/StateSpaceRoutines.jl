@@ -148,3 +148,9 @@ Float64
 """
 return_tracker_parameter_type(x::Tracker.TrackedReal{S}) where S<:Real = S
 return_tracker_parameter_type(x::TrackedArray{S}) where S<:Real = S
+
+mutable struct PredStateVarCovMatrixError <: Exception
+    msg::String
+end
+PredStateVarCovMatrixError() = PredStateVarCovMatrixError("Predicted state variance-covariance matrix is not positive definite.")
+Base.showerror(io::IO, ex::PredStateVarCovMatrixError) = print(io, ex.msg)
