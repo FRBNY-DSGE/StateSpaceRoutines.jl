@@ -290,9 +290,10 @@ function kalman_filter(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix
     P_0 = k.P_t
 
     # Loop through periods t
+    RQR = R * Q * R' # save on computation time by computing this once
     for t = 1:Nt
         # Forecast
-        forecast!(k)
+        forecast!(k; RQR = RQR)
         if return_pred
             s_pred[:,    t] = k.s_t
             P_pred[:, :, t] = k.P_t
@@ -384,9 +385,10 @@ function kalman_likelihood(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vect
     loglh = fill(mynan, Nt)
 
     # Loop through periods t
+    RQR = R * Q * R' # save on computation time by computing this once
     for t = 1:Nt
         # Forecast
-        forecast!(k)
+        forecast!(k; RQR = RQR)
 
         # Update and compute log-likelihood
         update!(k, y[:, t]; return_loglh = true, tol = tol)
@@ -419,9 +421,10 @@ function kalman_likelihood(y::AbstractArray, T::TrackedMatrix{S}, R::TrackedMatr
     loglh = fill(Tracker.TrackedReal{S}(mynan), Nt)
 
     # Loop through periods t
+    RQR = R * Q * R' # save on computation time by computing this once
     for t = 1:Nt
         # Forecast
-        forecast!(k)
+        forecast!(k; RQR = RQR)
 
         # Update and compute log-likelihood
         update!(k, y[:, t]; return_loglh = true, tol = tol)
@@ -443,12 +446,16 @@ forecast!(k::KalmanFilter)
 Compute the one-step-ahead states s_{t|t-1} and state covariances P_{t|t-1} and
 assign to `k`.
 """
-function forecast!(k::KalmanFilter{S}) where {S<:Real}
+function forecast!(k::KalmanFilter{S}; RQR::AbstractMatrix{S} =
+                   Matrix{S}(undef, 0, 0)) where {S<:Real}
     T, R, C, Q     = k.T, k.R, k.C, k.Q
     s_filt, P_filt = k.s_t, k.P_t
 
+    if isempty(RQR)
+        RQR = R * Q * R'
+    end
     k.s_t = T*s_filt + C         # s_{t|t-1} = T*s_{t-1|t-1} + C
-    k.P_t = T*P_filt*T' + R*Q*R' # P_{t|t-1} = Var s_{t|t-1} = T*P_{t-1|t-1}*T' + R*Q*R'
+    k.P_t = T*P_filt*T' + RQR    # P_{t|t-1} = Var s_{t|t-1} = T*P_{t-1|t-1}*T' + R*Q*R'
     return nothing
 end
 
