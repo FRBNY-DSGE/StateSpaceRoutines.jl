@@ -48,7 +48,7 @@ stationarity condition:
 
 ```
 s_0  =  (I - T) \\ C
-P_0 = reshape(I - kron(T, T)) \\ vec(R*Q*R'), Ns, Ns)
+P_0 = reshape((I - kron(T, T)) \\ vec(R*Q*R'), Ns, Ns)
 ```
 
 where:
@@ -64,7 +64,8 @@ vector estimate is set to `C` and its covariance matrix is given by `1e6 * I`.
 """
 function init_stationary_states(T::Matrix{S}, R::Matrix{S}, C::Vector{S},
                                 Q::Matrix{S};
-                                check_is_stationary::Bool = true) where {S<:Real}
+                                check_is_stationary::Bool = true,
+                                direct::Bool = false) where {S<:Real}
     if check_is_stationary
         e = eigvals(T)
         if all(abs.(e) .< 1)
@@ -77,14 +78,18 @@ function init_stationary_states(T::Matrix{S}, R::Matrix{S}, C::Vector{S},
         end
     else
         s_0 = (Matrix{eltype(T)}(I, size(T)...) - T)\C
-        P_0 = solve_discrete_lyapunov(T, R*Q*R')
+        P_0 = if direct
+            reshape((Matrix{eltype(T)}(I, length(T), length(T)) - kron(T, T)) \ vec(R*Q*R'), size(T, 1), size(T, 1))
+        else
+            solve_discrete_lyapunov(T, R*Q*R')
+        end
     end
     return s_0, P_0
 end
 
 function init_stationary_states(T::TrackedMatrix{S}, R::TrackedMatrix{S}, C::TrackedVector{S},
                                 Q::TrackedMatrix{S};
-                                check_is_stationary::Bool = true) where {S<:Real}
+                                check_is_stationary::Bool = true, direct = false) where {S<:Real}
     mat_type = return_tracker_parameter_type(T)
     if check_is_stationary
         e = eigvals(T)
@@ -98,7 +103,11 @@ function init_stationary_states(T::TrackedMatrix{S}, R::TrackedMatrix{S}, C::Tra
         end
     else
         s_0 = (Matrix{mat_type}(I, size(T)...) - T)\C
-        P_0 = solve_discrete_lyapunov(T, R*Q*R')
+        P_0 = if direct
+            reshape((Matrix{eltype(mat_type)}(I, length(T), length(T)) - kron(T, T)) \ vec(R*Q*R'), size(T, 1), size(T, 1))
+        else
+            solve_discrete_lyapunov(T, R*Q*R')
+        end
     end
     return s_0, P_0
 end
@@ -405,12 +414,64 @@ function kalman_likelihood(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vect
     end
 end
 
+function sum_kalman_likelihood(y::AbstractArray, T::Union{Matrix{S}, TrackedMatrix{S}}, R::Union{Matrix{S}, TrackedMatrix{S}},
+                               C::Union{Vector{S}, TrackedVector{S}}, Q::Union{Matrix{S}, TrackedMatrix{S}},
+                               Z::Union{Matrix{S}, TrackedMatrix{S}}, D::Union{Vector{S}, TrackedVector{S}},
+                               E::Union{Matrix{S}, TrackedMatrix{S}},
+                               s_0::Union{Vector{S}, TrackedVector{S}} = Vector{S}(undef, 0),
+                               P_0::Union{Matrix{S}, TrackedMatrix{S}} = Matrix{S}(undef, 0, 0);
+                               Nt0::Int = 0, tol::AbstractFloat = 0.0,
+                               switching::Bool = true) where {S<:Real}
+    # Dimensions
+    Nt = size(y, 2) # number of periods of data
+
+    # Initialize inputs and outputs
+    k = KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0)
+
+    # mynan = convert(S, NaN)
+    # loglh = fill(mynan, Nt)
+
+    # Loop through periods t
+    RQR = R * Q * R' # save on computation time by computing this once
+    for t = 1:Nt0
+        # Forecast
+        forecast!(k; RQR = RQR)
+
+        # Update but do not compute log-likelihood b/c removing presample
+        sum_update!(k, y[:, t]; return_loglh = false, tol = tol)
+    end
+
+    # Forecast
+    forecast!(k; RQR = RQR)
+
+    # Update and compute log-likelihood
+    sum_update!(k, y[:, 1 + Nt0]; return_loglh = true, tol = tol)
+    loglh = k.loglh_t
+
+    for t = 2+Nt0:Nt
+        # Forecast
+        forecast!(k; RQR = RQR)
+
+        # Update and compute log-likelihood
+        sum_update!(k, y[:, t]; return_loglh = true, tol = tol)
+        loglh += k.loglh_t
+    end
+
+    if switching
+        return loglh, k.s_t, k.P_t
+    else
+        return loglh
+    end
+end
+
+
 function kalman_likelihood(y::AbstractArray, T::TrackedMatrix{S}, R::TrackedMatrix{S},
                            C::TrackedVector{S}, Q::TrackedMatrix{S}, Z::TrackedMatrix{S},
                            D::TrackedVector{S}, E::TrackedMatrix{S},
                            s_0::TrackedVector{S} = param(Vector{S}(undef, 0)),
                            P_0::TrackedMatrix{S} = param(Matrix{S}(undef, 0, 0));
-                           Nt0::Int = 0, tol::AbstractFloat = 0.0) where {S<:Real}
+                           Nt0::Int = 0, tol::AbstractFloat = 0.0,
+                           switching::Bool = true) where {S<:Real}
     # Dimensions
     Nt = size(y, 2) # number of periods of data
 
@@ -434,7 +495,11 @@ function kalman_likelihood(y::AbstractArray, T::TrackedMatrix{S}, R::TrackedMatr
     # Remove presample periods
     loglh = remove_presample!(Nt0, loglh)
 
-    return loglh
+    if switching
+        return loglh, k.s_t, k.P_t
+    else
+        return loglh
+    end
 end
 
 
@@ -507,7 +572,7 @@ function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
 
     if return_loglh
         # p(y_t | y_{1:t-1})
-        try
+       try
             k.loglh_t = -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2
         catch e
             if det(V_pred) < 0
@@ -517,6 +582,51 @@ function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
                 rethrow(e)
             end
         end
+    end
+    return nothing
+end
+
+function sum_update!(k::KalmanFilter{S}, y_obs::AbstractArray;
+                     return_loglh::Bool = true, tol::AbstractFloat = 0.0) where {S<:Real}
+
+    # Keep rows of measurement equation corresponding to non-missing observables
+    nonmissing = .!map(x -> ismissing(x) ? true : isnan(x), y_obs)
+
+    y_obs = y_obs[nonmissing]
+    Z     = k.Z[nonmissing, :]
+    D     = k.D[nonmissing]
+    E     = k.E[nonmissing, nonmissing]
+
+    Ny    = length(y_obs)
+
+    s_pred = k.s_t
+    P_pred = k.P_t
+
+    y_pred = Z*s_pred + D             # y_{t|t-1} = Z*s_{t|t-1} + D
+
+    V_pred     = Z*P_pred*Z' + E      # V_{t|t-1} = Var y_{t|t-1} = Z*P_{t|t-1}*Z' + E
+    V_pred     = (V_pred + V_pred')/2 # V_pred should be symmetric; this guarantees symmetry and divides by 2 so entries aren't double
+    V_pred_inv = inv(V_pred)
+
+    dy         = y_obs - y_pred       # dy = y_t - y_{t|t-1} (prediction error)
+
+    if !k.converged
+        PZV = P_pred'*Z'*V_pred_inv
+    end
+
+    if size(k.PZV) == size(PZV)
+        if (tol > 0.0) && (maximum(abs.(PZV - k.PZV)) < tol)
+            k.converged = true
+        end
+    end
+    k.PZV = PZV
+
+    k.s_t = s_pred + PZV*dy       # s_{t|t} = s_{t|t-1} + P_{t|t-1}'*Z'/V_{t|t-1}*dy
+    k.P_t = P_pred - PZV*Z*P_pred # P_{t|t} = P_{t|t-1} - P_{t|t-1}'*Z'/V_{t|t-1}*Z*P_{t|t-1}
+
+    if return_loglh
+        # p(y_t | y_{1:t-1})
+        k.loglh_t = -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2
     end
     return nothing
 end
