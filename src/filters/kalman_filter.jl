@@ -87,8 +87,8 @@ function init_stationary_states(T::Matrix{S}, R::Matrix{S}, C::Vector{S},
     return s_0, P_0
 end
 
-function init_stationary_states(T::TrackedMatrix{S}, R::TrackedMatrix{S}, C::TrackedVector{S},
-                                Q::TrackedMatrix{S};
+function init_stationary_states(T::TrackedMatrix{S}, R::TrackedMatrix{S}, C::Union{Vector{S}, TrackedVector{S}},
+                                Q::Union{Matrix{S}, TrackedMatrix{S}};
                                 check_is_stationary::Bool = true, direct = false) where {S<:Real}
     mat_type = return_tracker_parameter_type(T)
     if check_is_stationary
@@ -466,8 +466,8 @@ end
 
 
 function kalman_likelihood(y::AbstractArray, T::TrackedMatrix{S}, R::TrackedMatrix{S},
-                           C::TrackedVector{S}, Q::TrackedMatrix{S}, Z::TrackedMatrix{S},
-                           D::TrackedVector{S}, E::TrackedMatrix{S},
+                           C::Union{Vector{S},TrackedVector{S}}, Q::Union{Matrix{S}, TrackedMatrix{S}}, Z::TrackedMatrix{S},
+                           D::Union{Vector{S},TrackedVector{S}}, E::Union{Matrix{S}, TrackedMatrix{S}},
                            s_0::TrackedVector{S} = param(Vector{S}(undef, 0)),
                            P_0::TrackedMatrix{S} = param(Matrix{S}(undef, 0, 0));
                            Nt0::Int = 0, tol::AbstractFloat = 0.0,
