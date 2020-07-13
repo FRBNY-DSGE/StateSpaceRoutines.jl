@@ -1,6 +1,6 @@
 name = "StateSpaceRoutines"
 uuid = "261fd431-d7e4-51f7-86ab-ce9e57fc1fff"
-authors = ["Michael Cai <michael.cai@ny.frb.org>", "Ethan Matlin <ethan.matlin@ny.frb.org>", "Rebecca Sarfati <rebecca.sarfati@ny.frb.org>"]
+authors = ["William Chen <william.chen@ny.frb.org>", "Shlok Goyal <shlok.goyal@ny.frb.org>", "Alissa Johnson <alissa.johnson@ny.frb.org>"]
 version = "0.3.1"
 
 [deps]
