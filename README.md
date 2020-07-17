@@ -22,7 +22,7 @@ pkg> add StateSpaceRoutines
 ```
 
 ## Versioning
-`StateSpaceRoutines.jl` is currently compatible with Julia `v1.0` and `v1.1`.
+`StateSpaceRoutines.jl` is currently compatible with Julia `1.x`.
 
 To use `StateSpaceRoutines.jl` with Julia `v0.7`, please check out tag `0.2.0`. To do this, click on the drop-down menu that reads `branch: master` on the left-hand side of the page. Select `tags`, then `v0.2.0`.  If you've already cloned the repo, you can simply run `git checkout v0.2.0`.
 
