@@ -1,3 +1,6 @@
+# StateSpaceRoutines.jl v0.3.2 Release Notes
+- Raise compatibility to all Julia 1.x versions.
+
 # StateSpaceRoutines.jl v0.3.1 Release Notes
 
 ## Patches
