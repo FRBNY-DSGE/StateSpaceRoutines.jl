@@ -1,7 +1,7 @@
 name = "StateSpaceRoutines"
 uuid = "261fd431-d7e4-51f7-86ab-ce9e57fc1fff"
 authors = ["William Chen <william.chen@ny.frb.org>", "Shlok Goyal <shlok.goyal@ny.frb.org>", "Alissa Johnson <alissa.johnson@ny.frb.org>"]
-version = "0.3.3"
+version = "0.3.2"
 
 [deps]
 DSGE = "6cf23378-2c47-544c-b0c3-6efefe57ca11"
