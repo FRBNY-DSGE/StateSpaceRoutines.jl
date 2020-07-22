@@ -20,8 +20,10 @@ addons:
       packages:
       - hdf5
 script:
-    - julia --color=yes -e 'using Pkg; Pkg.build()'
-    - julia --check-bounds=yes --color=yes -e 'using Pkg; Pkg.test(coverage=true)'
+    - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+    - julia --color=yes -e 'using Pkg; Pkg.build(); Pkg.test(coverage=true)'
+#     - julia --color=yes -e 'using Pkg; Pkg.build()'
+#     - julia --check-bounds=yes --color=yes -e 'using Pkg; Pkg.test(coverage=true)'
 branches:
   only:
     - master
