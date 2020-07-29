@@ -28,9 +28,9 @@ To use `StateSpaceRoutines.jl` with Julia `v0.7`, please check out tag `0.2.0`. 
 
 ## Precompilation
 
-The `DSGE.jl` package is not precompiled by default because when running code in parallel, we want to re-compile
-the copy of `DSGE.jl` on each processor to guarantee the right version of the code is being used. If users do not
-anticipate using parallelism, then users ought to change the first line of `src/DSGE.jl` from
+The `StateSpaceRoutines.jl` package is not precompiled by default because when running code in parallel, we want to re-compile
+the copy of `StateSpaceRoutines.jl` on each processor to guarantee the right version of the code is being used. If users do not
+anticipate using parallelism, then users ought to change the first line of `src/StateSpaceRoutines.jl` from
 
 ```
 isdefined(Base, :__precompile__) && __precompile__(false)
