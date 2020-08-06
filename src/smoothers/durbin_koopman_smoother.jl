@@ -127,7 +127,7 @@ function durbin_koopman_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abst
     end
 
     # Replace y+ with missings wherever y has missings
-    missing_coords = map(x -> ismissing(x) ? true : isnan(x), y)
+    missing_coords = [ismissing(x) ? true : isnan(x) for x in y]
     y_plus[missing_coords] .= missing
 
     # Compute y* = y - y+

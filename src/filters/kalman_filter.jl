@@ -464,7 +464,7 @@ function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
                  return_loglh::Bool = true, tol::AbstractFloat = 0.0) where {S<:Real}
 
     # Keep rows of measurement equation corresponding to non-missing observables
-    nonmissing = .!map(x -> ismissing(x) ? true : isnan(x), y_obs)
+    nonmissing = .![ismissing(x) ? true : isnan(x) for x in y_obs]
 
     y_obs = y_obs[nonmissing]
     Z     = k.Z[nonmissing, :]

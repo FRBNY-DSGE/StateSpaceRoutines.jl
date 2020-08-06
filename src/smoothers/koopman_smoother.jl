@@ -218,7 +218,7 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
 
         for t in reverse(regime_indices[i])
             # Keep rows of measurement equation corresponding to nonmissing observables
-            nonmissing = .!map(x -> ismissing(x) ? true : isnan(x), y[:, t]) #.!ismissing.(y[:, t])
+            nonmissing = .![ismissing(x) ? true : isnan(x), y[:, t]]
             y_t = y[nonmissing, t]
             Z_t = Z[nonmissing, :]
             D_t = D[nonmissing]
