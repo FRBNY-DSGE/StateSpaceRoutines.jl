@@ -6,7 +6,7 @@ tuning = tpf_main_input["tuning"]
 lpd_805 = tpf_main_input["lpd_805"]
 lpd_904 = tpf_main_input["lpd_904"]
 data = exp.([reshape(lpd_904, 1, length(lpd_904)); reshape(lpd_805, 1, length(lpd_805))])
-m = PoolModel("ss0")
+m = DSGE.PoolModel("ss0")
 
 # Define state space
 Φpm, Ψpm, F_ϵpm, F_upm, ~ = compute_system(m)

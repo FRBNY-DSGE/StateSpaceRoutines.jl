@@ -9,7 +9,6 @@ os:
     - linux
 julia:
     - 1
-    - 1.1
     - 1.4 # Make sure it works in 1.4 b/c test output is slightly different in 1.5
 notifications:
     email: false
