@@ -113,7 +113,7 @@ out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψt, F_ϵ, F_u, s_i
     # See equivalent test in tempered_particle_filter.jl
     if VERSION >= v"1.5"
         @test out_parallel_one_worker[1] ≈ -307.9285106003482
-    elseif VERSINO >= v"1.0"
+    elseif VERSION >= v"1.0"
         @test out_parallel_one_worker[1] ≈ -303.64727963725073 # Julia 6 was: -306.8211172094595
     end
 end
