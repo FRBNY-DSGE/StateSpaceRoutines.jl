@@ -110,8 +110,12 @@ Random.seed!(47)
 out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψt, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true, dynamic_measurement = true)
 @testset "TPF tests" begin
     @test out_no_parallel[1] ≈ -302.99967306704133
-    # This is different than in Julia6 because @distributed seeds differently than @parallel
-    @test out_parallel_one_worker[1] ≈ -303.64727963725073 # Julia 6 was: -306.8211172094595
+    # See equivalent test in tempered_particle_filter.jl
+    if VERSION >= v"1.5"
+        @test out_parallel_one_worker[1] ≈ -307.9285106003482
+    elseif VERSINO >= v"1.0"
+        @test out_parallel_one_worker[1] ≈ -303.64727963725073 # Julia 6 was: -306.8211172094595
+    end
 end
 
 nothing
