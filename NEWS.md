@@ -1,3 +1,6 @@
+# StateSpaceRoutines.jl v0.3.3 Release notes
+- Remove DSGE from dependencies
+
 # StateSpaceRoutines.jl v0.3.2 Release Notes
 - Raise compatibility to all Julia 1.x versions.
 

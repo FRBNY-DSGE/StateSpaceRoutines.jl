@@ -1,13 +1,12 @@
-using StateSpaceRoutines, DSGE
+using StateSpaceRoutines
 using Test, HDF5, JLD2, FileIO, LinearAlgebra, PDMats, Distributions, Random
 
 my_tests = [
-            "kalman_filter"
-            "chand_recursion"
-            "tempered_particle_filter"
-            "smoothers"
-            "dyn_measure_tpf"
-            "poolmodel_tpf"
+            "kalman_filter",
+            "chand_recursion",
+            "tempered_particle_filter",
+            "smoothers",
+            "dyn_measure_tpf",
             ]
 
 for test in my_tests
