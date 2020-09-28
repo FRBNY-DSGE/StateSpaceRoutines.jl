@@ -1,7 +1,8 @@
 # State-Space Routines
 
 [![Build Status](https://travis-ci.org/FRBNY-DSGE/StateSpaceRoutines.jl.svg)](https://travis-ci.org/FRBNY-DSGE/StateSpaceRoutines.jl)
-
+ [![Coverage Status](https://coveralls.io/repos/github/FRBNY-DSGE/StateSpaceRoutines.jl/badge.svg?branch=master)](https://coveralls.io/github/FRBNY-DSGE/StateSpaceRoutines.jl?branch=master)
+ 
 This package implements some common routines for state-space models. Provided algorithms include:
 
 - Kalman filter (`kalman_filter`)
