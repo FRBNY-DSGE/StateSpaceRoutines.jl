@@ -101,17 +101,19 @@ function koopman_smoother(regime_indices::Vector{UnitRange{Int}}, y::AbstractMat
     for i = 1:n_regimes
         # Get state-space system matrices for this regime
         T, R, Q = Ts[i], Rs[i], Qs[i]
+        RQR′    = R * Q * R'
+        QR′     = Q * R'
 
         for t in regime_indices[i]
             r_t = s_dist[:, t]
             s_t = if t == 1
                 s_0 + P_0*r_t
             else
-                T*s_t + R*Q*R'*r_t
+                T*s_t + RQR′ * r_t
             end
 
             s_smth[:, t] = s_t
-            ϵ_smth[:, t] = Q*R'*r_t
+            ϵ_smth[:, t] = QR′ * r_t
         end
     end
 
@@ -224,8 +226,8 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
             D_t = D[nonmissing]
             E_t = E[nonmissing, nonmissing]
 
-            s_pred_t = s_pred[:, t]            # s_{t|t-1}
-            P_pred_t = P_pred[:, :, t]         # P_{t|t-1} = Var s_{t|t-1}
+            s_pred_t = @view s_pred[:, t]            # s_{t|t-1}
+            P_pred_t = @view P_pred[:, :, t]         # P_{t|t-1} = Var s_{t|t-1}
 
             y_pred_t = Z_t*s_pred_t + D_t      # y_{t|t-1} = Z*s_{t|t-1} + D
             V_pred_t = Z_t*P_pred_t*Z_t' + E_t # V_{t|t-1} = Var y_{t|t-1} = Z*P_{t|t-1}*Z' + E
@@ -235,7 +237,7 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
             e_t = V_pred_t\dy - K'*r_t         # e_t     = (1/V_{t|t-1})dy - K_t'*r_t
             r_t = Z_t'*e_t + T'*r_t            # r_{t-1} = Z'*e_t + T'*r_t
 
-            s_dist[:,      t] = r_t
+            s_dist[:,          t] = r_t
             y_dist[nonmissing, t] = e_t
         end # of loop backward through this regime's periods
     end # of loop backward through regimes

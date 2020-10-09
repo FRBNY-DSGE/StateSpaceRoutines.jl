@@ -290,7 +290,7 @@ function kalman_filter(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix
     P_0 = k.P_t
 
     # Loop through periods t
-    RQR′ = R * Q * R′
+    RQR′ = R * Q * R'
     for t = 1:Nt
         # Forecast
         forecast!(k, RQR′) # calculate RQR′ once for efficiency
@@ -385,7 +385,7 @@ function kalman_likelihood(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vect
     loglh = fill(mynan, Nt)
 
     # Loop through periods t
-    RQR′ = R * Q * R′
+    RQR′ = R * Q * R'
     for t = 1:Nt
         # Forecast
         forecast!(k, RQR′) # calculate RQR′ once for efficiency
@@ -421,7 +421,7 @@ function kalman_likelihood(y::AbstractArray, T::TrackedMatrix{S}, R::TrackedMatr
     loglh = fill(Tracker.TrackedReal{S}(mynan), Nt)
 
     # Loop through periods t
-    RQR′ = R * Q * R′
+    RQR′ = R * Q * R'
     for t = 1:Nt
         # Forecast
         forecast!(k, RQR′) # calculate RQR′ once for efficiency
