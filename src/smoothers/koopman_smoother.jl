@@ -105,11 +105,11 @@ function koopman_smoother(regime_indices::Vector{UnitRange{Int}}, y::AbstractMat
         QR′     = Q * R'
 
         for t in regime_indices[i]
-            r_t = s_dist[:, t]
+            r_t = @view s_dist[:, t]
             s_t = if t == 1
-                s_0 + P_0*r_t
+                s_0 + P_0 * r_t
             else
-                T*s_t + RQR′ * r_t
+                T * s_t + RQR′ * r_t
             end
 
             s_smth[:, t] = s_t
@@ -215,7 +215,7 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
 
     for i = length(regime_indices):-1:1
         # Get state-space system matrices for this regime
-        T, R, Q = Ts[i], Rs[i], Qs[i]
+        T, R    = Ts[i], Rs[i]
         Z, D, E = Zs[i], Ds[i], Es[i]
 
         for t in reverse(regime_indices[i])
