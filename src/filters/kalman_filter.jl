@@ -196,7 +196,7 @@ function kalman_filter(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
                        Es::Vector{<:AbstractMatrix{S}}, s_0::AbstractVector{S} = Vector{S}(undef, 0),
                        P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
                        outputs::AbstractVector{Symbol} = [:loglh, :pred, :filt],
-                       Nt0::Int = 0, tol::AbstractFloat = 0.0) where {S<:Real}
+                       Nt0::Int = 0, tol::AbstractFloat = 0.0, set_pgap_ygap::Bool = false) where {S<:Real}
 
     # Determine outputs
     return_loglh = :loglh in outputs
@@ -229,6 +229,10 @@ function kalman_filter(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
     P_t = P_0
 
     for i = 1:length(regime_indices)
+        if set_pgap_ygap && i == (length(regime_indices) - 1)
+            s_t[83] = 0.
+            s_t[84] = -12.
+        end
         ts = regime_indices[i]
 
         loglh_i, s_pred_i, P_pred_i, s_filt_i, P_filt_i, s_0, P_0, s_t, P_t =
