@@ -231,10 +231,6 @@ function kalman_filter(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
     P_t = P_0
 
     for i = 1:length(regime_indices)
-        if set_pgap_ygap[1] && i == (length(regime_indices) - 1)
-            s_t[set_pgap_ygap[2]] = -set_pgap_ygap[4]
-            s_t[set_pgap_ygap[3]] = -set_pgap_ygap[5]
-        end
         ts = regime_indices[i]
 
         loglh_i, s_pred_i, P_pred_i, s_filt_i, P_filt_i, s_0, P_0, s_t, P_t =
@@ -252,6 +248,12 @@ function kalman_filter(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
             s_filt[:,    ts] = s_filt_i
             P_filt[:, :, ts] = P_filt_i
         end
+
+        if set_pgap_ygap[1] && i == (length(regime_indices) - 1)
+            s_filt[set_pgap_ygap[2], regime_indices[i][1]] = -set_pgap_ygap[4]
+            s_filt[set_pgap_ygap[3], regime_indices[i][1]] = -set_pgap_ygap[5]
+        end
+
     end
 
     # Populate s_T and P_T
