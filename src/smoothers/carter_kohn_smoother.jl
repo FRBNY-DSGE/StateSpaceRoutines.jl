@@ -139,7 +139,7 @@ end
 function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::AbstractMatrix,
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
     Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
-    s_0::Vector{S}, P_0::Matrix{S}, stil_pred::Matrix{S}, Ptil_pred::Matrix{S}, stil_filt::Matrix{S}, Ptil_filt::Matrix{S};
+    s_0::Vector{S}, P_0::Matrix{S}, stil_pred::Matrix{S}, Ptil_pred::Matrix{S}, stil_filt::Matrix{S}, Ptil_filt::Matrix{S},
     Nt0::Int = 0, draw_states::Bool = true, set_pgap_ygap = (false, 70, 71, 0.0, 12.0)) where {S<:AbstractFloat}
 #=
     # Dimensions
