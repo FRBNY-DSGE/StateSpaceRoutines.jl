@@ -132,7 +132,7 @@ function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abstrac
 
     return s_smth, ϵ_smth
 end
-
+#=
 # Carter-Kohn smoother that accepts Kalman filter results as arguments
 ## instead of running Kalman Filter itself.
 function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::AbstractMatrix,
@@ -196,3 +196,4 @@ function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abstrac
 
     return s_smth, ϵ_smth
 end
+=#
