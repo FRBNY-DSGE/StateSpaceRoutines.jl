@@ -252,6 +252,8 @@ function kalman_filter(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
         if set_pgap_ygap[1] && i == (length(regime_indices) - 1)
             s_filt[set_pgap_ygap[2], regime_indices[i][1]] = -set_pgap_ygap[4]
             s_filt[set_pgap_ygap[3], regime_indices[i][1]] = -set_pgap_ygap[5]
+            s_t[set_pgap_ygap[2]] = -set_pgap_ygap[4]
+            s_t[set_pgap_ygap[3]] = -set_pgap_ygap[5]
         end
 
     end
