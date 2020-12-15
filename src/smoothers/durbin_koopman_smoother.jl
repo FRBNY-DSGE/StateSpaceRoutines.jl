@@ -137,10 +137,11 @@ function durbin_koopman_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abst
     # Note that we pass in `zeros(Ny)` instead of `D` because the
     # measurement equation for y* has no constant term
     Ds_star = fill(zeros(Ny), n_regimes)
-    _, s_pred, P_pred, _, _, _, _, _, _ = kalman_filter(regime_indices, y_star, Ts, Rs, Cs, Qs, Zs, Ds_star, Es, s_0, P_0; outputs = [:pred])
+    Cs_star = fill(zeros(Ns), n_regimes)
+    _, s_pred, P_pred, _, _, _, _, _, _ = kalman_filter(regime_indices, y_star, Ts, Rs, Cs_star, Qs, Zs, Ds_star, Es, s_0, P_0; outputs = [:pred])
 
     # Kalman smooth y*
-    s_star, ϵ_star = koopman_smoother(regime_indices, y_star, Ts, Rs, Cs, Qs,
+    s_star, ϵ_star = koopman_smoother(regime_indices, y_star, Ts, Rs, Cs_star, Qs,
                                       Zs, Ds_star, Es, s_0, P_0, s_pred, P_pred)
 
     # Compute smoothed states and shocks
