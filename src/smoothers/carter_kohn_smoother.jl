@@ -64,7 +64,8 @@ function carter_kohn_smoother(y::AbstractMatrix,
                               T::Matrix{S}, R::Matrix{S}, C::Vector{S},
                               Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
                               s_0::Vector{S}, P_0::Matrix{S};
-                              Nt0::Int = 0, draw_states::Bool = true) where {S<:AbstractFloat}
+                              Nt0::Int = 0, draw_states::Bool = true,
+                              testing_carter_kohn::Bool = false) where {S<:AbstractFloat}
 
     Nt = size(y, 2)
     carter_kohn_smoother(UnitRange{Int}[1:Nt], y, Matrix{S}[T], Matrix{S}[R], Vector{S}[C],
