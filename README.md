@@ -1,7 +1,7 @@
 # State-Space Routines
 
 [![Build Status](https://travis-ci.org/FRBNY-DSGE/StateSpaceRoutines.jl.svg)](https://travis-ci.org/FRBNY-DSGE/StateSpaceRoutines.jl)
-[![codecov](https://codecov.io/gh/FRBNY-DSGE/StateSpaceRoutines.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/FRBNY-DSGE/StateSpaceRoutines.jl)
+[![codecov](https://codecov.io/gh/FRBNY-DSGE/StateSpaceRoutines.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/FRBNY-DSGE/StateSpaceRoutines.jl)
 
 This package implements some common routines for state-space models. Provided algorithms include:
 
@@ -25,7 +25,7 @@ pkg> add StateSpaceRoutines
 ## Versioning
 `StateSpaceRoutines.jl` is currently compatible with Julia `1.x`.
 
-To use `StateSpaceRoutines.jl` with Julia `v0.7`, please check out tag `0.2.0`. To do this, click on the drop-down menu that reads `branch: master` on the left-hand side of the page. Select `tags`, then `v0.2.0`.  If you've already cloned the repo, you can simply run `git checkout v0.2.0`.
+To use `StateSpaceRoutines.jl` with Julia `v0.7`, please check out tag `0.2.0`. To do this, click on the drop-down menu that reads `branch: main` on the left-hand side of the page. Select `tags`, then `v0.2.0`.  If you've already cloned the repo, you can simply run `git checkout v0.2.0`.
 
 ## Precompilation
 
@@ -108,8 +108,8 @@ y_t     = Ψ(s_t) + u_t       (measurement equation)
 u_t ∼ N(0, E)
 Cov(ϵ_t, u_t) = 0
 ```
-- The documentation and code are located in [src/filters/tempered_particle_filter](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/master/src/filters/tempered_particle_filter).
-- The example is located in [docs/examples/tempered_particle_filter](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/master/docs/examples/tempered_particle_filter)
+- The documentation and code are located in [src/filters/tempered_particle_filter](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/main/src/filters/tempered_particle_filter).
+- The example is located in [docs/examples/tempered_particle_filter](https://github.com/FRBNY-DSGE/StateSpaceRoutines.jl/tree/main/docs/examples/tempered_particle_filter)
 - The paper proposing and analyzing the method is [Herbst and Schorfheide (2019)](https://www.sciencedirect.com/science/article/pii/S0304407618302033)
 - For nonlinear smoothing, see (LowLevelParticleFilters.jl)[https://github.com/baggepinnen/LowLevelParticleFilters.jl]
 
