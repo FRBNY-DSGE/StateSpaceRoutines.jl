@@ -101,8 +101,8 @@ function koopman_smoother(regime_indices::Vector{UnitRange{Int}}, y::AbstractMat
     for i = 1:n_regimes
         # Get state-space system matrices for this regime
         T, R, Q, C = Ts[i], Rs[i], Qs[i], Cs[i]
-        RQR′    = R * Q * R'
-        QR′     = Q * R'
+        QR′        = Q * R'
+        RQR′       = R * QR′
 
         for t in regime_indices[i]
             r_t = @view s_dist[:, t]
