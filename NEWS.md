@@ -1,3 +1,6 @@
+# StateSpaceRoutines.jl v0.3.4 Release notes
+- Generalize Durbin-Koopman smoother to allow temporary time variation in `CCC`
+
 # StateSpaceRoutines.jl v0.3.3 Release notes
 - Remove DSGE from dependencies
 
