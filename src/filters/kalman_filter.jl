@@ -207,9 +207,6 @@ function kalman_filter(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
     Ns = size(Ts[1], 1) # number of states
     Nt = size(y, 2)     # number of periods of data
 
-    @assert first(regime_indices[1]) == 1
-    @assert last(regime_indices[end]) == Nt
-
     # Initialize inputs and outputs
     k = KalmanFilter(Ts[1], Rs[1], Cs[1], Qs[1], Zs[1], Ds[1], Es[1], s_0, P_0)
 
