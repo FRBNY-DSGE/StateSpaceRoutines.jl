@@ -215,7 +215,6 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
     r_t = zeros(S, Ns) # r_0 = 0
 
     regime_indices2 = copy(regime_indices)
-    @show regime_indices2
     if length(regime_indices2) > 1
         @show "This better run"
         for i in 1:length(regime_indices2)
@@ -229,12 +228,16 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
         end
     end
 
+    @show regime_indices2
     for i = length(regime_indices2):-1:1
         # Get state-space system matrices for this regime
         T, R    = Ts[i], Rs[i]
         Z, D, E = Zs[i], Ds[i], Es[i]
 
         for t in reverse(regime_indices2[i])
+            #=if t==1
+                break
+            end=#
             if !(t in regime_indices[i])
                 T1, R1 = Ts[i-1], Rs[i-1]
                 Z1, D1, E1 = Zs[i-1], Ds[i-1], Es[i-1]
@@ -243,27 +246,72 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
                 Z1, D1, E1 = Zs[i], Ds[i], Es[i]
             end
             # Keep rows of measurement equation corresponding to nonmissing observables
-            nonmissing = .![ismissing(x) ? true : isnan(x) for x in y[:, t]]
-            y_t = y[nonmissing, t]
-            Z_t = Z[nonmissing, :]
-            D_t = D[nonmissing]
-            E_t = E[nonmissing, nonmissing]
 
-            Z_t1 = Z1[nonmissing, :]
-            D_t1 = D1[nonmissing]
-            E_t1 = E1[nonmissing, nonmissing]
+            if t == regime_indices2[end][end]
+                nonmissing = .![ismissing(x) ? true : isnan(x) for x in y[:, t]]
+                y_t = y[nonmissing, t]
+                Z_t = Z[nonmissing, :]
+                D_t = D[nonmissing]
+                E_t = E[nonmissing, nonmissing]
 
+                Z_t1 = Z1[nonmissing, :]
+                D_t1 = D1[nonmissing]
+                E_t1 = E1[nonmissing, nonmissing]
+
+                s_pred_t = @view s_pred[:, t]            # s_{t|t-1}
+                P_pred_t = @view P_pred[:, :, t]         # P_{t|t-1} = Var s_{t|t-1}
+
+                y_pred_t = Z_t*s_pred_t + D_t      # y_{t|t-1} = Z*s_{t|t-1} + D
+                V_pred_t = Z_t*P_pred_t*Z_t' + E_t # V_{t|t-1} = Var y_{t|t-1} = Z*P_{t|t-1}*Z' + E
+                dy = y_t - y_pred_t                # dy = y_t - y_{t|t-1} = prediction error
+                K = T*P_pred_t*Z_t'/V_pred_t       # K_t = T*P_{t|t-1}'Z'/V_{t|t-1} = Kalman gain
+
+                e_t = V_pred_t\dy - K'*r_t         # e_t     = (1/V_{t|t-1})dy - K_t'*r_t
+                r_t = Z_t'*e_t + T'*r_t            # r_{t-1} = Z'*e_t + T'*r_t
+            else
+                nonmissing = .![ismissing(x) ? true : isnan(x) for x in y[:, t+1]]
+                y_t = y[nonmissing, t+1]
+                Z_t = Z[nonmissing, :]
+                D_t = D[nonmissing]
+                E_t = E[nonmissing, nonmissing]
+
+                Z_t1 = Z1[nonmissing, :]
+                D_t1 = D1[nonmissing]
+                E_t1 = E1[nonmissing, nonmissing]
+
+                s_pred_t = @view s_pred[:, t+1]            # s_{t|t-1}
+                P_pred_t = @view P_pred[:, :, t+1]         # P_{t|t-1} = Var s_{t|t-1}
+
+                y_pred_t = Z_t*s_pred_t + D_t      # y_{t|t-1} = Z*s_{t|t-1} + D
+                V_pred_t = Z_t*P_pred_t*Z_t' + E_t # V_{t|t-1} = Var y_{t|t-1} = Z*P_{t|t-1}*Z' + E
+                dy = y_t - y_pred_t                # dy = y_t - y_{t|t-1} = prediction error
+                K = T*P_pred_t*Z_t'/V_pred_t       # K_t = T*P_{t|t-1}'Z'/V_{t|t-1} = Kalman gain
+
+                # e_t = V_pred_t\dy - K'*r_t         # e_t     = (1/V_{t|t-1})dy - K_t'*r_t
+
+                e_t1 = Z_t1' * (V_pred_t\dy)
+                e_t2 = K'*r_t
+                r_t = e_t1 - Z_t' * e_t2 + T'*r_t#Z_t'*e_t + T'*r_t            # r_{t-1} = Z'*e_t + T'*r_t
+                e_t = V_pred_t\dy - K'*r_t
+                #r_t = Z_t'*e_t + T'*r_t
+            end
+#=
             s_pred_t = @view s_pred[:, t]            # s_{t|t-1}
             P_pred_t = @view P_pred[:, :, t]         # P_{t|t-1} = Var s_{t|t-1}
 
-            y_pred_t = Z_t1*s_pred_t + D_t1      # y_{t|t-1} = Z*s_{t|t-1} + D
-            V_pred_t = Z_t1*P_pred_t*Z_t1' + E_t1 # V_{t|t-1} = Var y_{t|t-1} = Z*P_{t|t-1}*Z' + E
+            y_pred_t = Z_t*s_pred_t + D_t      # y_{t|t-1} = Z*s_{t|t-1} + D
+            V_pred_t = Z_t*P_pred_t*Z_t' + E_t # V_{t|t-1} = Var y_{t|t-1} = Z*P_{t|t-1}*Z' + E
             dy = y_t - y_pred_t                # dy = y_t - y_{t|t-1} = prediction error
-            K = T1*P_pred_t*Z_t1'/V_pred_t       # K_t = T*P_{t|t-1}'Z'/V_{t|t-1} = Kalman gain
+            K = T*P_pred_t*Z_t'/V_pred_t       # K_t = T*P_{t|t-1}'Z'/V_{t|t-1} = Kalman gain
 
             e_t = V_pred_t\dy - K'*r_t         # e_t     = (1/V_{t|t-1})dy - K_t'*r_t
-            r_t = Z_t1'*e_t + T'*r_t            # r_{t-1} = Z'*e_t + T'*r_t
-
+            r_t = Z_t'*e_t + T'*r_t            # r_{t-1} = Z'*e_t + T'*r_t
+=#
+#=
+            if t == regime_indices2[end][end]
+                r_t = Z_t1' V_pred_t *
+            end
+=#
             s_dist[:,          t] = r_t
             y_dist[nonmissing, t] = e_t
         end # of loop backward through this regime's periods
@@ -275,6 +323,8 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
         s_dist = s_dist[:, insample]
         y_dist = y_dist[:, insample]
     end
+
+    # s_dist[:,regime_indices[end][end]] = s_dist[:,regime_indices[end][end]-1]
 
     return s_dist, y_dist
 end
