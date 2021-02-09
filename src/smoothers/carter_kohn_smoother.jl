@@ -106,14 +106,23 @@ function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abstrac
         # Get state-space system matrices for this regime
         T = Ts[i]
 
+        # Perform within-regime smoothing recursion
+        reg_end_date = regime_indices[i][end] # avoid indexing into this value every time during the loop to save on time
         for t in reverse(regime_indices[i])
             if t == Nt
-                μ = stil_filt[:, end]
-                Σ = Ptil_filt[:, :, end]
+                μ = @view stil_filt[:, end]
+                Σ = @view Ptil_filt[:, :, end]
             else
-                J = Ptil_filt[:, :, t] * T' * pinv(Ptil_pred[:, :, t+1])
-                μ = stil_filt[:, t] + J*(stil_smth[:, t+1] - stil_pred[:, t+1]) # stil_{t|T}
-                Σ = Ptil_filt[:, :, t] - J*T*Ptil_filt[:, :, t]                 # Ptil_{t|T}
+                # Need to be careful in calculating J b/c the T matrix required is supposed to be T_{t + 1}.
+                # If the T is time-varying, then we need to be careful in the time period right before
+                # a regime switch. For notes showing that this is true, see
+                # https://christophertonetti.com/files/notes/Nakata_Tonetti_KalmanFilterAndSmoother.pdf,
+                # which shows
+                # J_t = P_{t | t} * T_{t + 1} * P⁻¹_{t + 1 | t}
+                correct_T = t == reg_end_date ? Ts[i + 1] : T
+                J = view(Ptil_filt, :, :, t) * correct_T' * pinv(view(Ptil_pred, :, :, t + 1))
+                μ = view(stil_filt, :, t) + J * (view(stil_smth, :, t + 1) - view(stil_pred, :, t + 1)) # stil_{t|T}
+                Σ = view(Ptil_filt, :, :, t) - J * correct_T * view(Ptil_filt, :, :, t)                 # Ptil_{t|T}
             end
 
             # Draw stil_t ∼ N(stil_{t|T}, Ptil_{t|T})
@@ -141,7 +150,7 @@ function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abstrac
                     vcat(μ[1:Ns] .+ U1 * diagm(0 => sqrt.(eig1)) * randn(Ns),
                          μ[Ns+1:end] .+ diagm(0 => sqrt.(eig2)) * randn(Ne))
                 else
-                    μ .+ U * diagm(0 => (sqrt.(eig))) * randn(Ns+Ne)
+                    μ .+ U * Diagonal(sqrt.(eig)) * randn(Ns+Ne)
                 end
             else
                 μ
