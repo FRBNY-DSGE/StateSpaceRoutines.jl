@@ -213,77 +213,78 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
     y_dist = zeros(S, Ny, Nt)
 
     r_t = zeros(S, Ns) # r_0 = 0
-
     for i = length(regime_indices):-1:1
         # Get state-space system matrices for this regime
         T_t    = Ts[i]
         Z, D, E = Zs[i], Ds[i], Es[i]
 
-        reg_end_index = regime_indices[i][end] # index for first period of this regime
-        for t in reverse(regime_indices[i])
-            # Keep rows of measurement equation corresponding to nonmissing observables
-            nonmissing = .![ismissing(x) ? true : isnan(x) for x in view(y, :, t)]
-            allnonmiss = all(nonmissing)
-            if allnonmiss # avoid unnecessary copying when no observables are missing
-                y_t = y
-                Z_t = Z
-                D_t = D
-                E_t = E
-            else
-                y_t = y[nonmissing, t] # view is not used here b/c
-                Z_t = Z[nonmissing, :] # nonmissing is typically discontiguous, hence
-                D_t = D[nonmissing]    # column major order will not be preserved
-                E_t = E[nonmissing, nonmissing]
-            end
+        if !isempty(regime_indices[i])
+            reg_end_index = regime_indices[i][end] # index for first period of this regime
+            for t in reverse(regime_indices[i])
+                # Keep rows of measurement equation corresponding to nonmissing observables
+                nonmissing = .![ismissing(x) ? true : isnan(x) for x in view(y, :, t)]
+                allnonmiss = all(nonmissing)
+                if allnonmiss # avoid unnecessary copying when no observables are missing
+                    y_t = y
+                    Z_t = Z
+                    D_t = D
+                    E_t = E
+                else
+                    y_t = y[nonmissing, t] # view is not used here b/c
+                    Z_t = Z[nonmissing, :] # nonmissing is typically discontiguous, hence
+                    D_t = D[nonmissing]    # column major order will not be preserved
+                    E_t = E[nonmissing, nonmissing]
+                end
 
-            if t == reg_end_index && t < Nt # the check t < Nt ensures we don't trigger an BoundsError
-                # this should be triggered when t == 242, 241, 197
-                # When we are at the end of a regime, and there is time-variation,
-                # we need to distinguish between which matrices are used to perform the forecast in time t-1
-                # and which matrices actually apply at time t
-                #
-                # Observe that when t == Nt, r_{Nt} = 0, hence in the formula for e_t and r_t (see below),
-                # the impact of Z_{t+1} and T_{t+1} is zeroed out, which is why we don't run this code block
-                # when t == Nt. But when t < Nt and occurs at the end of a regime,
-                # we need to correct the Kalman gain and the impact of r_t on r_{t-1}
-                # for the regime switch in period t + 1
-                T_t1 = Ts[i+1] # t1 = t + 1
-                Z_t1 = Zs[i+1][nonmissing, :]
-                D_t1 = Ds[i+1][nonmissing]
-                E_t1 = Es[i+1][nonmissing, nonmissing]
+                if t == reg_end_index && t < Nt # the check t < Nt ensures we don't trigger an BoundsError
+                    # this should be triggered when t == 242, 241, 197
+                    # When we are at the end of a regime, and there is time-variation,
+                    # we need to distinguish between which matrices are used to perform the forecast in time t-1
+                    # and which matrices actually apply at time t
+                    #
+                    # Observe that when t == Nt, r_{Nt} = 0, hence in the formula for e_t and r_t (see below),
+                    # the impact of Z_{t+1} and T_{t+1} is zeroed out, which is why we don't run this code block
+                    # when t == Nt. But when t < Nt and occurs at the end of a regime,
+                    # we need to correct the Kalman gain and the impact of r_t on r_{t-1}
+                    # for the regime switch in period t + 1
+                    T_t1 = Ts[i+1] # t1 = t + 1
+                    Z_t1 = Zs[i+1][nonmissing, :]
+                    D_t1 = Ds[i+1][nonmissing]
+                    E_t1 = Es[i+1][nonmissing, nonmissing]
 
-                s_pred_t = @view s_pred[:, t]         # s_{t|t-1}                 # NOTE: s_pred[:, t] = s_{t|t-1}, so it's indexed by
-                P_pred_t = @view P_pred[:, :, t]      # P_{t|t-1} = Var s_{t|t-1} # forecast period, not conditional period
+                    s_pred_t = @view s_pred[:, t]         # s_{t|t-1}                 # NOTE: s_pred[:, t] = s_{t|t-1}, so it's indexed by
+                    P_pred_t = @view P_pred[:, :, t]      # P_{t|t-1} = Var s_{t|t-1} # forecast period, not conditional period
 
-                y_pred_t = Z_t*s_pred_t + D_t         # y_{t|t-1} = Z_t*s_{t|t-1} + D_t
-                V_pred_t = Z_t*P_pred_t*Z_t' + E_t    # V_{t|t-1} = Var y_{t|t-1} = Z_t*P_{t|t-1}*Z_t' + E_t
-                dy = y_t - y_pred_t                   # dy = y_t - y_{t|t-1} = prediction error
-                K = T_t1*P_pred_t*Z_t1'/V_pred_t      # K_t = T_{t+1}*P_{t|t-1}'Z_{t+1}'/V_{t|t-1} = Kalman gain
+                    y_pred_t = Z_t*s_pred_t + D_t         # y_{t|t-1} = Z_t*s_{t|t-1} + D_t
+                    V_pred_t = Z_t*P_pred_t*Z_t' + E_t    # V_{t|t-1} = Var y_{t|t-1} = Z_t*P_{t|t-1}*Z_t' + E_t
+                    dy = y_t - y_pred_t                   # dy = y_t - y_{t|t-1} = prediction error
+                    K = T_t1*P_pred_t*Z_t1'/V_pred_t      # K_t = T_{t+1}*P_{t|t-1}'Z_{t+1}'/V_{t|t-1} = Kalman gain
 
-                # When the matrices are different between time periods,
-                # we cannot use r_{t-1} = Z'*e_t + T'*r_t b/c this formula
-                # assumes Z_t = Z_{t+1} and T_t = T_{t+1}
-                e_t = V_pred_t\dy - K'*r_t    # e_t = V_{t|t-1}⁻¹*dy - K_t'*r_t (note r_{Nt} = 0)
-                r_t = Z_t' * (V_pred_t\dy) -  # r_{t-1} = Z_t*V_{t|t-1}⁻¹*dy - Z_{t+1}*K_t'*r_t + T_{t+1}'r_t
+                    # When the matrices are different between time periods,
+                    # we cannot use r_{t-1} = Z'*e_t + T'*r_t b/c this formula
+                    # assumes Z_t = Z_{t+1} and T_t = T_{t+1}
+                    e_t = V_pred_t\dy - K'*r_t    # e_t = V_{t|t-1}⁻¹*dy - K_t'*r_t (note r_{Nt} = 0)
+                    r_t = Z_t' * (V_pred_t\dy) -  # r_{t-1} = Z_t*V_{t|t-1}⁻¹*dy - Z_{t+1}*K_t'*r_t + T_{t+1}'r_t
                     Z_t1'*K'*r_t + T_t1'*r_t
-            else
-                # In this case, we can treat Z_t = Z_{t+1} and T_t = T_{t+1}
-                s_pred_t = @view s_pred[:, t]      # s_{t|t-1}
-                P_pred_t = @view P_pred[:, :, t]   # P_{t|t-1} = Var s_{t|t-1}
+                else
+                    # In this case, we can treat Z_t = Z_{t+1} and T_t = T_{t+1}
+                    s_pred_t = @view s_pred[:, t]      # s_{t|t-1}
+                    P_pred_t = @view P_pred[:, :, t]   # P_{t|t-1} = Var s_{t|t-1}
 
-                y_pred_t = Z_t*s_pred_t + D_t      # y_{t|t-1} = Z*s_{t|t-1} + D
-                V_pred_t = Z_t*P_pred_t*Z_t' + E_t # V_{t|t-1} = Var y_{t|t-1} = Z*P_{t|t-1}*Z' + E
-                dy = y_t - y_pred_t                # dy = y_{t} - y_{t|t-1} = prediction error
-                K = T_t*P_pred_t*Z_t'/V_pred_t     # K = T*P_{t|t-1}'Z'/V_{t|t-1} = Kalman gain
+                    y_pred_t = Z_t*s_pred_t + D_t      # y_{t|t-1} = Z*s_{t|t-1} + D
+                    V_pred_t = Z_t*P_pred_t*Z_t' + E_t # V_{t|t-1} = Var y_{t|t-1} = Z*P_{t|t-1}*Z' + E
+                    dy = y_t - y_pred_t                # dy = y_{t} - y_{t|t-1} = prediction error
+                    K = T_t*P_pred_t*Z_t'/V_pred_t     # K = T*P_{t|t-1}'Z'/V_{t|t-1} = Kalman gain
 
-                e_t = V_pred_t\dy - K'*r_t         # e_t = (1/V_{t|t-1})dy - K_'*r_t
-                r_t = Z_t'*e_t + T_t'*r_t          # r_{t-1} = Z'*e_{t+1} + T'*r_t
-            end
+                    e_t = V_pred_t\dy - K'*r_t         # e_t = (1/V_{t|t-1})dy - K_'*r_t
+                    r_t = Z_t'*e_t + T_t'*r_t          # r_{t-1} = Z'*e_{t+1} + T'*r_t
+                end
 
-            s_dist[:,          t] = r_t
-            y_dist[nonmissing, t] = e_t
-        end # of loop backward through this regime's periods
-    end # of loop backward through regimes
+                s_dist[:,          t] = r_t
+                y_dist[nonmissing, t] = e_t
+            end # of loop backward through this regime's periods
+        end # of loop backward through regimes
+    end
 
     # Trim the presample if needed
     if Nt0 > 0

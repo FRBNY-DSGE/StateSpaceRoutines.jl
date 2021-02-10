@@ -107,53 +107,55 @@ function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abstrac
         T = Ts[i]
 
         # Perform within-regime smoothing recursion
-        reg_end_index = regime_indices[i][end] # avoid indexing into this value every time during the loop to save on time
-        for t in reverse(regime_indices[i])
-            if t == Nt
-                μ = @view stil_filt[:, end]
-                Σ = @view Ptil_filt[:, :, end]
-            else
-                # Need to be careful in calculating J b/c the T matrix required is supposed to be T_{t + 1}.
-                # If the T is time-varying, then we need to be careful in the time period right before
-                # a regime switch. For notes showing that this is true, see
-                # https://christophertonetti.com/files/notes/Nakata_Tonetti_KalmanFilterAndSmoother.pdf,
-                # which shows
-                # J_t = P_{t | t} * T_{t + 1} * P⁻¹_{t + 1 | t}
-                correct_T = t == reg_end_index ? Ts[i + 1] : T
-                J = view(Ptil_filt, :, :, t) * correct_T' * pinv(view(Ptil_pred, :, :, t + 1))
-                μ = view(stil_filt, :, t) + J * (view(stil_smth, :, t + 1) - view(stil_pred, :, t + 1)) # stil_{t|T}
-                Σ = view(Ptil_filt, :, :, t) - J * correct_T * view(Ptil_filt, :, :, t)                 # Ptil_{t|T}
-            end
-
-            # Draw stil_t ∼ N(stil_{t|T}, Ptil_{t|T})
-            stil_smth[:, t] = if draw_states
-                U, eig, _ = svd(Σ)
-                if testing_carter_kohn
-                    U1, eig1, _ = svd(Σ[1:Ns, 1:Ns])
-                    U2, eig2, _ = svd(Σ[Ns+1:end, Ns+1:end])
-                    conded[t] = maximum(abs.(Σ[Ns+1:end,1:Ns]))
-                    # conded[t] = isposdef(Σ[Ns+1:end,Ns+1:end]) ? 1.0 : 0.0
-                    # conded[t] = minimum(eig2)
-                    # conded[t] = isposdef(Σ[1:Ns,1:Ns]) ? 1.0 : 0.0
-                    # conded[t] = maximum(abs.(U[Ns+1:end,:]))
-                    # conded[t] = maximum(abs.((U * diagm(0 => (sqrt.(eig))))[Ns+1:end,:]))
-                    # conded[t] = minimum(U[Ns+1:end,:])
-                    # conded[t] = maximum(abs.(randn(Ns+Ne)))
-                    # @show size(U), size(eig), size(Σ), size(μ)
-                    # firsted = μ[1:Ns] .+ U[1:Ns,1:Ns] * diagm(0 => (sqrt.(eig[1:Ns]))) * randn(Ns)
-                    # seconded = μ[Ns+1:end] .+ diagm(0 => (sqrt.(eig[Ns+1:end]))) * randn(Ne)# Σ[Ns+1:end, Ns+1:end] * randn(Ne)
-                    # vcat(firsted, seconded)
-                    # evals, evecs = eigen(Σ)
-                    # please_work = evecs * diagm(0 => sqrt.(evals)) * inv(evecs)
-                    # real(μ .+ please_work * randn(Ns+Ne))
-                    # μ .+ Σ * randn(Ns+Ne)
-                    vcat(μ[1:Ns] .+ U1 * diagm(0 => sqrt.(eig1)) * randn(Ns),
-                         μ[Ns+1:end] .+ diagm(0 => sqrt.(eig2)) * randn(Ne))
+        if !isempty(regime_indices[i])
+            reg_end_index = regime_indices[i][end] # avoid indexing into this value every time during the loop to save on time
+            for t in reverse(regime_indices[i])
+                if t == Nt
+                    μ = @view stil_filt[:, end]
+                    Σ = @view Ptil_filt[:, :, end]
                 else
-                    μ .+ U * Diagonal(sqrt.(eig)) * randn(Ns+Ne)
+                    # Need to be careful in calculating J b/c the T matrix required is supposed to be T_{t + 1}.
+                    # If the T is time-varying, then we need to be careful in the time period right before
+                    # a regime switch. For notes showing that this is true, see
+                    # https://christophertonetti.com/files/notes/Nakata_Tonetti_KalmanFilterAndSmoother.pdf,
+                    # which shows
+                    # J_t = P_{t | t} * T_{t + 1} * P⁻¹_{t + 1 | t}
+                    correct_T = t == reg_end_index ? Ts[i + 1] : T
+                    J = view(Ptil_filt, :, :, t) * correct_T' * pinv(view(Ptil_pred, :, :, t + 1))
+                    μ = view(stil_filt, :, t) + J * (view(stil_smth, :, t + 1) - view(stil_pred, :, t + 1)) # stil_{t|T}
+                    Σ = view(Ptil_filt, :, :, t) - J * correct_T * view(Ptil_filt, :, :, t)                 # Ptil_{t|T}
                 end
-            else
-                μ
+
+                # Draw stil_t ∼ N(stil_{t|T}, Ptil_{t|T})
+                stil_smth[:, t] = if draw_states
+                    U, eig, _ = svd(Σ)
+                    if testing_carter_kohn
+                        U1, eig1, _ = svd(Σ[1:Ns, 1:Ns])
+                        U2, eig2, _ = svd(Σ[Ns+1:end, Ns+1:end])
+                        conded[t] = maximum(abs.(Σ[Ns+1:end,1:Ns]))
+                        # conded[t] = isposdef(Σ[Ns+1:end,Ns+1:end]) ? 1.0 : 0.0
+                        # conded[t] = minimum(eig2)
+                        # conded[t] = isposdef(Σ[1:Ns,1:Ns]) ? 1.0 : 0.0
+                        # conded[t] = maximum(abs.(U[Ns+1:end,:]))
+                        # conded[t] = maximum(abs.((U * diagm(0 => (sqrt.(eig))))[Ns+1:end,:]))
+                        # conded[t] = minimum(U[Ns+1:end,:])
+                        # conded[t] = maximum(abs.(randn(Ns+Ne)))
+                        # @show size(U), size(eig), size(Σ), size(μ)
+                        # firsted = μ[1:Ns] .+ U[1:Ns,1:Ns] * diagm(0 => (sqrt.(eig[1:Ns]))) * randn(Ns)
+                        # seconded = μ[Ns+1:end] .+ diagm(0 => (sqrt.(eig[Ns+1:end]))) * randn(Ne)# Σ[Ns+1:end, Ns+1:end] * randn(Ne)
+                        # vcat(firsted, seconded)
+                        # evals, evecs = eigen(Σ)
+                        # please_work = evecs * diagm(0 => sqrt.(evals)) * inv(evecs)
+                        # real(μ .+ please_work * randn(Ns+Ne))
+                        # μ .+ Σ * randn(Ns+Ne)
+                        vcat(μ[1:Ns] .+ U1 * diagm(0 => sqrt.(eig1)) * randn(Ns),
+                             μ[Ns+1:end] .+ diagm(0 => sqrt.(eig2)) * randn(Ne))
+                    else
+                        μ .+ U * Diagonal(sqrt.(eig)) * randn(Ns+Ne)
+                    end
+                else
+                    μ
+                end
             end
         end
     end

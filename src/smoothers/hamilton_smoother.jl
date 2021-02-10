@@ -91,20 +91,22 @@ function hamilton_smoother(regime_indices::Vector{UnitRange{Int}}, y::AbstractMa
         T = Ts[i]
 
         # Perform within-regime smoothing recursion
-        reg_end_index = regime_indices[i][end] # avoid indexing into this value every time during the loop to save on time
-        for t in reverse(regime_indices[i])
-            # The smoothed state in t = T is the same as the filtered state
-            t == Nt && continue
+        if !isempty(regime_indices[i])
+            reg_end_index = regime_indices[i][end] # avoid indexing into this value every time during the loop to save on time
+            for t in reverse(regime_indices[i])
+                # The smoothed state in t = T is the same as the filtered state
+                t == Nt && continue
 
-            # Need to be careful in calculating J b/c the T matrix required is supposed to be T_{t + 1}.
-            # If the T is time-varying, then we need to be careful in the time period right before
-            # a regime switch. For notes showing that this is true, see
-            # https://christophertonetti.com/files/notes/Nakata_Tonetti_KalmanFilterAndSmoother.pdf,
-            # which shows
-            # J_t = P_{t | t} * T_{t + 1} * P⁻¹_{t + 1 | t}
-            correct_T = t == reg_end_index ? Ts[i + 1] : T
-            J = view(Ptil_filt, :, :, t) * correct_T' * pinv(view(Ptil_pred, :, :, t + 1))
-            stil_smth[:, t] = view(stil_filt, :, t) + J * (view(stil_smth, :, t + 1) - view(stil_pred, :, t + 1)) # stil_{t|T}
+                # Need to be careful in calculating J b/c the T matrix required is supposed to be T_{t + 1}.
+                # If the T is time-varying, then we need to be careful in the time period right before
+                # a regime switch. For notes showing that this is true, see
+                # https://christophertonetti.com/files/notes/Nakata_Tonetti_KalmanFilterAndSmoother.pdf,
+                # which shows
+                # J_t = P_{t | t} * T_{t + 1} * P⁻¹_{t + 1 | t}
+                correct_T = t == reg_end_index ? Ts[i + 1] : T
+                J = view(Ptil_filt, :, :, t) * correct_T' * pinv(view(Ptil_pred, :, :, t + 1))
+                stil_smth[:, t] = view(stil_filt, :, t) + J * (view(stil_smth, :, t + 1) - view(stil_pred, :, t + 1)) # stil_{t|T}
+            end
         end
     end
 
