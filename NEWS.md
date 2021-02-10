@@ -1,4 +1,7 @@
 # StateSpaceRoutines.jl v0.3.4 Release notes
+- Fix all smoothers to allow for time variation in any component of a Gaussian linear state space system.
+
+# StateSpaceRoutines.jl v0.3.4 Release notes
 - Generalize Durbin-Koopman smoother to allow temporary time variation in `CCC`
 
 # StateSpaceRoutines.jl v0.3.3 Release notes
