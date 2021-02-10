@@ -107,7 +107,7 @@ function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abstrac
         T = Ts[i]
 
         # Perform within-regime smoothing recursion
-        reg_end_date = regime_indices[i][end] # avoid indexing into this value every time during the loop to save on time
+        reg_end_index = regime_indices[i][end] # avoid indexing into this value every time during the loop to save on time
         for t in reverse(regime_indices[i])
             if t == Nt
                 μ = @view stil_filt[:, end]
@@ -119,7 +119,7 @@ function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abstrac
                 # https://christophertonetti.com/files/notes/Nakata_Tonetti_KalmanFilterAndSmoother.pdf,
                 # which shows
                 # J_t = P_{t | t} * T_{t + 1} * P⁻¹_{t + 1 | t}
-                correct_T = t == reg_end_date ? Ts[i + 1] : T
+                correct_T = t == reg_end_index ? Ts[i + 1] : T
                 J = view(Ptil_filt, :, :, t) * correct_T' * pinv(view(Ptil_pred, :, :, t + 1))
                 μ = view(stil_filt, :, t) + J * (view(stil_smth, :, t + 1) - view(stil_pred, :, t + 1)) # stil_{t|T}
                 Σ = view(Ptil_filt, :, :, t) - J * correct_T * view(Ptil_filt, :, :, t)                 # Ptil_{t|T}
