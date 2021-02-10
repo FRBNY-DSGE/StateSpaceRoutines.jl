@@ -89,8 +89,9 @@ function koopman_smoother(regime_indices::Vector{UnitRange{Int}}, y::AbstractMat
     Ne = size(Rs[1], 2) # number of shocks
 
     # Call disturbance smoother
-    s_dist, _ = koopman_disturbance_smoother(regime_indices, y, Ts, Rs, Qs,
-                                             Zs, Ds, Es, s_pred, P_pred; Nt0 = 0)
+    s_dist = koopman_disturbance_smoother(regime_indices, y, Ts, Rs, Qs,
+                                          Zs, Ds, Es, s_pred, P_pred; Nt0 = 0,
+                                          obs_disturbances = false)
 
     # Initialize outputs
     s_smth = zeros(S, Ns, Nt)
@@ -131,7 +132,7 @@ end
 """
 ```
 koopman_disturbance_smoother(y, T, R, Q, Z, D, E, s_pred, P_pred;
-    Nt0 = 0)
+    Nt0 = 0, output = [:states, :obs])
 
 koopman_smoother(regime_indices, y, Ts, Rs, Qs, Zs, Ds, Es,
     s_pred, P_pred; Nt0 = 0)
@@ -179,6 +180,9 @@ where:
 
 - `Nt0`: if greater than 0, the returned smoothed disturbances and shocks
   matrices will be shorter by that number of columns (taken from the beginning)
+- `obs_disturbance`: if true, then we return both the transition equation
+    and measurement equation disturbances. Otherwise, only
+    the transition equation disturbances are returned.
 
 ### Outputs
 
@@ -188,19 +192,20 @@ where:
 function koopman_disturbance_smoother(y::AbstractArray,
     T::Matrix{S}, R::Matrix{S}, Q::Matrix{S},
     Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
-    s_pred::Matrix{S}, P_pred::Array{S, 3}; Nt0::Int = 0) where {S<:AbstractFloat}
+    s_pred::Matrix{S}, P_pred::Array{S, 3}; Nt0::Int = 0,
+    obs_disturbances::Bool = true) where {S<:AbstractFloat}
 
     Nt = size(y, 2)
     koopman_disturbance_smoother(UnitRange{Int}[1:Nt], y, Matrix{S}[T], Matrix{S}[R],
         Matrix{S}[Q], Matrix{S}[Z], Vector{S}[D], Matrix{S}[E],
-        s_pred, P_pred; Nt0 = Nt0)
+        s_pred, P_pred; Nt0 = Nt0, obs_disturbances = obs_disturbances)
 end
 
 function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Qs::Vector{Matrix{S}},
     Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
-    s_pred::Matrix{S}, P_pred::Array{S, 3}; Nt0::Int = 0) where {S<:AbstractFloat}
-
+    s_pred::Matrix{S}, P_pred::Array{S, 3}; Nt0::Int = 0,
+    obs_disturbances::Bool = true) where {S<:AbstractFloat}
 
     # Dimensions
     Nt = size(y ,    2) # number of periods of data
@@ -209,8 +214,10 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
     Ny = size(Zs[1], 1) # number of observables
 
     # Initialize outputs
-    s_dist = zeros(S, Ns, Nt)
-    y_dist = zeros(S, Ny, Nt)
+    s_dist = Matrix{S}(undef, Ns, Nt)
+    if obs_disturbances
+        y_dist = zeros(S, Ny, Nt) # use zeros b/c we only update the nonmissing values and leave missing ones as zeros
+    end
 
     r_t = zeros(S, Ns) # r_0 = 0
     for i = length(regime_indices):-1:1
@@ -263,9 +270,11 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
                     # When the matrices are different between time periods,
                     # we cannot use r_{t-1} = Z'*e_t + T'*r_t b/c this formula
                     # assumes Z_t = Z_{t+1} and T_t = T_{t+1}
-                    e_t = V_pred_t\dy - K'*r_t    # e_t = V_{t|t-1}⁻¹*dy - K_t'*r_t (note r_{Nt} = 0)
-                    r_t = Z_t' * (V_pred_t\dy) -  # r_{t-1} = Z_t*V_{t|t-1}⁻¹*dy - Z_{t+1}*K_t'*r_t + T_{t+1}'r_t
-                    Z_t'*K'*r_t + T_t1'*r_t
+                    if obs_disturbances
+                        e_t = V_pred_t\dy - K'*r_t    # e_t = V_{t|t-1}⁻¹*dy - K_t'*r_t (note r_{Nt} = 0)
+                    end
+                    r_t = Z_t' * (V_pred_t\dy) -      # r_{t-1} = Z_t*V_{t|t-1}⁻¹*dy - Z_t*K_t'*r_t + T_{t+1}'r_t
+                        Z_t1'*K'*r_t + T_t1'*r_t
                 else
                     # In this case, we can treat Z_t = Z_{t+1} and T_t = T_{t+1}
                     s_pred_t = @view s_pred[:, t]      # s_{t|t-1}
@@ -276,12 +285,18 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
                     dy = y_t - y_pred_t                # dy = y_{t} - y_{t|t-1} = prediction error
                     K = T_t*P_pred_t*Z_t'/V_pred_t     # K = T*P_{t|t-1}'Z'/V_{t|t-1} = Kalman gain
 
-                    e_t = V_pred_t\dy - K'*r_t         # e_t = (1/V_{t|t-1})dy - K_'*r_t
-                    r_t = Z_t'*e_t + T_t'*r_t          # r_{t-1} = Z'*e_{t+1} + T'*r_t
+                    if obs_disturbances
+                        e_t = V_pred_t\dy - K'*r_t         # e_t = (1/V_{t|t-1})dy - K_'*r_t
+                        r_t = Z_t'*e_t + T_t'*r_t          # r_{t-1} = Z'*e_{t+1} + T'*r_t
+                    else
+                        r_t = Z_t'*(V_pred_t\dy - K'*r_t) + T_t'*r_t
+                    end
                 end
 
-                s_dist[:,          t] = r_t
-                y_dist[nonmissing, t] = e_t
+                s_dist[:, t] = r_t
+                if obs_disturbances
+                    y_dist[nonmissing, t] = e_t
+                end
             end # of loop backward through this regime's periods
         end # of loop backward through regimes
     end
@@ -293,5 +308,9 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
         y_dist = y_dist[:, insample]
     end
 
-    return s_dist, y_dist
+    if obs_disturbances
+        return s_dist, y_dist
+    else
+        return s_dist
+    end
 end
