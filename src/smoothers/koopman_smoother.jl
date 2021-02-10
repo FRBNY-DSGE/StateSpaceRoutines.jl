@@ -225,7 +225,7 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
                 nonmissing = .![ismissing(x) ? true : isnan(x) for x in view(y, :, t)]
                 allnonmiss = all(nonmissing)
                 if allnonmiss # avoid unnecessary copying when no observables are missing
-                    y_t = y
+                    y_t = @view y[:, t]
                     Z_t = Z
                     D_t = D
                     E_t = E
