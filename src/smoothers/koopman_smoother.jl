@@ -258,14 +258,14 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
                     y_pred_t = Z_t*s_pred_t + D_t         # y_{t|t-1} = Z_t*s_{t|t-1} + D_t
                     V_pred_t = Z_t*P_pred_t*Z_t' + E_t    # V_{t|t-1} = Var y_{t|t-1} = Z_t*P_{t|t-1}*Z_t' + E_t
                     dy = y_t - y_pred_t                   # dy = y_t - y_{t|t-1} = prediction error
-                    K = T_t1*P_pred_t*Z_t1'/V_pred_t      # K_t = T_{t+1}*P_{t|t-1}'Z_{t+1}'/V_{t|t-1} = Kalman gain
+                    K = T_t1*P_pred_t*Z_t'/V_pred_t      # K_t = T_{t+1}*P_{t|t-1}'Z_{t+1}'/V_{t|t-1} = Kalman gain
 
                     # When the matrices are different between time periods,
                     # we cannot use r_{t-1} = Z'*e_t + T'*r_t b/c this formula
                     # assumes Z_t = Z_{t+1} and T_t = T_{t+1}
                     e_t = V_pred_t\dy - K'*r_t    # e_t = V_{t|t-1}⁻¹*dy - K_t'*r_t (note r_{Nt} = 0)
                     r_t = Z_t' * (V_pred_t\dy) -  # r_{t-1} = Z_t*V_{t|t-1}⁻¹*dy - Z_{t+1}*K_t'*r_t + T_{t+1}'r_t
-                    Z_t1'*K'*r_t + T_t1'*r_t
+                    Z_t'*K'*r_t + T_t1'*r_t
                 else
                     # In this case, we can treat Z_t = Z_{t+1} and T_t = T_{t+1}
                     s_pred_t = @view s_pred[:, t]      # s_{t|t-1}

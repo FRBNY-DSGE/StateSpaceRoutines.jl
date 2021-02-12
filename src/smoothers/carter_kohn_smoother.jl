@@ -97,11 +97,11 @@ function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abstrac
     # Smooth the stacked states and shocks recursively, starting at t = T-1 and
     # going backwards
     stil_smth = copy(stil_filt)
-
+#=
     if testing_carter_kohn
         conded = zeros(regime_indices[end][end])
     end
-
+=#
     for i = length(regime_indices):-1:1
         # Get state-space system matrices for this regime
         T = Ts[i]
@@ -129,8 +129,8 @@ function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abstrac
                 # Draw stil_t ∼ N(stil_{t|T}, Ptil_{t|T})
                 stil_smth[:, t] = if draw_states
                     U, eig, _ = svd(Σ)
-                    if testing_carter_kohn
-                        U1, eig1, _ = svd(Σ[1:Ns, 1:Ns])
+                    #=if testing_carter_kohn
+                        #=U1, eig1, _ = svd(Σ[1:Ns, 1:Ns])
                         U2, eig2, _ = svd(Σ[Ns+1:end, Ns+1:end])
                         conded[t] = maximum(abs.(Σ[Ns+1:end,1:Ns]))
                         # conded[t] = isposdef(Σ[Ns+1:end,Ns+1:end]) ? 1.0 : 0.0
@@ -149,10 +149,12 @@ function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abstrac
                         # real(μ .+ please_work * randn(Ns+Ne))
                         # μ .+ Σ * randn(Ns+Ne)
                         vcat(μ[1:Ns] .+ U1 * diagm(0 => sqrt.(eig1)) * randn(Ns),
-                             μ[Ns+1:end] .+ diagm(0 => sqrt.(eig2)) * randn(Ne))
-                    else
+                             μ[Ns+1:end] .+ diagm(0 => sqrt.(eig2)) * randn(Ne))=#
                         μ .+ U * Diagonal(sqrt.(eig)) * randn(Ns+Ne)
-                    end
+                    else=#
+                    μ + U * diagm(0 => (sqrt.(eig))) * randn(Ns+Ne)
+                        # μ .+ U * Diagonal(sqrt.(eig)) * randn(Ns+Ne)
+                    #end
                 else
                     μ
                 end
@@ -170,10 +172,10 @@ function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abstrac
         s_smth = s_smth[:, insample]
         ϵ_smth = ϵ_smth[:, insample]
     end
-
+#=
     if testing_carter_kohn
         return s_smth, ϵ_smth, conded
     end
-
+=#
     return s_smth, ϵ_smth
 end
