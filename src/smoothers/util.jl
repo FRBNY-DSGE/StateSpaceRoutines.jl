@@ -48,6 +48,12 @@ function augment_states_with_shocks(regime_indices::Vector{UnitRange{Int64}},
     Ne = size(RRRs[1], 2) # number of shocks
     Ny = size(ZZs[1],  1) # number of observables
 
+    # Make new vectors to avoid side effects
+    newTTTs = similar(TTTs)
+    newRRRs = similar(RRRs)
+    newCCCs = similar(CCCs)
+    newZZs  = similar(ZZs)
+
     # Augment initial conditions
     z0 = vcat(z0, zeros(Ne))
     P0 = vcat(hcat(P0, zeros(Nz, Ne)), hcat(zeros(Ne, Nz), QQs[1]))
@@ -58,11 +64,11 @@ function augment_states_with_shocks(regime_indices::Vector{UnitRange{Int64}},
         QQ,  ZZ       = QQs[i],  ZZs[i]
 
         # Augment regime-specific matrices
-        TTTs[i] = vcat(hcat(TTT, zeros(Nz, Ne)), hcat(zeros(Ne, Nz), zeros(Ne, Ne)))
-        RRRs[i] = vcat(RRR, Matrix{Float64}(I, Ne, Ne))
-        CCCs[i] = vcat(CCC, zeros(Ne))
-        ZZs[i]  = hcat(ZZ, zeros(Ny, Ne))
+        newTTTs[i] = vcat(hcat(TTT, zeros(Nz, Ne)), hcat(zeros(Ne, Nz), zeros(Ne, Ne)))
+        newRRRs[i] = vcat(RRR, Matrix{Float64}(I, Ne, Ne))
+        newCCCs[i] = vcat(CCC, zeros(Ne))
+        newZZs[i]  = hcat(ZZ, zeros(Ny, Ne))
     end
 
-    return TTTs, RRRs, CCCs, ZZs, z0, P0
+    return newTTTs, newRRRs, newCCCs, newZZs, z0, P0
 end
