@@ -274,7 +274,7 @@ function koopman_disturbance_smoother(regime_indices::Vector{UnitRange{Int}}, y:
                         e_t = V_pred_t\dy - K'*r_t    # e_t = V_{t|t-1}⁻¹*dy - K_t'*r_t (note r_{Nt} = 0)
                     end
                     r_t = Z_t' * (V_pred_t\dy) -      # r_{t-1} = Z_t*V_{t|t-1}⁻¹*dy - Z_t*K_t'*r_t + T_{t+1}'r_t
-                        Z_t1'*K'*r_t + T_t1'*r_t
+                        Z_t'*K'*r_t + T_t1'*r_t
                 else
                     # In this case, we can treat Z_t = Z_{t+1} and T_t = T_{t+1}
                     s_pred_t = @view s_pred[:, t]      # s_{t|t-1}
