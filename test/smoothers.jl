@@ -119,9 +119,9 @@ end
             elseif i in [4, 5]
                 @test obs[:carter_kohn_draw][i, not_nan] ≈ y[i, not_nan] atol=5e-4
             else
-                @test obs[:carter_kohn_draw][i, not_nan] ≈ y[i, not_nan] atol=5e-5
+                @test obs[:carter_kohn_draw][i, not_nan] ≈ y[i, not_nan] atol=5e-4
             end
-            @test obs[:durbin_koopman_draw][i, not_nan] ≈ y[i, not_nan] atol=5e-6
+            @test obs[:durbin_koopman_draw][i, not_nan] ≈ y[i, not_nan] atol=5e-4
         end
     end
 end
