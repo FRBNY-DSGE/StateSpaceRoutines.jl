@@ -107,7 +107,7 @@ end
     @test shocks[:hamilton] ≈ shocks[:carter_kohn]
     @test shocks[:koopman] ≈ shocks[:durbin_koopman]
     @test maximum(abs.(states[:hamilton] - states[:koopman])) < 5e-3
-    @test maximum(abs.(shocks[:hamilton] - shocks[:koopman])) < 1e-3
+    @test maximum(abs.(shocks[:hamilton] - shocks[:koopman])) < 1.5e-3
     for i in 1:size(y, 1)
         not_nan = findall(.!isnan.(y[i, :]))
         if !isempty(not_nan)
@@ -117,7 +117,7 @@ end
             if i in [1, 3, 7, 8, 13]
                 @test obs[:carter_kohn_draw][i, not_nan] ≈ y[i, not_nan] atol=1e-2
             elseif i in [4, 5]
-                @test obs[:carter_kohn_draw][i, not_nan] ≈ y[i, not_nan] atol=5e-5
+                @test obs[:carter_kohn_draw][i, not_nan] ≈ y[i, not_nan] atol=5e-4
             else
                 @test obs[:carter_kohn_draw][i, not_nan] ≈ y[i, not_nan] atol=5e-5
             end
