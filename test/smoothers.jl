@@ -112,14 +112,14 @@ end
         not_nan = findall(.!isnan.(y[i, :]))
         if !isempty(not_nan)
             for k in [:hamilton, :koopman, :carter_kohn, :durbin_koopman]
-                @test obs[k][i, not_nan] ≈ y[i, not_nan] atol=5e-6
+                @test obs[k][i, not_nan] ≈ y[i, not_nan] atol=6e-6
             end
             if i in [1, 3, 7, 8, 13]
                 @test obs[:carter_kohn_draw][i, not_nan] ≈ y[i, not_nan] atol=1e-2
             elseif i in [4, 5]
                 @test obs[:carter_kohn_draw][i, not_nan] ≈ y[i, not_nan] atol=5e-5
             else
-                @test obs[:carter_kohn_draw][i, not_nan] ≈ y[i, not_nan] atol=1e-5
+                @test obs[:carter_kohn_draw][i, not_nan] ≈ y[i, not_nan] atol=5e-5
             end
             @test obs[:durbin_koopman_draw][i, not_nan] ≈ y[i, not_nan] atol=5e-6
         end
