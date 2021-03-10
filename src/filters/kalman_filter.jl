@@ -62,8 +62,8 @@ All eigenvalues of `T` are inside the unit circle when the state space model
 is stationary. When the preceding formula cannot be applied, the initial state
 vector estimate is set to `C` and its covariance matrix is given by `1e6 * I`.
 """
-function init_stationary_states(T::Matrix{S}, R::Matrix{S}, C::Vector{S},
-                                Q::Matrix{S};
+function init_stationary_states(T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVector{S},
+                                Q::AbstractMatrix{S};
                                 check_is_stationary::Bool = true) where {S<:Real}
     if check_is_stationary
         e = eigvals(T)
@@ -366,10 +366,10 @@ function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractAr
     return loglh
 end
 
-function kalman_likelihood(y::AbstractArray, T::Matrix{S}, R::Matrix{S}, C::Vector{S},
-                           Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
-                           s_0::Vector{S} = Vector{S}(undef, 0),
-                           P_0::Matrix{S} = Matrix{S}(undef, 0, 0);
+function kalman_likelihood(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVector{S},
+                           Q::AbstractMatrix{S}, Z::AbstractMatrix{S}, D::AbstractVector{S}, E::AbstractMatrix{S},
+                           s_0::AbstractVector{S} = Vector{S}(undef, 0),
+                           P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
                            Nt0::Int = 0, tol::AbstractFloat = 0.0,
                            switching::Bool = true) where {S<:Real}
     # Dimensions
