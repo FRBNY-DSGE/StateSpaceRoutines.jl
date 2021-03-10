@@ -32,7 +32,11 @@ function KalmanFilter(T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVec
                       converged::Bool = false,
                       PZV::AbstractMatrix{S} = Matrix{S}(undef, 0, 0)) where {S<:Real}
     if isempty(s_0) || isempty(P_0)
-        s_0, P_0 = init_stationary_states(T, R, C, Q)
+        if issparse(T) # can't call eigvals on a sparse matrix
+            s_0, P_0 = init_stationary_states(Matrix(T), R, C, Q)
+        else
+            s_0, P_0 = init_stationary_states(T, R, C, Q)
+        end
     end
 
     return KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0, NaN, converged, PZV)

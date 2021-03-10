@@ -1,6 +1,7 @@
 # StateSpaceRoutines.jl v0.4.1 Release notes
 - Fix Koopman disturbance smoother when Z is time-varying.
 - Add further tests in time-varying cases.
+- Sparse matrices allowed for Kalman filter
 
 # StateSpaceRoutines.jl v0.4.0 Release notes
 - Fix all smoothers to allow for time variation in any component of a Gaussian linear state space system. Previous attempts were incorrect.

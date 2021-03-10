@@ -7,7 +7,7 @@ module StateSpaceRoutines
     using LinearAlgebra, Statistics
     using Roots: fzero
     using Distributed
-    using SharedArrays
+    using SharedArrays, SparseArrays
 
     export
 
