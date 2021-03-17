@@ -64,21 +64,19 @@ function carter_kohn_smoother(y::AbstractMatrix,
                               T::Matrix{S}, R::Matrix{S}, C::Vector{S},
                               Q::Matrix{S}, Z::Matrix{S}, D::Vector{S}, E::Matrix{S},
                               s_0::Vector{S}, P_0::Matrix{S};
-                              Nt0::Int = 0, draw_states::Bool = true,
-                              testing_carter_kohn::Bool = false) where {S<:AbstractFloat}
+                              Nt0::Int = 0, draw_states::Bool = true) where {S<:AbstractFloat}
 
     Nt = size(y, 2)
     carter_kohn_smoother(UnitRange{Int}[1:Nt], y, Matrix{S}[T], Matrix{S}[R], Vector{S}[C],
                          Matrix{S}[Q], Matrix{S}[Z], Vector{S}[D], Matrix{S}[E], s_0, P_0;
-                         Nt0 = Nt0, draw_states = draw_states,
-                         testing_carter_kohn = testing_carter_kohn)
+                         Nt0 = Nt0, draw_states = draw_states)
 end
 
 function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::AbstractMatrix,
     Ts::Vector{Matrix{S}}, Rs::Vector{Matrix{S}}, Cs::Vector{Vector{S}}, Qs::Vector{Matrix{S}},
     Zs::Vector{Matrix{S}}, Ds::Vector{Vector{S}}, Es::Vector{Matrix{S}},
     s_0::Vector{S}, P_0::Matrix{S};
-    Nt0::Int = 0, draw_states::Bool = true, testing_carter_kohn::Bool = false) where {S<:AbstractFloat}
+    Nt0::Int = 0, draw_states::Bool = true) where {S<:AbstractFloat}
 
     # Dimensions
     Nt = size(y,     2) # number of periods of data
@@ -97,11 +95,6 @@ function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abstrac
     # Smooth the stacked states and shocks recursively, starting at t = T-1 and
     # going backwards
     stil_smth = copy(stil_filt)
-#=
-    if testing_carter_kohn
-        conded = zeros(regime_indices[end][end])
-    end
-=#
     for i = length(regime_indices):-1:1
         # Get state-space system matrices for this regime
         T = Ts[i]
@@ -129,32 +122,7 @@ function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abstrac
                 # Draw stil_t ∼ N(stil_{t|T}, Ptil_{t|T})
                 stil_smth[:, t] = if draw_states
                     U, eig, _ = svd(Σ)
-                    #=if testing_carter_kohn
-                        #=U1, eig1, _ = svd(Σ[1:Ns, 1:Ns])
-                        U2, eig2, _ = svd(Σ[Ns+1:end, Ns+1:end])
-                        conded[t] = maximum(abs.(Σ[Ns+1:end,1:Ns]))
-                        # conded[t] = isposdef(Σ[Ns+1:end,Ns+1:end]) ? 1.0 : 0.0
-                        # conded[t] = minimum(eig2)
-                        # conded[t] = isposdef(Σ[1:Ns,1:Ns]) ? 1.0 : 0.0
-                        # conded[t] = maximum(abs.(U[Ns+1:end,:]))
-                        # conded[t] = maximum(abs.((U * diagm(0 => (sqrt.(eig))))[Ns+1:end,:]))
-                        # conded[t] = minimum(U[Ns+1:end,:])
-                        # conded[t] = maximum(abs.(randn(Ns+Ne)))
-                        # @show size(U), size(eig), size(Σ), size(μ)
-                        # firsted = μ[1:Ns] .+ U[1:Ns,1:Ns] * diagm(0 => (sqrt.(eig[1:Ns]))) * randn(Ns)
-                        # seconded = μ[Ns+1:end] .+ diagm(0 => (sqrt.(eig[Ns+1:end]))) * randn(Ne)# Σ[Ns+1:end, Ns+1:end] * randn(Ne)
-                        # vcat(firsted, seconded)
-                        # evals, evecs = eigen(Σ)
-                        # please_work = evecs * diagm(0 => sqrt.(evals)) * inv(evecs)
-                        # real(μ .+ please_work * randn(Ns+Ne))
-                        # μ .+ Σ * randn(Ns+Ne)
-                        vcat(μ[1:Ns] .+ U1 * diagm(0 => sqrt.(eig1)) * randn(Ns),
-                             μ[Ns+1:end] .+ diagm(0 => sqrt.(eig2)) * randn(Ne))=#
-                        μ .+ U * Diagonal(sqrt.(eig)) * randn(Ns+Ne)
-                    else=#
-                    μ + U * diagm(0 => (sqrt.(eig))) * randn(Ns+Ne)
-                        # μ .+ U * Diagonal(sqrt.(eig)) * randn(Ns+Ne)
-                    #end
+                    μ .+ U * Diagonal(sqrt.(eig)) * randn(Ns+Ne)
                 else
                     μ
                 end
@@ -172,10 +140,6 @@ function carter_kohn_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abstrac
         s_smth = s_smth[:, insample]
         ϵ_smth = ϵ_smth[:, insample]
     end
-#=
-    if testing_carter_kohn
-        return s_smth, ϵ_smth, conded
-    end
-=#
+
     return s_smth, ϵ_smth
 end

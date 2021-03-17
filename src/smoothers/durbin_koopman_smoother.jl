@@ -99,7 +99,7 @@ function durbin_koopman_smoother(regime_indices::Vector{UnitRange{Int}}, y::Abst
     # Draw initial state s_0+
     s_plus_t = if draw_states
         U, eig, _ = svd(P_0)
-        U * diagm(0 => (sqrt.(eig))) * randn(Ns)
+        U * Diagonal(sqrt.(eig)) * randn(Ns)
     else
         zeros(S, Ns)
     end
