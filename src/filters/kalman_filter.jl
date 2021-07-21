@@ -3,19 +3,19 @@ using LinearAlgebra
 This code is loosely based on a routine originally copyright Federal Reserve Bank of Atlanta
 and written by Iskander Karibzhanov.
 """
-mutable struct KalmanFilter{S<:Number}
+mutable struct KalmanFilter{S,V,W <:Number, X,Y<:Real}
     T::AbstractMatrix{S}
     R::AbstractMatrix{S}
     C::AbstractVector{S}
-    Q::AbstractMatrix{S}
-    Z::AbstractMatrix{S}
-    D::AbstractVector{S}
-    E::AbstractMatrix{S}
-    s_t::AbstractVector{S} # s_{t|t-1} or s_{t|t}
-    P_t::AbstractMatrix{S} # P_{t|t-1} or P_{t|t}
+    Q::AbstractMatrix{V}
+    Z::AbstractMatrix{V}
+    D::AbstractVector{V}
+    E::AbstractMatrix{V}
+    s_t::AbstractVector{Y} # s_{t|t-1} or s_{t|t}
+    P_t::AbstractMatrix{W} # P_{t|t-1} or P_{t|t}
     loglh_t::U where {U<:Number}     # P(y_t | y_{1:t})
     converged::Bool
-    PZV::AbstractMatrix{S}
+    PZV::AbstractMatrix{X}
 end
 
 """
@@ -25,12 +25,12 @@ KalmanFilter(T, R, C, Q, Z, D, E, [s_0, P_0])
 
 Outer constructor for the `KalmanFilter` type.
 """
-function KalmanFilter(T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVector{S}, Q::AbstractMatrix{S},
-                      Z::AbstractMatrix{S}, D::AbstractVector{S}, E::AbstractMatrix{S},
-                      s_0::AbstractVector{S} = Vector{S}(undef, 0),
-                      P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0),
+function KalmanFilter(T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVector{S}, Q::AbstractMatrix{U},
+                      Z::AbstractMatrix{U}, D::AbstractVector{U}, E::AbstractMatrix{U},
+                      s_0::AbstractVector{W} = Vector{Real}(undef, 0),
+                      P_0::AbstractMatrix{V} = Matrix{S}(undef, 0, 0),
                       converged::Bool = false,
-                      PZV::AbstractMatrix{S} = Matrix{S}(undef, 0, 0)) where {S<:Real}
+                      PZV::AbstractMatrix{Real} = Matrix{Real}(undef, 0, 0)) where {S,U,V,W <:Real}
     if isempty(s_0) || isempty(P_0)
         if issparse(T) # can't call eigvals on a sparse matrix
             s_0, P_0 = init_stationary_states(Matrix(T), R, C, Q)
@@ -38,8 +38,10 @@ function KalmanFilter(T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVec
             s_0, P_0 = init_stationary_states(T, R, C, Q)
         end
     end
-
-    return KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0, NaN, converged, PZV)
+    if eltype(s_0) <: Float64
+        s_0 = convert(Vector{Real}, s_0) 
+    end 
+    return KalmanFilter(T, R, C, Q, Z, D, E,  s_0, P_0, NaN, converged, PZV)
 end
 
 """
@@ -67,13 +69,18 @@ is stationary. When the preceding formula cannot be applied, the initial state
 vector estimate is set to `C` and its covariance matrix is given by `1e6 * I`.
 """
 function init_stationary_states(T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVector{S},
-                                Q::AbstractMatrix{S};
-                                check_is_stationary::Bool = true) where {S<:Real}
+                                Q::AbstractMatrix{U};
+                                check_is_stationary::Bool = true) where {S,U<:Real} #sbs-modified to include a T type that is Real but not same as Floats 
     if check_is_stationary
         e = eigvals(T)
         if all(abs.(e) .< 1)
             s_0 = (UniformScaling(1) - T)\C
-            P_0 = solve_discrete_lyapunov(T, R*Q*R')
+            # @show typeof(R) #sbs remove 
+            # @show typeof(Q) #sbs remove 
+           
+            # @show R*Q*R' #sbs remove show
+            # @show typeof(R*Q*R') #sbs remove show 
+            P_0 = solve_discrete_lyapunov(T,convert(Array{Real,2}, R*Q*R')) #sbs-changed convert real
         else
             Ns = size(T, 1)
             s_0 = C
@@ -81,7 +88,12 @@ function init_stationary_states(T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::A
         end
     else
         s_0 = (Matrix{eltype(T)}(I, size(T)...) - T)\C
-        P_0 = solve_discrete_lyapunov(T, R*Q*R')
+            # @show typeof(R) #sbs remove 
+            # @show typeof(Q) #sbs remove 
+            # @show R*Q*R' #sbs remove show
+            # @show typeof(R*Q*R') #sbs remove show 
+
+        P_0 = solve_discrete_lyapunov(T, convert(Array{Real,2}, R*Q*R')) #sbs-changed convert real 
     end
     return s_0, P_0
 end
@@ -371,20 +383,20 @@ function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractAr
 end
 
 function kalman_likelihood(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVector{S},
-                           Q::AbstractMatrix{S}, Z::AbstractMatrix{S}, D::AbstractVector{S}, E::AbstractMatrix{S},
+                           Q::AbstractMatrix{U}, Z::AbstractMatrix{U}, D::AbstractVector{U}, E::AbstractMatrix{U},
                            s_0::AbstractVector{S} = Vector{S}(undef, 0),
-                           P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
+                           P_0::AbstractMatrix{V} = Matrix{S}(undef, 0, 0);
                            Nt0::Int = 0, tol::AbstractFloat = 0.0,
-                           switching::Bool = true) where {S<:Real}
+                           switching::Bool = true) where {S, U, V<:Real} #sbs P_0 U type 
     # Dimensions
     Nt = size(y, 2) # number of periods of data
 
     # Initialize inputs and outputs
     k = KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0)
 
-    mynan = convert(S, NaN)
+    mynan = convert(Real, NaN)
     loglh = fill(mynan, Nt)
-
+    loglh = convert(Array{Real}, loglh)
     # Loop through periods t
     RQR′ = R * Q * R'
     for t = 1:Nt
@@ -393,6 +405,8 @@ function kalman_likelihood(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMa
 
         # Update and compute log-likelihood
         update!(k, y[:, t]; return_loglh = true, tol = tol)
+        # @show typeof(loglh[t])
+        # @show typeof(k.loglh_t)
         loglh[t] = k.loglh_t
     end
 

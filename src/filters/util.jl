@@ -70,8 +70,8 @@ and extended to handle Flux.Tracker through multiple dispatch.
 
 """
 function solve_discrete_lyapunov(A::Matrix{S},
-                                 B::Matrix{S},
-                                 max_it::Int=50) where {S<:Real}
+                                 B::Matrix{T},
+                                 max_it::Int=50) where {S,T <:Real}
     # TODO: Implement Bartels-Stewardt
     n = size(A, 2)
     alpha0 = reshape([A;], n, n)
