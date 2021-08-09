@@ -28,17 +28,21 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
 
     if poolmodel
         if parallel
-            @sync @distributed for i in 1:n_particles
-                if initialize
-                    # Initialization step (using 2π instead of φ_old)
-                    coeff_terms[i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
-                    log_e_1_terms[i] = 0.
-                    log_e_2_terms[i] = log(Ψ(s_t_nontemp[:,i])) # pred dens passed -> log it
-                else
-                    coeff_terms[i] = (φ_old)^(-n_obs/2)
-                    log_e_1_terms[i] = -φ_old * log(Ψ(s_t_nontemp[:,i]))
-                    log_e_2_terms[i] = log(Ψ(s_t_nontemp[:,i]))
-                end
+            sendto(workers(), s_t_nontemp = s_t_nontemp)
+            sendto(workers(), Ψ = Ψ)
+            measurement_closure(i::Int) =  log(Ψ(s_t_nontemp[:,i])) # pred dens passed -> log it
+            @everywhere measurement_closure(i::Int) =  log(Ψ(s_t_nontemp[:,i]))
+
+            log_e_2_terms .= @sync @distributed (vcat) for i in 1:n_particles
+                measurement_closure(i)
+            end
+
+            if initialize
+                coeff_terms .= (2*pi)^(-n_obs/2) # this may need to be adjusted
+                log_e_1_terms .= 0.0
+            else
+                coeff_terms .= (φ_old)^(-n_obs/2)
+                log_e_1_terms .= -φ_old .* log_e_1_terms
             end
         else
             for i in 1:n_particles
@@ -56,21 +60,34 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
         end
     else
         if parallel
-            @sync @distributed for i in 1:n_particles
-                error    = y_t - Ψ(s_t_nontemp[:, i])
-                sq_error = dot(error, inv_HH * error)
+            sendto(workers(), y_t = y_t)
+            sendto(workers(), s_t_nontemp = s_t_nontemp)
+            sendto(workers(), inv_HH = inv_HH)
+            sendto(workers(), Ψ = Ψ)
 
-                if initialize
-                    # Initialization step (using 2π instead of φ_old)
-                    coeff_terms[i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
-                    log_e_1_terms[i] = 0.
-                    log_e_2_terms[i] = -1/2 * sq_error
-                else
-                    # Non-initialization step (tempering and final iteration)
-                    coeff_terms[i]   = (φ_old)^(-n_obs/2)
-                    log_e_1_terms[i] = -1/2 * (-φ_old) * sq_error
-                    log_e_2_terms[i] = -1/2 * sq_error
-                end
+            function error_closure(i::Int)
+                error = y_t - Ψ(s_t_nontemp[:, i])
+                return dot(error, inv_HH * error)
+            end
+
+            @everywhere function error_closure(i::Int)
+                error = y_t - Ψ(s_t_nontemp[:, i])
+                return dot(error, inv_HH * error)
+            end
+            sq_error = @sync @distributed (vcat) for i in 1:n_particles
+                error_closure(i)
+            end
+
+            if initialize
+                # Initialization step (using 2π instead of φ_old)
+                coeff_terms   .= (2*pi)^(-n_obs/2) * det_HH^(-1/2)
+                log_e_1_terms .= 0.
+                log_e_2_terms .= -1/2 * sq_error
+            else
+                # Non-initialization step (tempering and final iteration)
+                coeff_terms   .= (φ_old)^(-n_obs/2)
+                log_e_1_terms .= -1/2 * (-φ_old) * sq_error
+                log_e_2_terms .= -1/2 * sq_error
             end
         else
            for i in 1:n_particles

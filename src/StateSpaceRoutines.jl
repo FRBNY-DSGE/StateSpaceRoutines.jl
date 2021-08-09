@@ -8,7 +8,6 @@ module StateSpaceRoutines
     using Roots: fzero
     using Distributed
     using SharedArrays, SparseArrays
-    using DistributedArrays ## Necessary when using parallel in TPF to communicate across servers
 
     export
 
@@ -27,6 +26,7 @@ module StateSpaceRoutines
 
     const VERBOSITY = Dict(:none => 0, :low => 1, :high => 2)
 
+    include("util.jl")
     include("filters/util.jl")
     include("filters/kalman_filter.jl")
     include("filters/chand_recursion.jl")

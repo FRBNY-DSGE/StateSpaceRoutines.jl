@@ -29,12 +29,26 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
 
     # Take Metropolis-Hastings steps
     if parallel
-        @sync @distributed for i in 1:n_particles
-            s_t[:,i], ϵ_t[:,i], accept_vec[i] =
-                mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1[:,i], s_t[:,i], ϵ_t[:,i],
+        sendto(workers(), s_t1 = s_t1)
+        sendto(workers(), s_t = s_t)
+        sendto(workers(), ϵ_t = ϵ_t)
+        sendto(workers(), dist_ϵ = dist_ϵ)
+        sendto(workers(), y_t = y_t)
+        sendto(workers(), Φ = Φ)
+        sendto(workers(), Ψ = Ψ)
+        sendto(workers(), scaled_inv_HH = scaled_inv_HH)
+
+        mh_steps_closure(i::Int) = mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1[:,i], s_t[:,i], ϵ_t[:,i],
                          scaled_det_HH, scaled_inv_HH, n_mh_steps;
                          poolmodel = poolmodel)
+        @everywhere mh_steps_closure(i::Int) = mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1[:,i], s_t[:,i], ϵ_t[:,i],
+                         scaled_det_HH, scaled_inv_HH, n_mh_steps;
+                         poolmodel = poolmodel)
+
+        s_t, ϵ_t, accept_vec .= @sync @distributed (vector_reduce) for i in 1:n_particles
+            mh_steps_closure(i)
         end
+        accept_vec = vec(accept_vec)
     else
          for i in 1:n_particles
             s_t[:,i], ϵ_t[:,i], accept_vec[i] =

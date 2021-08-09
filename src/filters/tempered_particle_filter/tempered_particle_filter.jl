@@ -123,18 +123,12 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     end
 
     # Initialize working variables
-    s_t1_temp     = parallel ? SharedMatrix{Float64}(copy(s_init)) :
-        Matrix{Float64}(copy(s_init))
-    s_t_nontemp   = parallel ? SharedMatrix{Float64}(n_states, n_particles) :
-        Matrix{Float64}(undef, n_states, n_particles)
-    ϵ_t           = parallel ? SharedMatrix{Float64}(n_shocks, n_particles) :
-        Matrix{Float64}(undef, n_shocks, n_particles)
-    coeff_terms   = parallel ? SharedVector{Float64}(n_particles) :
-        Vector{Float64}(undef, n_particles)
-    log_e_1_terms = parallel ? SharedVector{Float64}(n_particles) :
-        Vector{Float64}(undef, n_particles)
-    log_e_2_terms = parallel ? SharedVector{Float64}(n_particles) :
-        Vector{Float64}(undef, n_particles)
+    s_t1_temp     = Matrix{Float64}(copy(s_init))
+    s_t_nontemp   = Matrix{Float64}(undef, n_states, n_particles)
+    ϵ_t           = Matrix{Float64}(undef, n_shocks, n_particles)
+    coeff_terms   = Vector{Float64}(undef, n_particles)
+    log_e_1_terms = Vector{Float64}(undef, n_particles)
+    log_e_2_terms = Vector{Float64}(undef, n_particles)
 
     inc_weights   = Vector{Float64}(undef, n_particles)
     norm_weights  = Vector{Float64}(undef, n_particles)
@@ -190,9 +184,20 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
         # Initialize s_t_nontemp and ϵ_t for this period
         if parallel
-            @sync @distributed for i in 1:n_particles
-                ϵ_t[:, i] .= rand(F_ϵ)
-                s_t_nontemp[:, i] = Φ(s_t1_temp[:, i], ϵ_t[:, i])
+            # Send to workers
+            ϵ_t = rand(F_ϵ, n_particles)
+            if ndims(ϵ_t) == 1 # Edge case where only 1 shock
+                ϵ_t = reshape(ϵ_t, (1, length(ϵ_t)))
+            end
+            sendto(workers(), s_t1_temp = s_t1_temp)
+            sendto(workers(), ϵ_t = ϵ_t)
+            sendto(workers(), Φ = Φ)
+
+            state_transition_closure(i::Int) = Φ(s_t1_temp[:, i], ϵ_t[:, i])
+            @everywhere state_transition_closure(i::Int) = Φ(s_t1_temp[:, i], ϵ_t[:, i])
+
+            s_t_nontemp .= @sync @distributed (hcat) for i in 1:n_particles
+                state_transition_closure(i)
             end
         else
              for i in 1:n_particles
