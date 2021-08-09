@@ -123,6 +123,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     end
 
     # Initialize working variables
+#=
     s_t1_temp     = parallel ? SharedMatrix{Float64}(copy(s_init)) :
         Matrix{Float64}(copy(s_init))
     s_t_nontemp   = parallel ? SharedMatrix{Float64}(n_states, n_particles) :
@@ -134,6 +135,19 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     log_e_1_terms = parallel ? SharedVector{Float64}(n_particles) :
         Vector{Float64}(undef, n_particles)
     log_e_2_terms = parallel ? SharedVector{Float64}(n_particles) :
+        Vector{Float64}(undef, n_particles)
+=#
+    s_t1_temp     = parallel ? distribute(copy(s_init)) :
+        Matrix{Float64}(copy(s_init))
+    s_t_nontemp   = parallel ? dzeros(n_states, n_particles) :
+        Matrix{Float64}(undef, n_states, n_particles)
+    ϵ_t           = #parallel ? dzeros(n_shocks, n_particles) :
+        Matrix{Float64}(undef, n_shocks, n_particles)
+    coeff_terms   = parallel ? dzeros(n_particles) :
+        Vector{Float64}(undef, n_particles)
+    log_e_1_terms = parallel ? dzeros(n_particles) :
+        Vector{Float64}(undef, n_particles)
+    log_e_2_terms = parallel ? dzeros(n_particles) :
         Vector{Float64}(undef, n_particles)
 
     inc_weights   = Vector{Float64}(undef, n_particles)
@@ -190,9 +204,18 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
         # Initialize s_t_nontemp and ϵ_t for this period
         if parallel
-            @sync @distributed for i in 1:n_particles
-                ϵ_t[:, i] .= rand(F_ϵ)
-                s_t_nontemp[:, i] = Φ(s_t1_temp[:, i], ϵ_t[:, i])
+            ϵ_t = rand(F_ϵ, n_particles)
+            if ndims(ϵ_t) == 1 # Edge case where only 1 shock
+                ϵ_t = reshape(ϵ_t, (1, length(ϵ_t)))
+            end
+            # Cite for DArray: https://discourse.julialang.org/t/alternative-to-sharedarrays-for-multi-node-cluster/37794
+            s_t_notemp = DArray((n_states,n_particles), workers(), [1,nworkers()]) do inds # the 1 in dist = [1,x] important because each chunk should have complete columns
+                arr = zeros(inds) # OffsetArray corrects local indices
+                s_t1 = OffsetArray(localpart(s_t1_temp),DistributedArrays.localindices(s_t1_temp)) # worker also stores some part of s_t1_temp which this gets and corrects
+                for i in inds[2]
+                    arr[:,i] .= Φ(convert(Vector,s_t1[:, i]), ϵ_t[:, i]) # Need to convert for type-checking in Φ
+                end
+                parent(arr) # remove the OffsetArray wrapper
             end
         else
              for i in 1:n_particles
@@ -258,7 +281,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         if get_t_particle_dist
             # save the normalized weights in the column for period t
             t_norm_weights[:,t] = norm_weights
-            t_particle_dist[t] = copy(s_t_nontemp)
+            t_particle_dist[t] = parallel ? convert(Array, s_t_nontemp) : copy(s_t_nontemp)
         end
 
         times[t] = time_ns() - begin_time
@@ -267,12 +290,18 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             @show loglh[t]
             print("Completion of one period $times[t]")
         end
-        s_t1_temp .= s_t_nontemp
+        if parallel
+            s_t1_temp = s_t_nontemp
+        else
+            s_t1_temp .= s_t_nontemp
+        end
     end # of loop over periods
 
     if VERBOSITY[verbose] >= VERBOSITY[:low]
         println("=============================================")
     end
+
+    darray_closeall()
 
     if get_t_particle_dist && allout
         return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times, t_particle_dist, t_norm_weights

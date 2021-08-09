@@ -20,6 +20,19 @@ function selection!(norm_weights::Vector{Float64}, s_t1_temp::M, s_t_nontemp::M,
     return nothing
 end
 
+function selection!(norm_weights::Vector{Float64}, s_t1_temp::M, s_t_nontemp::M, ϵ_t::AbstractMatrix{Float64};
+                    resampling_method::Symbol = :multinomial) where M<:DArray{Float64}
+    # Resampling
+    is = resample(norm_weights, method = resampling_method)
+
+    # Update arrays using resampled indices
+    s_t1_temp1   = distribute(convert(Array, s_t1_temp)[:, is])
+    s_t_nontemp1 = distribute(convert(Array, s_t_nontemp)[:, is])
+    ϵ_t1         = ϵ_t[:, is]
+
+    return nothing
+end
+
 """
 ```
 resample(weights; method = :systematic)
@@ -63,6 +76,7 @@ function resample(weights::Vector{Float64}; method::Symbol = :systematic)
         return new_inds
 
     elseif method == :multinomial
+        @show typeof(Weights(weights)), n_particles, typeof(weights), length(weights), sum(isnan.(weights))
         return sample(1:n_particles, Weights(weights), n_particles, replace = true)
 
     else

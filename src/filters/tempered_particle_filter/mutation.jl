@@ -18,7 +18,8 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
     n_particles = size(ϵ_t, 2)
 
     # Initialize vector of acceptances
-    accept_vec = parallel ? SharedVector{Int}(n_particles) : Vector{Int}(undef, n_particles)
+    #accept_vec = parallel ? SharedVector{Int}(n_particles) : Vector{Int}(undef, n_particles)
+    accept_vec = Vector{Int}(undef, n_particles)
 
     # Used to generate new draws of ϵ
     dist_ϵ = MvNormal(c^2 * diag(QQ))
@@ -29,12 +30,27 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
 
     # Take Metropolis-Hastings steps
     if parallel
-        @sync @distributed for i in 1:n_particles
-            s_t[:,i], ϵ_t[:,i], accept_vec[i] =
-                mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1[:,i], s_t[:,i], ϵ_t[:,i],
-                         scaled_det_HH, scaled_inv_HH, n_mh_steps;
-                         poolmodel = poolmodel)
+        combined_mat_inds = (size(s_t,1) + size(ϵ_t,1) + 1, n_particles)
+        combined_mat = DArray(combined_mat_inds, workers(), [1, nworkers()]) do inds
+            arr = zeros(inds)
+            s_t1_d = OffsetArray(localparts(s_t1), DistributedArrays.localindices(s_t1))
+            s_t_d = OffsetArray(localparts(s_t), DistributedArrays.localindices(s_t))
+            # ϵ_t_d = OffsetArray(localparts(ϵ_t), DistributedArrays.localindices(ϵ_t))
+
+            for i in inds[2]
+                ss, ϵs, accepts =
+                    mh_steps(Φ, Ψ, dist_ϵ, y_t, parent(s_t1_d[:,i]), parent(s_t_d[:,i]), ϵ_t_d[:,i],
+                             scaled_det_HH, scaled_inv_HH, n_mh_steps;
+                             poolmodel = poolmodel)
+                arr[1:size(s_t,1),i] .= ss
+                arr[size(s_t,1)+1:end-1,i] .= ϵs
+                arr[end,i] .= accepts
+            end
+            parent(arr)
         end
+        s_t = combined_mat[1:size(s_t,1),:]
+        ϵ_t .= combined_mat[size(s_t,1)+1:end-1,:]
+        accept_vec .= combined_mat[end,:]
     else
          for i in 1:n_particles
             s_t[:,i], ϵ_t[:,i], accept_vec[i] =
