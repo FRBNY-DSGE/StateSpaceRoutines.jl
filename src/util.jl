@@ -56,6 +56,7 @@ end
 function vec_red_scal(args...)
 ```
 vector_reduce but scalar_reduce for last argument
+Hard coded for 3 arguments
 """
 function vec_scal_reduce(args...)
     nargs1 = length(args)    # The number of times the loop is run
@@ -64,14 +65,36 @@ function vec_scal_reduce(args...)
     return_arg = args[1]
     for i in 1:nargs2
         for j in 2:nargs1
-            if i < nargs2
-                return_arg[i] = hcat(return_arg[i], args[j][i])
+            if i == nargs2
+                append!(return_arg[i], args[j][i][1])
+                #return_arg[i] = vcat(return_arg[i], args[j][i])
             else
-                append!(return_arg[i], args[j][i])
+                return_arg[i] = hcat(return_arg[i], args[j][i])
             end
         end
     end
     return return_arg
+#=
+    nargs1 = length(args)    # The number of times the loop is run
+    nargs2 = length(args[1]) # The number of variables output by a single run
+
+    if nargs2 == 1
+        return args
+    end
+
+    arg1, arg2, arg3 = args[1]
+    #arg2 = args[1][2]
+    #arg3 = args[1][3]
+
+    for j in 2:nargs1
+        arg1 = hcat(arg1, args[j][1])
+        arg2 = hcat(arg2, args[j][2])
+        arg3 = vcat(arg3, args[j][3])
+    end
+
+    return_arg = (arg1, arg2, arg3)
+    return return_arg
+=#
 end
 
 """

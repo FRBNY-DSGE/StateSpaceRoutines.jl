@@ -74,6 +74,7 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                 error = y_t - Ψ(s_t_nontemp[:, i])
                 return dot(error, inv_HH * error)
             end
+
             sq_error = @sync @distributed (vcat) for i in 1:n_particles
                 error_closure(i)
             end

@@ -1,3 +1,6 @@
+# StateSpaceRoutine.jl v0.4.2 Release notes
+- Fix Tempered Particle Filter when run in parallel with multiple nodes.
+
 # StateSpaceRoutines.jl v0.4.1 Release notes
 - Fix Koopman disturbance smoother when Z is time-varying.
 - Add further tests in time-varying cases.
