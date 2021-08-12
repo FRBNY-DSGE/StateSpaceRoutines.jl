@@ -44,32 +44,7 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
         @everywhere mh_steps_closure(i::Int) = mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1[:,i], s_t[:,i], ϵ_t[:,i],
                          scaled_det_HH, scaled_inv_HH, n_mh_steps;
                          poolmodel = poolmodel)
-#=
-        @floop DistributedEx() for i in 1:n_particles#DistributedEx(threads_basesize = Int(ceil(n_particles / nworkers()))) begin
-            #=s_t_fin = Matrix(undef, size(s_t,1), 0)
-            ϵ_t_fin = Matrix(undef, size(ϵ_t,1), 0)
-            accept_vec_fin = []
 
-            for i in 1:n_particles=#
-            s_t2, ϵ_t2, accept_vec2 = mh_steps_closure(i)
-#=            @reduce() do (s_t_fin = Matrix(undef, size(s_t,1), 0); s_t2)
-                s_t_fin = hcat(s_t_fin, s_t2)
-            end
-            @reduce() do (ϵ_t_fin = Matrix(undef, size(ϵ_t,1), 0); ϵ_t2)
-                ϵ_t_fin = hcat(ϵ_t_fin, ϵ_t2)
-            end
-            @reduce() do (accept_vec_fin = []; accept_vec2)
-                accept_vec_fin = append!(accept_vec_fin, accept_vec2)
-            end
-=#
-            @reduce(s_t_fin = hcat(Matrix(undef, size(s_t,1), 0), s_t2), ϵ_t_fin = hcat(Matrix(undef, size(ϵ_t,1), 0), ϵ_t2),
-                    accept_vec_fin = append!([],accept_vec2))
-        end
-            #end
-        s_t .= s_t_fin
-        ϵ_t .= ϵ_t_fin
-        accept_vec .= accept_vec_fin
-=#
         s_t2, ϵ_t2, accept_vec2 = @sync @distributed (vector_reduce) for i in 1:n_particles
             vector_reshape(mh_steps_closure(i)...)
         end
