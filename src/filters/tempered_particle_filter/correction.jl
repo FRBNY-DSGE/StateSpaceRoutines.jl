@@ -29,7 +29,7 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
     if poolmodel
         if parallel
             sendto(workers(), s_t_nontemp = s_t_nontemp)
-            sendto(workers(), Ψ = Ψ)
+            # sendto(workers(), Ψ = Ψ) ## Should be sent to all workers before calling the function
             measurement_closure(i::Int) =  log(Ψ(s_t_nontemp[:,i])) # pred dens passed -> log it
             @everywhere measurement_closure(i::Int) =  log(Ψ(s_t_nontemp[:,i]))
 
@@ -60,10 +60,10 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
         end
     else
         if parallel
+            # sendto(workers(), Ψ = Ψ) ## Should be sent to all workers before calling the function
             sendto(workers(), y_t = y_t)
             sendto(workers(), s_t_nontemp = s_t_nontemp)
             sendto(workers(), inv_HH = inv_HH)
-            sendto(workers(), Ψ = Ψ)
 
             function error_closure(i::Int)
                 error = y_t - Ψ(s_t_nontemp[:, i])

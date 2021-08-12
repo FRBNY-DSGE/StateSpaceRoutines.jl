@@ -34,8 +34,8 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
         sendto(workers(), ϵ_t = ϵ_t)
         sendto(workers(), dist_ϵ = dist_ϵ)
         sendto(workers(), y_t = y_t)
-        sendto(workers(), Φ = Φ)
-        sendto(workers(), Ψ = Ψ)
+        # sendto(workers(), Φ = Φ) ## Should be sent to all workers before calling the function
+        # sendto(workers(), Ψ = Ψ) ## Should be sent to all workers before calling the function
         sendto(workers(), scaled_inv_HH = scaled_inv_HH)
 
         mh_steps_closure(i::Int) = mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1[:,i], s_t[:,i], ϵ_t[:,i],

@@ -191,7 +191,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             end
             sendto(workers(), s_t1_temp = s_t1_temp)
             sendto(workers(), ϵ_t = ϵ_t)
-            sendto(workers(), Φ = Φ)
+            # sendto(workers(), Φ = Φ) ## Should be sent to all workers before calling the function
 
             state_transition_closure(i::Int) = Φ(s_t1_temp[:, i], ϵ_t[:, i])
             @everywhere state_transition_closure(i::Int) = Φ(s_t1_temp[:, i], ϵ_t[:, i])
