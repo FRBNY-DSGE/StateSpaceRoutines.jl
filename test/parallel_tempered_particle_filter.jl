@@ -49,8 +49,8 @@ myprocs = addprocs_frbny(12)
 @everywhere Φ(s_t::AbstractVector{Float64}, ϵ_t::AbstractVector{Float64}) = TTT*s_t + RRR*ϵ_t + CCC
 @everywhere Ψ(s_t::AbstractVector{Float64}) = ZZ*s_t + DD
 
-StateSpaceRoutines.sendto(workers(), Φ = Φ)
-StateSpaceRoutines.sendto(workers(), Ψ = Ψ)#=
+#= StateSpaceRoutines.sendto(workers(), Φ = Φ)
+StateSpaceRoutines.sendto(workers(), Ψ = Ψ)
 StateSpaceRoutines.sendto(workers(), coeff_terms = coeff_terms)
 StateSpaceRoutines.sendto(workers(), log_e_1_terms = log_e_1_terms)
 StateSpaceRoutines.sendto(workers(), log_e_2_terms = log_e_2_terms)
