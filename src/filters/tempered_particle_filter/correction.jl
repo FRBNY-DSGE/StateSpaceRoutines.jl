@@ -40,10 +40,10 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                     parent(arr)
                 end
             else
-                coeff_terms = dfill((φ_old)^(-n_obs/2), size(coeff_terms))
-                half_wkr = n_workers()#Int(floor(n_workers()/2)) ## TODO: Might not work if each worker has some part of s_t_nontemp and you only use half the workers here.
+                coeff_terms .= dfill((φ_old)^(-n_obs/2), size(coeff_terms))
+                half_wkr = nworkers()#Int(floor(n_workers()/2)) ## TODO: Might not work if each worker has some part of s_t_nontemp and you only use half the workers here.
 
-                log_e_1_terms = DArray(size(log_e_1_terms), workers()[1:half_wkr], [1,half_wkr]) do inds
+                log_e_1_terms .= DArray(size(log_e_1_terms), workers()[1:half_wkr], [1,half_wkr]) do inds
                     arr = zeros(inds)
                     s_t_no = OffsetArray(localpart(s_t_nontemp), DistributedArrays.localindices(s_t_nontemp))
                     for i in inds[1]
@@ -52,7 +52,7 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                     parent(arr)
                 end
 
-                log_e_2_terms = DArray(size(log_e_2_terms), workers()[1:half_wkr], [1,half_wkr]) do inds
+                log_e_2_terms .= DArray(size(log_e_2_terms), workers()[1:half_wkr], [1,half_wkr]) do inds
                     arr = zeros(inds)
                     s_t_no = OffsetArray(localpart(s_t_nontemp), DistributedArrays.localindices(s_t_nontemp))
                     for i in inds[1]
@@ -77,19 +77,28 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
         end
     else
         if parallel
-            error    = y_t .- Ψ(s_t_nontemp[:, i])
+            error = DArray((n_particles,), workers()[1:nworkers()], [1,nworkers()]) do inds
+                arr = zeros(inds)
+                s_t_no = OffsetArray(localpart(s_t_nontemp), DistributedArrays.localindices(s_t_nontemp))
+                for i in inds[1] ## [1] b/c inds is (1:n,) so need to index into tuple first
+                    arr[i] = y_t .- Ψ(convert(Vector,s_t_no[:,i]))
+                end
+                parent(arr)
+            end
+
+            #error    = y_t .- Ψ(s_t_nontemp[:, i])
             sq_error = dot(error, inv_HH * error)
 
             if initialize
                 # Initialization step (using 2π instead of φ_old)
-                coeff_terms   = dfill((2*pi)^(-n_obs/2) * det_HH^(-1/2), size(coeff_terms))
-                log_e_1_terms = dzeros(size(log_e_1_terms))
-                log_e_2_terms = dfill(-1/2 * sq_error, size(log_e_2_terms))
+                coeff_terms   .= dfill((2*pi)^(-n_obs/2) * det_HH^(-1/2), size(coeff_terms))
+                log_e_1_terms .= dzeros(size(log_e_1_terms))
+                log_e_2_terms .= dfill(-1/2 * sq_error, size(log_e_2_terms))
             else
                 # Non-initialization step (tempering and final iteration)
-                coeff_terms   = dfill((φ_old)^(-n_obs/2), size(coeff_terms))
-                log_e_1_terms = dfill(-1/2 * (-φ_old) * sq_error, size(log_e_1_terms))
-                log_e_2_terms = dfill(-1/2 * sq_error, size(log_e_2_terms))
+                coeff_terms   .= dfill((φ_old)^(-n_obs/2), size(coeff_terms))
+                log_e_1_terms .= dfill(-1/2 * (-φ_old) * sq_error, size(log_e_1_terms))
+                log_e_2_terms .= dfill(-1/2 * sq_error, size(log_e_2_terms))
             end
         else
            for i in 1:n_particles
