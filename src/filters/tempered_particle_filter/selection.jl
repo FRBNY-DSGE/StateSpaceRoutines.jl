@@ -7,7 +7,7 @@ selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
 Resample particles using `norm_weights`. This function modifies `s_t1_temp`,
 `s_t_nontemp`, and `ϵ_t` in place.
 """
-function selection!(norm_weights::Vector{Float64}, s_t1_temp::M, s_t_nontemp::M, ϵ_t::M;
+function selection!(norm_weights::Vector{Float64}, s_t1_temp::M, s_t_nontemp, ϵ_t::M;
                     resampling_method::Symbol = :multinomial) where M<:AbstractMatrix{Float64}
     # Resampling
     is = resample(norm_weights, method = resampling_method)
@@ -76,7 +76,6 @@ function resample(weights::Vector{Float64}; method::Symbol = :systematic)
         return new_inds
 
     elseif method == :multinomial
-        @show typeof(Weights(weights)), n_particles, typeof(weights), length(weights), sum(isnan.(weights))
         return sample(1:n_particles, Weights(weights), n_particles, replace = true)
 
     else

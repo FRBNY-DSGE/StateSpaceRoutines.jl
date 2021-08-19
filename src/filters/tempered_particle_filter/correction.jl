@@ -77,28 +77,28 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
         end
     else
         if parallel
-            error = DArray((n_particles,), workers()[1:nworkers()], [1,nworkers()]) do inds
+            sq_error = DArray((n_particles,), workers()) do inds
                 arr = zeros(inds)
                 s_t_no = OffsetArray(localpart(s_t_nontemp), DistributedArrays.localindices(s_t_nontemp))
                 for i in inds[1] ## [1] b/c inds is (1:n,) so need to index into tuple first
-                    arr[i] = y_t .- Ψ(convert(Vector,s_t_no[:,i]))
+                    errors = y_t .- Ψ(convert(Vector,s_t_no[:,i]))
+                    arr[i] = dot(errors, inv_HH * errors)
                 end
                 parent(arr)
             end
 
-            #error    = y_t .- Ψ(s_t_nontemp[:, i])
-            sq_error = dot(error, inv_HH * error)
+            sq_error = convert(Array, sq_error)
 
             if initialize
                 # Initialization step (using 2π instead of φ_old)
                 coeff_terms   .= dfill((2*pi)^(-n_obs/2) * det_HH^(-1/2), size(coeff_terms))
                 log_e_1_terms .= dzeros(size(log_e_1_terms))
-                log_e_2_terms .= dfill(-1/2 * sq_error, size(log_e_2_terms))
+                log_e_2_terms .= -1/2 * sq_error#dfill(-1/2 * sq_error, size(log_e_2_terms))
             else
                 # Non-initialization step (tempering and final iteration)
                 coeff_terms   .= dfill((φ_old)^(-n_obs/2), size(coeff_terms))
-                log_e_1_terms .= dfill(-1/2 * (-φ_old) * sq_error, size(log_e_1_terms))
-                log_e_2_terms .= dfill(-1/2 * sq_error, size(log_e_2_terms))
+                log_e_1_terms .= -1/2 * (-φ_old) * sq_error#dfill(-1/2 * (-φ_old) * sq_error, size(log_e_1_terms))
+                log_e_2_terms .= -1/2 * sq_error#dfill(-1/2 * sq_error, size(log_e_2_terms))
             end
         else
            for i in 1:n_particles

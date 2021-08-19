@@ -209,7 +209,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                 ϵ_t = reshape(ϵ_t, (1, length(ϵ_t)))
             end
             # Cite for DArray: https://discourse.julialang.org/t/alternative-to-sharedarrays-for-multi-node-cluster/37794
-            s_t_notemp = DArray((n_states,n_particles), workers(), [1,nworkers()]) do inds # the 1 in dist = [1,x] important because each chunk should have complete columns
+            s_t_nontemp = DArray((n_states,n_particles), workers(), [1,nworkers()]) do inds # the 1 in dist = [1,x] important because each chunk should have complete columns
                 arr = zeros(inds) # OffsetArray corrects local indices
                 s_t1 = OffsetArray(localpart(s_t1_temp),DistributedArrays.localindices(s_t1_temp)) # worker also stores some part of s_t1_temp which this gets and corrects
                 for i in inds[2]
@@ -255,8 +255,19 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             ### 2. Selection
             # Modifies s_t1_temp, s_t_nontemp, ϵ_t
-            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+            if parallel
+                s_t_nontemp_std = convert(Array, s_t_nontemp)
+                s_t1_temp_std = convert(Array, s_t1_temp)
+
+                selection!(norm_weights, s_t1_temp_std, s_t_nontemp_std, ϵ_t;
                        resampling_method = resampling_method)
+
+                s_t_nontemp = distribute(s_t_nontemp_std)
+                s_t1_temp = distribute(s_t1_temp_std)
+            else
+                selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+                           resampling_method = resampling_method)
+            end
 
             loglh[t] += log(mean(inc_weights))
 
@@ -301,7 +312,9 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         println("=============================================")
     end
 
-    darray_closeall()
+    if parallel
+        d_closeall()
+    end
 
     if get_t_particle_dist && allout
         return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times, t_particle_dist, t_norm_weights

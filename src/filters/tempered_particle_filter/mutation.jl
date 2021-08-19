@@ -9,8 +9,8 @@ function modifies `s_t` and `ϵ_t` in place and returns `accept_rate`.
 """
 function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
                    det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::Float64,
-                   y_t::Vector{Float64}, s_t::M, s_t1::M,
-                   ϵ_t::M, c::Float64, n_mh_steps::Int;
+                   y_t::Vector{Float64}, s_t, s_t1,
+                   ϵ_t, c::Float64, n_mh_steps::Int;
                    parallel::Bool = false,
                    poolmodel::Bool = false) where M<:AbstractMatrix{Float64}
     # Sizes
@@ -33,18 +33,18 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
         combined_mat_inds = (size(s_t,1) + size(ϵ_t,1) + 1, n_particles)
         combined_mat = DArray(combined_mat_inds, workers(), [1, nworkers()]) do inds
             arr = zeros(inds)
-            s_t1_d = OffsetArray(localparts(s_t1), DistributedArrays.localindices(s_t1))
-            s_t_d = OffsetArray(localparts(s_t), DistributedArrays.localindices(s_t))
-            # ϵ_t_d = OffsetArray(localparts(ϵ_t), DistributedArrays.localindices(ϵ_t))
+            s_t1_d = OffsetArray(DistributedArrays.localpart(s_t1), DistributedArrays.localindices(s_t1))
+            s_t_d = OffsetArray(DistributedArrays.localpart(s_t), DistributedArrays.localindices(s_t))
+            # ϵ_t_d = OffsetArray(localpart(ϵ_t), DistributedArrays.localindices(ϵ_t))
 
             for i in inds[2]
                 ss, ϵs, accepts =
-                    mh_steps(Φ, Ψ, dist_ϵ, y_t, parent(s_t1_d[:,i]), parent(s_t_d[:,i]), ϵ_t_d[:,i],
+                    mh_steps(Φ, Ψ, dist_ϵ, y_t, parent(s_t1_d[:,i]), parent(s_t_d[:,i]), ϵ_t[:,i],
                              scaled_det_HH, scaled_inv_HH, n_mh_steps;
                              poolmodel = poolmodel)
                 arr[1:size(s_t,1),i] .= ss
                 arr[size(s_t,1)+1:end-1,i] .= ϵs
-                arr[end,i] .= accepts
+                arr[end,i] = accepts
             end
             parent(arr)
         end
