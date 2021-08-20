@@ -12,10 +12,13 @@ F_ϵ = tpf_main_input["F_epsilon"]
 F_u = tpf_main_input["F_u"]
 s_init = tpf_main_input["s_init"]
 
+# s_init = repeat(s_init, outer=(1,1000))
+
 # Tune algorithm
 tuning = Dict(:r_star => 2., :c_init => 0.3, :target_accept_rate => 0.4,
               :resampling_method => :systematic, :n_mh_steps => 1,
-              :n_particles => 1000, :n_presample_periods => 0,
+              :n_particles => 1000,#1000000,
+              :n_presample_periods => 0,
               :allout => true, :parallel => true)
 
 # Define Φ and Ψ (can't be saved to JLD)
@@ -35,9 +38,17 @@ inc_weights = test_file_inputs["inc_weights"]
 HH = cov(F_u)
 s_t_nontemp = test_file_inputs["s_t_nontemp"]
 
+#=s_t_nontemp = repeat(s_t_nontemp, outer=(1,1000))
+coeff_terms = repeat(coeff_terms,1000)
+log_e_1_terms = repeat(log_e_1_terms, 1000)
+log_e_2_terms = repeat(log_e_2_terms, 1000)
+inc_weights = repeat(inc_weights, 1000)
+norm_weights = repeat(norm_weights, 1000)=#
+
 ENV["frbnyjuliamemory"] = "5G"
-myprocs = addprocs_frbny(12)
+myprocs = addprocs_frbny(48)
 @everywhere using JLD, JLD2, Test, Distributions, Random, StateSpaceRoutines, BenchmarkTools, ParallelDataTransfer
+
 #=
 x = randn(10,10)
 sendto(workers(), x=x)
@@ -68,7 +79,9 @@ sendto(workers(), HH=HH)
 sendto(workers(), s_t_nontemp=s_t_nontemp)
 @everywhere inv_HH = inv(HH)
 
-@btime weight_kernel!($coeff_terms, $log_e_1_terms, $log_e_2_terms, $φ_old, $Ψ, $data[:, 47], $s_t_nontemp, $det(HH), $inv_HH;
+#=weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv_HH;
+               initialize = false, parallel = false)=#
+@btime weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv_HH;
                initialize = false, parallel = true)
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv_HH;
                initialize = false, parallel = true)
@@ -86,6 +99,10 @@ end
 ## Selection Tests
 s_t1_temp = test_file_inputs["s_t1_temp"]
 ϵ_t = test_file_inputs["eps_t"]
+
+#=s_t1_temp = repeat(s_t1_temp, outer=(1,1000))
+ϵ_t = repeat(ϵ_t, outer=(1,1000))=#
+
 #=
 ENV["frbnyjuliamemory"] = "5G"
 myprocs = addprocs_frbny(48)
@@ -115,12 +132,12 @@ sendto(workers(), φ_new = φ_new)
 
 StateSpaceRoutines.mutation!(Φ, Ψ, QQ, det(HH), inv_HH, φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps],
                              parallel = true)
-#=
+
 @testset "Mutation Tests" begin
     @test s_t_nontemp[1] ≈ test_file_outputs["s_t_nontemp_mutation"][1]
     @test ϵ_t[1] ≈ test_file_outputs["eps_t_mutation"][1]
 end
-=#
+
 sendto(workers(), y_t = data[:,47])
 
 @btime StateSpaceRoutines.mutation!(Φ, Ψ, QQ, det(HH), inv_HH, φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c,
