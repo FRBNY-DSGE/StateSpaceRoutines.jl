@@ -29,11 +29,11 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
 
     # Take Metropolis-Hastings steps
     if parallel
-        sendto(workers(), s_t1 = s_t1)
-        sendto(workers(), s_t = s_t)
-        sendto(workers(), ϵ_t = ϵ_t)
+        #sendto(workers(), s_t1 = s_t1)
+        #sendto(workers(), s_t = s_t)
+        #sendto(workers(), ϵ_t = ϵ_t)
         sendto(workers(), dist_ϵ = dist_ϵ)
-        sendto(workers(), y_t = y_t)
+        # sendto(workers(), y_t = y_t)
         # sendto(workers(), Φ = Φ) ## Should be sent to all workers before calling the function
         # sendto(workers(), Ψ = Ψ) ## Should be sent to all workers before calling the function
         sendto(workers(), scaled_inv_HH = scaled_inv_HH)

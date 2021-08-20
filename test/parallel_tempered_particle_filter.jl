@@ -34,10 +34,16 @@ log_e_2_terms = test_file_inputs["log_e_2_terms"]
 inc_weights = test_file_inputs["inc_weights"]
 HH = cov(F_u)
 s_t_nontemp = test_file_inputs["s_t_nontemp"]
-#=
+
 ENV["frbnyjuliamemory"] = "5G"
 myprocs = addprocs_frbny(12)
 @everywhere using JLD, JLD2, Test, Distributions, Random, StateSpaceRoutines, BenchmarkTools, ParallelDataTransfer
+#=
+x = randn(10,10)
+sendto(workers(), x=x)
+@show fetch(@spawnat 5 x)
+x[1:10,1:10] .= 1.0
+@show fetch(@spawnat 5 x)
 =#
 
 @everywhere tpf_main_input = load("reference/tpf_main_inputs.jld2")
@@ -58,9 +64,13 @@ StateSpaceRoutines.sendto(workers(), data = data)
 StateSpaceRoutines.sendto(workers(), s_t_nontemp = s_t_nontemp)
 StateSpaceRoutines.sendto(workers(), HH = HH)=#
 
-@btime weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
+sendto(workers(), HH=HH)
+sendto(workers(), s_t_nontemp=s_t_nontemp)
+@everywhere inv_HH = inv(HH)
+
+@btime weight_kernel!($coeff_terms, $log_e_1_terms, $log_e_2_terms, $φ_old, $Ψ, $data[:, 47], $s_t_nontemp, $det(HH), $inv_HH;
                initialize = false, parallel = true)
-weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
+weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv_HH;
                initialize = false, parallel = true)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
@@ -99,16 +109,26 @@ c = test_file_inputs["c"]
 c = update_c(c, accept_rate, tuning[:target_accept_rate])
 Random.seed!(47)
 
-StateSpaceRoutines.mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps],
-                             parallel = true)
+sendto(workers(), s_t1_temp = s_t1_temp)
+sendto(workers(), ϵ_t = ϵ_t)
+sendto(workers(), φ_new = φ_new)
 
+StateSpaceRoutines.mutation!(Φ, Ψ, QQ, det(HH), inv_HH, φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps],
+                             parallel = true)
+#=
 @testset "Mutation Tests" begin
     @test s_t_nontemp[1] ≈ test_file_outputs["s_t_nontemp_mutation"][1]
     @test ϵ_t[1] ≈ test_file_outputs["eps_t_mutation"][1]
 end
+=#
+sendto(workers(), y_t = data[:,47])
 
-@btime StateSpaceRoutines.mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c,
+@btime StateSpaceRoutines.mutation!(Φ, Ψ, QQ, det(HH), inv_HH, φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c,
                                     tuning[:n_mh_steps], parallel = true)
+sendto(workers(), data=data)
+sendto(workers(), s_init = s_init)
+sendto(workers(), F_ϵ = F_ϵ)
+sendto(workers(), F_u = F_u)
 @btime out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true)
 
 ## Whole TPF Tests

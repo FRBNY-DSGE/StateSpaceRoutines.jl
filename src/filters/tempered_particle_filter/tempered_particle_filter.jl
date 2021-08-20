@@ -126,6 +126,11 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     s_t1_temp     = Matrix{Float64}(copy(s_init))
     s_t_nontemp   = Matrix{Float64}(undef, n_states, n_particles)
     ϵ_t           = Matrix{Float64}(undef, n_shocks, n_particles)
+
+    sendto(workers(), s_t1_temp = s_t1_temp)
+    sendto(workers(), s_t_nontemp = s_t_nontemp)
+    sendto(workers(), ϵ_t = ϵ_t)
+
     coeff_terms   = Vector{Float64}(undef, n_particles)
     log_e_1_terms = Vector{Float64}(undef, n_particles)
     log_e_2_terms = Vector{Float64}(undef, n_particles)
@@ -141,6 +146,9 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     if !dynamic_measurement
         Ψ_allstates = Ψ
     end
+    if !(poolmodel || dynamic_measurement)
+            sendto(workers(), Ψ_allstates = Ψ_allstates)
+        end
 
     #--------------------------------------------------------------
     # Main Algorithm: Tempered Particle Filter
@@ -157,9 +165,9 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         # Initialization
         #--------------------------------------------------------------
 
-        # Remove rows/columns of series with NaN values
         y_t = data[:, t]
 
+        # Remove rows/columns of series with NaN values
         # Handle measurement equation
         if !(poolmodel || dynamic_measurement)
             Ψ_t  = x -> Ψ(x)[nonmissing]
@@ -172,6 +180,12 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         else
             Ψ_t  = x -> Ψ(x,t)[nonmissing]
             Ψ_allstates = x -> Ψ(x,t)
+        end
+
+        sendto(workers(), Ψ_t = Ψ_t)
+
+        if poolmodel || dynamic_measurement
+            sendto(workers(), Ψ_allstates = Ψ_allstates)
         end
 
         # Adjust other values to remove rows/columns with NaN values
@@ -189,8 +203,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             if ndims(ϵ_t) == 1 # Edge case where only 1 shock
                 ϵ_t = reshape(ϵ_t, (1, length(ϵ_t)))
             end
-            sendto(workers(), s_t1_temp = s_t1_temp)
-            sendto(workers(), ϵ_t = ϵ_t)
+            #sendto(workers(), s_t1_temp = s_t1_temp)
+            #sendto(workers(), ϵ_t = ϵ_t)
             # sendto(workers(), Φ = Φ) ## Should be sent to all workers before calling the function
 
             state_transition_closure(i::Int) = Φ(s_t1_temp[:, i], ϵ_t[:, i])
@@ -209,6 +223,16 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         # Tempering initialization
         φ_old = 1e-30
         stage = 0
+
+        # Pass in objects that are only changed with iteration in t
+        if parallel
+            sendto(workers(), y_t = y_t)
+            sendto(workers(), HH_t = HH_t)
+            if !poolmodel
+                sendto(workers(), inv_HH_t = inv_HH_t)
+                #sendto(workers(), det_HH_t = det_HH_t)
+            end
+        end
 
         #--------------------------------------------------------------
         # Main Algorithm
@@ -262,7 +286,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
         if get_t_particle_dist
             # save the normalized weights in the column for period t
-            t_norm_weights[:,t] = norm_weights
+            t_norm_weights[:,t] .= norm_weights
             t_particle_dist[t] = copy(s_t_nontemp)
         end
 
