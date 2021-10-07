@@ -166,6 +166,12 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     # Main Algorithm: Tempered Particle Filter
     #--------------------------------------------------------------
 
+    ## Store unnormalized weights for resample with processors when BSPF in parallel
+    if parallel && fixed_sched == [1.0]
+        unnormalized_wts = dones(n_particles)
+        processor_wt = dones(nworkers())
+    end
+
     for t = 1:T
         begin_time = time_ns()
         if VERBOSITY[verbose] >= VERBOSITY[:low]
@@ -246,63 +252,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         ## 3. Use SPMD to run in parallel
         ## 4. Resample at the end of each iteration following Gust et al.
 
-        function tpf_helper!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
-                             Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
-                             n_obs_t, stage, inc_weights, norm_weights,
-                             s_t1_temp, ϵ_t,
-                             Φ, Ψ_t, QQ, det_HH_t, inv_HH_t;
-                             r_star::S = 2.0,
-                             initialize = 1, poolmodel::Bool = false,
-                             fixed_sched::Vector{S} = zeros(0),
-                             findroot::Function = bisection, xtol::S = 1e-3,
-                             resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
-                             accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
-                             verbose::Symbol = :high) where S<:AbstractFloat
-
-            ### 1. Correction
-            # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
-            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
-                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
-                           initialize = stage == 1, parallel = true,
-                           poolmodel = poolmodel)
-
-            φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
-                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
-                           xtol = xtol)
-
-            if VERBOSITY[verbose] >= VERBOSITY[:high]
-                @show φ_new
-            end
-
-            # Modifies inc_weights, norm_weights
-            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
-                        log_e_1_terms, log_e_2_terms, n_obs_t)
-
-            ### 2. Selection
-            # Modifies s_t1_temp, s_t_nontemp, ϵ_t
-            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
-                           resampling_method = resampling_method)
-
-            c = update_c(c, accept_rate, target_accept_rate)
-            if VERBOSITY[verbose] >= VERBOSITY[:high]
-                @show c
-                println("------------------------------")
-            end
-
-            ### 3. Mutation
-            # Modifies s_t_nontemp, ϵ_t
-            if stage != 1
-                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
-                                        s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
-                                        parallel = parallel,
-                                        poolmodel = poolmodel)
-            end
-
-            φ_old = φ_new
-
-            return φ_old
-        end
-
         #--------------------------------------------------------------
         # Main Algorithm
         #--------------------------------------------------------------
@@ -310,7 +259,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             stage += 1
 
             if parallel
-                φ_old = spmd(tpf_helper!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+                if fixed_sched == [1.0] ## TPF would be faster with mutation at start and adaptive TPF can't be parallelized like this
+                    φ_old = spmd(tpf_helper!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                             Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
                             n_obs_t, stage, inc_weights, norm_weights,
                             s_t1_temp, ϵ_t,
@@ -324,10 +274,80 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                             verbose = verbose; pids=workers())
 
                 # Resample processors if necessary
+                    unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
+                    processor_wt[:L] = sum(unnormalized_wts[:L])
+                    procs_wt2 = convert(Vector,processor_wt)
+                    alpha_k = processor_wt2 ./ sum(processor_wt2)
+                    alpha_args = sortperm(alpha_k)
+                    EP_t = 1/sum(alpha_k .^ 2)
+
+                    if EP_t < nworkers()/2
+                        replace_inds = n_particles ÷ (2*nworkers())
+                        for i in 1:floor(nworkers()/2)
+                            first_proc = alpha_args[i]
+                            last_proc = alpha_args[nworkers()+1-i]
+
+                            # Either take each DArray and change its indices directly
+                            ## or change the localparts on each processor to match.
+                            ### Let's do the former unless it doesn't change what's on each processor.
+                            #### Hmmm, indexing into DArrays is hard but easy for localparts so let's do the latter.
+
+                            tmp1 = @fetchfrom first_proc localpart(unnormalized_weights)
+                            tmp2 = @fetchfrom last_proc localpart(unnormalized_weights)
+                            remotecall_fetch(set_dvals, last_proc, unnormalized_weights, 1:replace_inds, tmp1[1:replace_inds])
+                            remotecall_fetch(set_dvals, first_proc, unnormalized_weights, 1:replace_inds, tmp2[1:replace_inds])
+
+                            tmp1 = @fetchfrom first_proc localpart(s_t1_temp)
+                            tmp2 = @fetchfrom last_proc localpart(s_t1_temp)
+                            remotecall_fetch(set_dvals, last_proc, s_t1_temp, 1:replace_inds, tmp1[1:replace_inds])
+                            remotecall_fetch(set_dvals, first_proc, s_t1_temp, 1:replace_inds, tmp2[1:replace_inds])
+
+                            tmp1 = @fetchfrom first_proc localpart(s_t_nontemp)
+                            tmp2 = @fetchfrom last_proc localpart(s_t_nontemp)
+                            remotecall_fetch(set_dvals, last_proc, s_t_nontemp, 1:replace_inds, tmp1[1:replace_inds])
+                            remotecall_fetch(set_dvals, first_proc, s_t_nontemp, 1:replace_inds, tmp2[1:replace_inds])
+
+                            ## ϵ_t only needs to be stored when tempering
+                            #=tmp1 = @fetchfrom first_proc localpart(ϵ_t)
+                            tmp2 = @fetchfrom last_proc localpart(ϵ_t)
+                            remotecall_fetch(set_dvals, last_proc, ϵ_t, 1:replace_inds, tmp1[1:replace_inds])
+                            remotecall_fetch(set_dvals, first_proc, ϵ_t, 1:replace_inds, tmp2[1:replace_inds])=#
+
+                            ## coeff_terms, log_e_1_terms, and log_e_2_terms are reset in the next iteration.
+                            #=tmp1 = @fetchfrom first_proc localpart(coeff_terms)
+                            tmp2 = @fetchfrom last_proc localpart(coeff_terms)
+                            remotecall_fetch(set_dvals, last_proc, coeff_terms, 1:replace_inds, tmp1[1:replace_inds])
+                            remotecall_fetch(set_dvals, first_proc, coeff_terms, 1:replace_inds, tmp2[1:replace_inds])
+
+                            tmp1 = @fetchfrom first_proc localpart(log_e_1_terms)
+                            tmp2 = @fetchfrom last_proc localpart(log_e_1_terms)
+                            remotecall_fetch(set_dvals, last_proc, log_e_1_terms, 1:replace_inds, tmp1[1:replace_inds])
+                            remotecall_fetch(set_dvals, first_proc, log_e_1_terms, 1:replace_inds, tmp2[1:replace_inds])
+
+                            tmp1 = @fetchfrom first_proc localpart(log_e_2_terms)
+                            tmp2 = @fetchfrom last_proc localpart(log_e_2_terms)
+                            remotecall_fetch(set_dvals, last_proc, log_e_2_terms, 1:replace_inds, tmp1[1:replace_inds])
+                            remotecall_fetch(set_dvals, first_proc, log_e_2_terms, 1:replace_inds, tmp2[1:replace_inds])=#
+
+                            ## inc_weights is reset and only the mean is used in the iteration
+                            #=tmp1 = @fetchfrom first_proc localpart(s_t_nontemp)
+                            tmp2 = @fetchfrom last_proc localpart(s_t_nontemp)
+                            remotecall_fetch(set_dvals, last_proc, s_t_nontemp, 1:replace_inds, tmp1[1:replace_inds])
+                            remotecall_fetch(set_dvals, first_proc, s_t_nontemp, 1:replace_inds, tmp2[1:replace_inds])=#
+
+                            tmp1 = @fetchfrom first_proc localpart(norm_weights)
+                            tmp2 = @fetchfrom last_proc localpart(norm_weights)
+                            remotecall_fetch(set_dvals, last_proc, norm_weights, 1:replace_inds, tmp1[1:replace_inds])
+                            remotecall_fetch(set_dvals, first_proc, norm_weights, 1:replace_inds, tmp2[1:replace_inds])
+                        end
+                        @distributed for i in workers()
+                            processor_wt[:L] = sum(unnormalized_wts[:L])
+                        end
+                    end
 
                 # Update loglikelihood
                 loglh[t] += log(mean(inc_weights))
-
+                end
             else
                 ### 1. Correction
                 # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
@@ -387,7 +407,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
         if get_t_particle_dist
             # save the normalized weights in the column for period t
-            t_norm_weights[:,t] = norm_weights
+            t_norm_weights[:,t] = parallel ? convert(Array, norm_weights) : norm_weights
             t_particle_dist[t] = parallel ? convert(Array, s_t_nontemp) : copy(s_t_nontemp)
         end
 
@@ -421,4 +441,69 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     else
         return sum(loglh[n_presample_periods + 1:end])
     end
+end
+
+
+# Function for parallel Bootstrap Particle Filter
+        function tpf_helper!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+                             Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                             n_obs_t, stage, inc_weights, norm_weights,
+                             s_t1_temp, ϵ_t,
+                             Φ, Ψ_t, QQ, det_HH_t, inv_HH_t;
+                             r_star::S = 2.0,
+                             initialize = 1, poolmodel::Bool = false,
+                             fixed_sched::Vector{S} = zeros(0),
+                             findroot::Function = bisection, xtol::S = 1e-3,
+                             resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
+                             accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
+                             verbose::Symbol = :high) where S<:AbstractFloat
+
+            ### 1. Correction
+            # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
+            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
+                           initialize = stage == 1, parallel = true,
+                           poolmodel = poolmodel)
+
+            φ_new = fixed_sched[stage] ## Function only runs w/ Bootstrap PF so this is 1.0
+            #=φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
+                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
+                           xtol = xtol, parallel = parallel)=#
+
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show φ_new
+            end
+
+            # Modifies inc_weights, norm_weights
+            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
+                        log_e_1_terms, log_e_2_terms, n_obs_t, parallel = parallel)
+
+            ### 2. Selection
+            # Modifies s_t1_temp, s_t_nontemp, ϵ_t
+            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+                           resampling_method = resampling_method, parallel = parallel)
+
+            c = update_c(c, accept_rate, target_accept_rate)
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show c
+                println("------------------------------")
+            end
+
+            ### 3. Mutation
+            # Modifies s_t_nontemp, ϵ_t
+            if stage != 1 ## Note this never runs in Bootstrap PF case
+                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
+                                        s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
+                                        parallel = parallel,
+                                        poolmodel = poolmodel)
+            end
+
+            φ_old = φ_new
+
+            return φ_old
+        end
+
+## Set values on a specific processor
+@everywhere function set_dvals(x,inds,final_val)
+    x[:L][inds] .= final_val
 end

@@ -23,15 +23,34 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                         parallel::Bool = false,
                         poolmodel::Bool = false) where V<:AbstractVector{Float64}
     # Sizes
-    n_particles = length(coeff_terms)
+    n_particles = parallel ? length(coeff_terms[:L]) : length(coeff_terms)
     n_obs = length(y_t)
 
     if poolmodel
         if parallel
             if initialize
-                coeff_terms = dfill((2*pi)^(-n_obs/2), size(coeff_terms)) # this may need to be adjusted
-                log_e_1_terms = dzeros(size(coeff_terms))
-                log_e_2_terms = DArray(size(log_e_2_terms)) do inds
+                for i in 1:n_particles
+                    # Initialization step (using 2π instead of φ_old)
+                    coeff_terms[:L][i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
+                    log_e_1_terms[:L][i] = 0.
+                    log_e_2_terms[:L][i] = log(Ψ(s_t_nontemp[:,i]))
+                end
+            else
+                for i in 1:n_particles
+                    coeff_terms[:L][i] = (φ_old)^(-n_obs/2)
+                    log_e_1_terms[:L][i] = -φ_old * log(Ψ(s_t_nontemp[:,i]))
+                    log_e_2_terms[:L][i] = log(Ψ(s_t_nontemp[:,i]))
+                end
+            end
+
+#=            if initialize
+                coeff_terms[:L] = fill((2*pi)^(-n_obs/2), n_particles)
+                log_e_1_terms[:L] = zeros(n_particles)
+
+
+
+                for i in 1:n_particles
+                    log_e_2_terms[:L][i] = #DArray(size(log_e_2_terms[:L])) do inds
                     arr = zeros(inds)
                     s_t_no = OffsetArray(localpart(s_t_nontemp), DistributedArrays.localindices(s_t_nontemp))
                     for i in inds[1] ## [1] b/c inds is (1:n,) so need to index into tuple first
@@ -60,7 +79,7 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                     end
                     parent(arr)
                 end
-            end
+            end=#
         else
             for i in 1:n_particles
                 if initialize
@@ -77,6 +96,28 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
         end
     else
         if parallel
+            if initialize
+                for i in 1:n_particles
+                    error    = y_t - Ψ(s_t_nontemp[:, i])
+                    sq_error = dot(error, inv_HH * error)
+
+                    # Initialization step (using 2π instead of φ_old)
+                    coeff_terms[:L][i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
+                    log_e_1_terms[:L][i] = 0.
+                    log_e_2_terms[:L][i] = -1/2 * sq_error
+                end
+            else
+                for i in 1:n_particles
+                    error    = y_t - Ψ(s_t_nontemp[:, i])
+                    sq_error = dot(error, inv_HH * error)
+
+                    # Non-initialization step (tempering and final iteration)
+                    coeff_terms[:L][i]   = (φ_old)^(-n_obs/2)
+                    log_e_1_terms[:L][i] = -1/2 * (-φ_old) * sq_error
+                    log_e_2_terms[:L][i] = -1/2 * sq_error
+                end
+            end
+#=
             sq_error = DArray((n_particles,), workers()) do inds
                 arr = zeros(inds)
                 s_t_no = OffsetArray(localpart(s_t_nontemp), DistributedArrays.localindices(s_t_nontemp))
@@ -99,7 +140,7 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                 coeff_terms   .= dfill((φ_old)^(-n_obs/2), size(coeff_terms))
                 log_e_1_terms .= -1/2 * (-φ_old) * sq_error#dfill(-1/2 * (-φ_old) * sq_error, size(log_e_1_terms))
                 log_e_2_terms .= -1/2 * sq_error#dfill(-1/2 * sq_error, size(log_e_2_terms))
-            end
+            end=#
         else
            for i in 1:n_particles
                 error    = y_t - Ψ(s_t_nontemp[:, i])
@@ -136,14 +177,19 @@ function next_φ(φ_old::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_term
                 n_obs::Int, r_star::Float64, stage::Int;
                 fixed_sched::Vector{Float64} = Float64[],
                 findroot::Function = bisection,
-                xtol::Float64 = 1e-3) where V<:AbstractVector{Float64}
+                xtol::Float64 = 1e-3, parallel::Bool = false) where V<:AbstractVector{Float64}
 
     if isempty(fixed_sched)
-        n_particles  = length(coeff_terms)
+        n_particles  = parallel ? length(coeff_terms[:L]) : length(coeff_terms)
         inc_weights  = Vector{Float64}(undef, n_particles)
         norm_weights = Vector{Float64}(undef, n_particles)
-        ineff0(φ) =
-            ineff!(inc_weights, norm_weights, φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs) - r_star
+        if parallel
+            ineff0(φ) =
+                ineff!(inc_weights[:L], norm_weights[:L], φ, coeff_terms[:L], log_e_1_terms[:L], log_e_2_terms[:L], n_obs) - r_star
+        else
+            ineff0(φ) =
+                ineff!(inc_weights, norm_weights, φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs) - r_star
+        end
 
         if stage == 1 || (sign(ineff0(φ_old)) != sign(ineff0(1.0)))
             # Solve for optimal φ if either
@@ -174,12 +220,16 @@ Compute (and modify in-place) incremental weights w̃ₜʲ and normalized weight
 """
 function correction!(inc_weights::Vector{Float64}, norm_weights::Vector{Float64},
                      φ_new::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
-                     n_obs::Int) where V<:AbstractVector{Float64}
+                     n_obs::Int; parallel::Bool = false) where V<:AbstractVector{Float64}
     # Compute incremental weights
-    n_particles = length(inc_weights)
+    n_particles = parallel ? length(inc_weights[:L]) : length(inc_weights)
     for i = 1:n_particles
-        inc_weights[i] =
-            φ_new^(n_obs/2) * coeff_terms[i] * exp(log_e_1_terms[i]) * exp(φ_new*log_e_2_terms[i])
+        if parallel
+            inc_weights[:L][i] =
+            φ_new^(n_obs/2) * coeff_terms[:L][i] * exp(log_e_1_terms[:L][i]) * exp(φ_new*log_e_2_terms[:L][i])
+        else
+            inc_weights[i] =
+                φ_new^(n_obs/2) * coeff_terms[i] * exp(log_e_1_terms[i]) * exp(φ_new*log_e_2_terms[i])
     end
 
     # Normalize weights
