@@ -169,7 +169,7 @@ end
 =#
 # @btime StateSpaceRoutines.mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c,
 #                                     tuning[:n_mh_steps], parallel = true)
-@btime out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true)
+# @btime out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true)
 
 ## Whole TPF Tests
 Random.seed!(47)

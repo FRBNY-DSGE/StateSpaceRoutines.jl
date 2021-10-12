@@ -248,7 +248,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             if stage != 1 ## Note this never runs in Bootstrap PF case
                 accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
                                         s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
-                                        parallel = parallel,
                                         poolmodel = poolmodel)
             end
 
@@ -308,7 +307,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             if stage != 1 ## Note this never runs in Bootstrap PF case
                 accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
                                         s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
-                                        parallel = parallel,
                                         poolmodel = poolmodel)
             end
 
@@ -505,7 +503,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                 if stage != 1
                     accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
                                             s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
-                                            parallel = parallel,
                                             poolmodel = poolmodel)
                 end
 
