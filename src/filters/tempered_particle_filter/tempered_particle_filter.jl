@@ -189,15 +189,11 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         function set_dvals4(x, replaced, proc_j)
             tmp1 = copy(x[:L][1:replaced])
             x[:L][1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
-
-            @show "Work"
             passobj(proc_i, proc_j, :tmp1)
         end
         @everywhere function set_dvals4(x, replaced, proc_j)
             tmp1 = copy(x[:L][1:replaced])
             x[:L][1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
-
-            @show "Work"
             passobj(proc_i, proc_j, :tmp1)
         end
     end
@@ -320,27 +316,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
         unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
 
-            return nothing
-        end
-
-    ## Set values on a specific processor
-    function set_dvals2(x,inds,final_val)
-        x[:L][1:inds] = final_val[1:inds]
+        return nothing
     end
-    @everywhere function set_dvals2(x,inds,final_val)
-        x[:L][1:inds] = final_val[1:inds]
-    end
-
-    function set_dvals(x,inds,final_val)
-        x[1:inds] = final_val
-    end
-    @everywhere function set_dvals(x,inds,final_val)
-        x[1:inds] = final_val
-    end
-
-    # Sum values on each processor
-    @inline sum_vals(x) = sum(localpart(x))
-    @everywhere @inline sum_vals(x) = sum(localpart(x))
 
     for t = 1:T
         begin_time = time_ns()
@@ -380,15 +357,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
         # Initialize s_t_nontemp and ϵ_t for this period
         if parallel
-            #=if n_shocks == 1 && ndims(rand(F_ϵ,1)) == 1
-                ϵ_t = DArray((n_shocks, n_particles)) do inds
-                    reshape(rand(F_ϵ, length(inds[1])), (1, length(inds[1])))
-                end
-            else
-                ϵ_t = DArray((n_shocks,n_particles), workers(), [1,nworkers()]) do inds
-                    rand(F_ϵ, length(inds[2]))
-                end
-            end=#
 
             ϵ_t_vec = rand(F_ϵ, n_particles)
             if ndims(ϵ_t_vec) == 1 # Edge case where only 1 shock
@@ -432,8 +400,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             if parallel
                 if fixed_sched == [1.0] ## TPF would be faster with mutation at start and adaptive TPF can't be parallelized like this
-                    @show "SPMD"
-                    @time spmd(tpf_helper!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+                    spmd(tpf_helper!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                             Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
                             n_obs_t, stage, inc_weights, norm_weights,
                             s_t1_temp, ϵ_t,
@@ -446,180 +413,48 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                     φ_old = 1.0 ## Can do this because it's given in fixed_sched
 
                 # Resample processors if necessary
-                     procs_wt = @sync @distributed (vcat) for p in workers()
-                         sum(unnormalized_wts[:L])
-                     end
-                    # procs_wt = [remotecall_fetch(sum_vals, p, unnormalized_wts) for p in workers()] ## Run in parallel
+                    if nworkers() == 1
+                        EP_t = 1.0
+                    else
+                        procs_wt = @sync @distributed (vcat) for p in workers()
+                            sum(unnormalized_wts[:L])
+                        end
 
-                    α_k = procs_wt ./ sum(procs_wt)
-                    alpha_args = sortperm(α_k)
-                    EP_t = 1/sum(α_k .^ 2)
+                        α_k = procs_wt ./ sum(procs_wt)
+                        alpha_args = sortperm(α_k)
+                        EP_t = 1/sum(α_k .^ 2)
+                    end
 
-                    if EP_t < nworkers()#/2
-                        @show "EP 2"
-                        @time begin
-                            replace_inds = n_particles ÷ (2*nworkers())
-                        for i in 1:(nworkers() ÷ 2)
-                        # @sync @distributed for i in 1:(nworkers())# ÷ 2) ## Run in parallel by choosing workers to run each iteration on
-                            @show i
-                            proc_i = i+1
-                            proc_ind = findfirst(x -> x==i, alpha_args) ## Index in sorted array of weights of this processor
-                            @show "Hi"
-                            #=if proc_ind > nworkers() ÷ 2
-                                @show myid()
-                                continue
-                            end=#
-                            j = nworkers()+1-proc_ind ## Other worker's index
-                            proc_j = alpha_args[nworkers()+1-proc_ind]+1 ## Other worker
-                            @show "Bye"
+                    if EP_t < nworkers()/2
+                        replace_inds = n_particles ÷ (2*nworkers())
+                        add_to_proc = workers()[1] - 1 ## Add 1 to remove master worker when parallel
+                        for i in 1:(nworkers() ÷ 2) ## Run in parallel by choosing workers to run each iteration on
+                            proc_i = alpha_args[i] + add_to_proc
+                            proc_j = alpha_args[nworkers()+1-i] + add_to_proc
 
-                            # tmp1 = copy(unnormalized_wts[:L][1:replace_inds])
-                            # unnormalized_wts[:L][1:replace_inds] = remotecall_fetch(get_local_inds, proc_j, unnormalized_wts, replace_inds)
-                            tmp1 = @spawnat proc_i set_dvals4(unnormalized_wts, replace_inds, proc_j)
-
-                            # @show "Work"
-                            # passobj(proc_i, proc_j, :tmp1)
-                            @show "Passed"
+                            # Pass relevant objects between processors
+                            @spawnat proc_i set_dvals4(unnormalized_wts, replace_inds, proc_j)
                             @spawnat proc_j set_dvals3(unnormalized_wts, replace_inds, tmp1)
 
-                            @show "Hello?"
-#=
-                            # Either take each DArray and change its indices directly
-                            ## or change the localparts on each processor to match.
-                            ### Let's do the former unless it doesn't change what's on each processor.
-                            #### Hmmm, indexing into DArrays is hard but easy for localparts so let's do the latter.
+                            @spawnat proc_i set_dvals4(s_t1_temp, replace_inds, proc_j)
+                            @spawnat proc_j set_dvals3(s_t1_temp, replace_inds, tmp1)
 
-                            #=tmp1 = @fetchfrom first_proc localpart(unnormalized_wts)
-                            tmp2 = @fetchfrom last_proc localpart(unnormalized_wts)
+                            @spawnat proc_i set_dvals4(s_t_nontemp, replace_inds, proc_j)
+                            @spawnat proc_j set_dvals3(s_t_nontemp, replace_inds, tmp1)
 
-                            # This sends objects from proc to main, then to other proc
-                            ## passobj would pass directly between procs but might override values.
-                            ### I fix this with own implementation of passobj allowing for different name
-                            passobj_newname(last_proc, first_proc, :unnormalized_wts[:L])=#
+                            @spawnat proc_i set_dvals4(norm_weights, replace_inds, proc_j)
+                            @spawnat proc_j set_dvals3(norm_weights, replace_inds, tmp1)
 
-                            ## Define the localpart of the vector separately on each proc (as its own var)
-
-                            #function pass_objs(src_proc, dest_proc, replace_inds)
-                            src_proc = last_proc
-                            dest_proc = first_proc
-                                @defineat src_proc zz=unnormalized_wts[:L][1:replace_inds]
-                                @defineat dest_proc zzz=unnormalized_wts[:L][1:replace_inds]
-                                passobj(src_proc, dest_proc, :zz)
-                                @spawnat dest_proc set_dvals(unnormalized_wts[:L], replace_inds, zz)
-
-                                passobj(dest_proc, src_proc, :zzz)
-                                @spawnat src_proc set_dvals(unnormalized_wts[:L], replace_inds, zzz)
-
-                         #=function set_dvals(x,inds,final_val)
-                         x[:L][1:inds] = final_val[1:inds]
-                         end=#
-#=
-                                @defineat src_proc z=first_local[:L][1:replace_inds]
-                                passobj(src_proc, dest_proc, :z)#, :last_local)
-                                remotecall_fetch(set_dvals, dest_proc, first_local, 1:replace_inds, z)
-                                @spawnat dest_proc set_dvals(,1:replace_inds,z)=#
-                                ## Need to store the object so it can be passed into the next proc correctly.
-                            #end
-
-                            @everywhere function pass_objs(src_proc, dest_proc, replace_inds)
-                                @defineat src_proc zz=unnormalized_wts[:L][1:replace_inds]
-                                @defineat dest_proc zzz=unnormalized_wts[:L][1:replace_inds]
-                                passobj(src_proc, dest_proc, :zz)
-                                @spawnat dest_proc set_dvals(unnormalized_wts[:L], replace_inds, zz)
-
-                                passobj(dest_proc, src_proc, :zzz)
-                                @spawnat src_proc set_dvals(unnormalized_wts[:L], replace_inds, zzz)
-                            end
-                            @show myid(), last_proc, first_proc
-                            @show @fetchfrom last_proc localpart(unnormalized_wts)
-                            @show @fetchfrom first_proc localpart(unnormalized_wts)
-                            pass_objs(last_proc, first_proc, replace_inds)
-                            pass_objs(last_proc, first_proc, replace_inds) #s_t1_temp
-                            pass_objs(last_proc, first_proc, replace_inds) #s_t_nontemp
-                            pass_objs(last_proc, first_proc, replace_inds) #norm_weights
-=#
-#=
-                            # Ah! Use passobj in ParallelDataTransfer
-                            #@inline set_dvals2(x,inds) = x[:L][inds]
-                            #function set_dvals3
-                            #@spawnat first_proc set_dvals2(unnormalized_wts, 1:replace_inds)
-                            #@spawnat last_proc set_dvals3(tmp1)
-
-                            #=ParallelDataTransfer.sendto(last_proc, tmp1=tmp1)
-                            ParallelDataTransfer.sendto(first_proc, tmp2=tmp2)
-                            @spawnat last_proc set_dvals(unnormalized_wts,replace_inds, tmp1)
-                            @spawnat first_proc set_dvals(unnormalized_wts, replace_inds, tmp2)=#
-                            #=remotecall_fetch(set_dvals, last_proc, unnormalized_wts, 1:replace_inds, tmp1[1:replace_inds])
-                            remotecall_fetch(set_dvals, first_proc, unnormalized_wts, 1:replace_inds, tmp2[1:replace_inds])=#
-
-                            tmp1 = @fetchfrom first_proc localpart(s_t1_temp)
-                            tmp2 = @fetchfrom last_proc localpart(s_t1_temp)
-                            ParallelDataTransfer.sendto(last_proc, tmp1=tmp1)
-                            ParallelDataTransfer.sendto(first_proc, tmp2=tmp2)
-                            @spawnat last_proc set_dvals(s_t1_temp,replace_inds, tmp1)
-                            @spawnat first_proc set_dvals(s_t1_temp, replace_inds, tmp2)
-                            #=tmp1 = @fetchfrom first_proc localpart(s_t1_temp)
-                            tmp2 = @fetchfrom last_proc localpart(s_t1_temp)
-                            remotecall_fetch(set_dvals, last_proc, s_t1_temp, 1:replace_inds, tmp1[1:replace_inds])
-                            remotecall_fetch(set_dvals, first_proc, s_t1_temp, 1:replace_inds, tmp2[1:replace_inds])=#
-
-                            tmp1 = @fetchfrom first_proc localpart(s_t_nontemp)
-                            tmp2 = @fetchfrom last_proc localpart(s_t_nontemp)
-                            ParallelDataTransfer.sendto(last_proc, tmp1=tmp1)
-                            ParallelDataTransfer.sendto(first_proc, tmp2=tmp2)
-                            @spawnat last_proc set_dvals(s_t_nontemp,replace_inds, tmp1)
-                            @spawnat first_proc set_dvals(s_t_nontemp, replace_inds, tmp2)
-                            #=tmp1 = @fetchfrom first_proc localpart(s_t_nontemp)
-                            tmp2 = @fetchfrom last_proc localpart(s_t_nontemp)
-                            remotecall_fetch(set_dvals, last_proc, s_t_nontemp, 1:replace_inds, tmp1[1:replace_inds])
-                            remotecall_fetch(set_dvals, first_proc, s_t_nontemp, 1:replace_inds, tmp2[1:replace_inds])=#
-
+                            # These objects are not reset for BSPF:
                             ## ϵ_t only needs to be stored when tempering
-                            #=tmp1 = @fetchfrom first_proc localpart(ϵ_t)
-                            tmp2 = @fetchfrom last_proc localpart(ϵ_t)
-                            remotecall_fetch(set_dvals, last_proc, ϵ_t, 1:replace_inds, tmp1[1:replace_inds])
-                            remotecall_fetch(set_dvals, first_proc, ϵ_t, 1:replace_inds, tmp2[1:replace_inds])=#
-
-                            ## coeff_terms, log_e_1_terms, and log_e_2_terms are reset in the next iteration.
-                            #=tmp1 = @fetchfrom first_proc localpart(coeff_terms)
-                            tmp2 = @fetchfrom last_proc localpart(coeff_terms)
-                            remotecall_fetch(set_dvals, last_proc, coeff_terms, 1:replace_inds, tmp1[1:replace_inds])
-                            remotecall_fetch(set_dvals, first_proc, coeff_terms, 1:replace_inds, tmp2[1:replace_inds])
-
-                            tmp1 = @fetchfrom first_proc localpart(log_e_1_terms)
-                            tmp2 = @fetchfrom last_proc localpart(log_e_1_terms)
-                            remotecall_fetch(set_dvals, last_proc, log_e_1_terms, 1:replace_inds, tmp1[1:replace_inds])
-                            remotecall_fetch(set_dvals, first_proc, log_e_1_terms, 1:replace_inds, tmp2[1:replace_inds])
-
-                            tmp1 = @fetchfrom first_proc localpart(log_e_2_terms)
-                            tmp2 = @fetchfrom last_proc localpart(log_e_2_terms)
-                            remotecall_fetch(set_dvals, last_proc, log_e_2_terms, 1:replace_inds, tmp1[1:replace_inds])
-                            remotecall_fetch(set_dvals, first_proc, log_e_2_terms, 1:replace_inds, tmp2[1:replace_inds])=#
-
+                            ## coeff_terms, log_e_1_terms, and log_e_2_terms are reset in the next iteration
                             ## inc_weights is reset and only the mean is used in the iteration
-                            #=tmp1 = @fetchfrom first_proc localpart(s_t_nontemp)
-                            tmp2 = @fetchfrom last_proc localpart(s_t_nontemp)
-                            remotecall_fetch(set_dvals, last_proc, s_t_nontemp, 1:replace_inds, tmp1[1:replace_inds])
-                            remotecall_fetch(set_dvals, first_proc, s_t_nontemp, 1:replace_inds, tmp2[1:replace_inds])=#
-
-                            tmp1 = @fetchfrom first_proc localpart(norm_weights)
-                            tmp2 = @fetchfrom last_proc localpart(norm_weights)
-                            ParallelDataTransfer.sendto(last_proc, tmp1=tmp1)
-                            ParallelDataTransfer.sendto(first_proc, tmp2=tmp2)
-                            @spawnat last_proc set_dvals(norm_weights,replace_inds, tmp1)
-                            @spawnat first_proc set_dvals(norm_weights, replace_inds, tmp2)=#
-                            #=tmp1 = @fetchfrom first_proc localpart(norm_weights)
-                            tmp2 = @fetchfrom last_proc localpart(norm_weights)
-                            remotecall_fetch(set_dvals, last_proc, norm_weights, 1:replace_inds, tmp1[1:replace_inds])
-                            remotecall_fetch(set_dvals, first_proc, norm_weights, 1:replace_inds, tmp2[1:replace_inds])=#
+                            ## recalcualting procs_wt unnecessary b/c it will be re-calculated in next iteration
                         end
-                        #=procs_wt = @sync @distributed (vcat) for p in workers()
-                         sum(unnormalized_wts[:L])
-                     end=# # unnecessary b/c it will be re-calculated later
                     end
-                end
-                # Update loglikelihood
-                loglh[t] += log(mean(convert(Vector, inc_weights)))
+
+                    # Update loglikelihood
+                    loglh[t] += log(mean(convert(Vector, inc_weights)))
                 end
             else
                 ### 1. Correction

@@ -240,19 +240,14 @@ function next_φ(φ_old::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_term
                 n_obs::Int, r_star::Float64, stage::Int;
                 fixed_sched::Vector{Float64} = Float64[],
                 findroot::Function = bisection,
-                xtol::Float64 = 1e-3, parallel::Bool = false) where V<:AbstractVector{Float64}
+                xtol::Float64 = 1e-3) where V<:AbstractVector{Float64}
 
     if isempty(fixed_sched)
-        n_particles  = parallel ? length(coeff_terms[:L]) : length(coeff_terms)
+        n_particles  = length(coeff_terms)
         inc_weights  = Vector{Float64}(undef, n_particles)
         norm_weights = Vector{Float64}(undef, n_particles)
-        if parallel
-            ineff0(φ) =
-                ineff!(inc_weights[:L], norm_weights[:L], φ, coeff_terms[:L], log_e_1_terms[:L], log_e_2_terms[:L], n_obs) - r_star
-        else
-            ineff0(φ) =
-                ineff!(inc_weights, norm_weights, φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs) - r_star
-        end
+        ineff0(φ) =
+            ineff!(inc_weights, norm_weights, φ, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs) - r_star
 
         if stage == 1 || (sign(ineff0(φ_old)) != sign(ineff0(1.0)))
             # Solve for optimal φ if either
