@@ -137,6 +137,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     log_e_2_terms = parallel ? SharedVector{Float64}(n_particles) :
         Vector{Float64}(undef, n_particles)
 =#
+    # TODO: Ensure each worker has all of a particle
     s_t1_temp     = parallel ? distribute(copy(s_init)) :
         Matrix{Float64}(copy(s_init))
     s_t_nontemp   = parallel ? dzeros(n_states, n_particles) :
@@ -152,6 +153,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
     inc_weights   = parallel ? dones(n_particles) : Vector{Float64}(undef, n_particles)
     norm_weights  = parallel ? dones(n_particles) : Vector{Float64}(undef, n_particles)
+
+    ## TODO: assert that localindices for each worker is the same across all DArrays
 
     c = c_init
     accept_rate = target_accept_rate
@@ -169,8 +172,175 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     ## Store unnormalized weights for resample with processors when BSPF in parallel
     if parallel && fixed_sched == [1.0]
         unnormalized_wts = dones(n_particles)
-        processor_wt = dones(nworkers())
+        function get_local_inds(x, replaced)
+            x[:L][1:replaced]
+        end
+        @everywhere function get_local_inds(x, replaced)
+            x[:L][1:replaced]
+        end
+
+        function set_dvals3(x, replaced, tmps)
+            x[:L][1:replaced] = tmps
+        end
+        @everywhere function set_dvals3(x, replaced, tmps)
+            x[:L][1:replaced] = tmps
+        end
+
+        function set_dvals4(x, replaced, proc_j)
+            tmp1 = copy(x[:L][1:replaced])
+            x[:L][1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
+
+            @show "Work"
+            passobj(proc_i, proc_j, :tmp1)
+        end
+        @everywhere function set_dvals4(x, replaced, proc_j)
+            tmp1 = copy(x[:L][1:replaced])
+            x[:L][1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
+
+            @show "Work"
+            passobj(proc_i, proc_j, :tmp1)
+        end
     end
+
+
+    function tpf_helper!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+                             Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                             n_obs_t, stage, inc_weights, norm_weights,
+                             s_t1_temp, ϵ_t,
+                             Φ, Ψ_t, QQ, unnormalized_wts,
+                             r_star::S = 2.0,
+                             initialize = 1, poolmodel::Bool = false,
+                             fixed_sched::Vector{S} = zeros(0),
+                             findroot::Function = bisection, xtol::S = 1e-3,
+                             resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
+                             accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
+                             verbose::Symbol = :high) where S<:AbstractFloat
+
+            ### 1. Correction
+            # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
+            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
+                           initialize = stage == 1, parallel = true,
+                           poolmodel = poolmodel)
+
+            φ_new = fixed_sched[stage] ## Function only runs w/ Bootstrap PF so this is 1.0
+            #=φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
+                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
+                           xtol = xtol, parallel = parallel)=#
+
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show φ_new
+            end
+
+            # Modifies inc_weights, norm_weights
+            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
+                        log_e_1_terms, log_e_2_terms, n_obs_t)
+
+            ### 2. Selection
+            # Modifies s_t1_temp, s_t_nontemp, ϵ_t
+            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+                           resampling_method = resampling_method)
+
+            c = update_c(c, accept_rate, target_accept_rate)
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show c
+                println("------------------------------")
+            end
+
+            ### 3. Mutation
+            # Modifies s_t_nontemp, ϵ_t
+            if stage != 1 ## Note this never runs in Bootstrap PF case
+                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
+                                        s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
+                                        parallel = parallel,
+                                        poolmodel = poolmodel)
+            end
+
+            φ_old = φ_new
+
+        unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
+
+            return nothing
+        end
+
+    @everywhere function tpf_helper!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+                             Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                             n_obs_t, stage, inc_weights, norm_weights,
+                             s_t1_temp, ϵ_t,
+                             Φ, Ψ_t, QQ, unnormalized_wts,
+                             r_star::S = 2.0,
+                             initialize = 1, poolmodel::Bool = false,
+                             fixed_sched::Vector{S} = zeros(0),
+                             findroot::Function = bisection, xtol::S = 1e-3,
+                             resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
+                             accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
+                             verbose::Symbol = :high) where S<:AbstractFloat
+
+            ### 1. Correction
+            # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
+            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
+                           initialize = stage == 1, parallel = true,
+                           poolmodel = poolmodel)
+
+            φ_new = fixed_sched[stage] ## Function only runs w/ Bootstrap PF so this is 1.0
+            #=φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
+                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
+                           xtol = xtol, parallel = parallel)=#
+
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show φ_new
+            end
+
+            # Modifies inc_weights, norm_weights
+            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
+                        log_e_1_terms, log_e_2_terms, n_obs_t)
+
+            ### 2. Selection
+            # Modifies s_t1_temp, s_t_nontemp, ϵ_t
+            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+                           resampling_method = resampling_method)
+
+            c = update_c(c, accept_rate, target_accept_rate)
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show c
+                println("------------------------------")
+            end
+
+            ### 3. Mutation
+            # Modifies s_t_nontemp, ϵ_t
+            if stage != 1 ## Note this never runs in Bootstrap PF case
+                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
+                                        s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
+                                        parallel = parallel,
+                                        poolmodel = poolmodel)
+            end
+
+            φ_old = φ_new
+
+        unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
+
+            return nothing
+        end
+
+    ## Set values on a specific processor
+    function set_dvals2(x,inds,final_val)
+        x[:L][1:inds] = final_val[1:inds]
+    end
+    @everywhere function set_dvals2(x,inds,final_val)
+        x[:L][1:inds] = final_val[1:inds]
+    end
+
+    function set_dvals(x,inds,final_val)
+        x[1:inds] = final_val
+    end
+    @everywhere function set_dvals(x,inds,final_val)
+        x[1:inds] = final_val
+    end
+
+    # Sum values on each processor
+    @inline sum_vals(x) = sum(localpart(x))
+    @everywhere @inline sum_vals(x) = sum(localpart(x))
 
     for t = 1:T
         begin_time = time_ns()
@@ -210,7 +380,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
         # Initialize s_t_nontemp and ϵ_t for this period
         if parallel
-            if n_shocks == 1 && ndims(rand(F_ϵ,1)) == 1
+            #=if n_shocks == 1 && ndims(rand(F_ϵ,1)) == 1
                 ϵ_t = DArray((n_shocks, n_particles)) do inds
                     reshape(rand(F_ϵ, length(inds[1])), (1, length(inds[1])))
                 end
@@ -218,20 +388,22 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                 ϵ_t = DArray((n_shocks,n_particles), workers(), [1,nworkers()]) do inds
                     rand(F_ϵ, length(inds[2]))
                 end
-            end
+            end=#
 
-            if ndims(ϵ_t) == 1 # Edge case where only 1 shock
-                ϵ_t = reshape(ϵ_t, (1, length(ϵ_t)))
+            ϵ_t_vec = rand(F_ϵ, n_particles)
+            if ndims(ϵ_t_vec) == 1 # Edge case where only 1 shock
+                ϵ_t_vec = reshape(ϵ_t_vec, (1, length(ϵ_t_vec)))
             end
             # Cite for DArray: https://discourse.julialang.org/t/alternative-to-sharedarrays-for-multi-node-cluster/37794
             s_t_nontemp = DArray((n_states,n_particles), workers(), [1,nworkers()]) do inds # the 1 in dist = [1,x] important because each chunk should have complete columns
                 arr = zeros(inds) # OffsetArray corrects local indices
                 s_t1 = OffsetArray(localpart(s_t1_temp),DistributedArrays.localindices(s_t1_temp)) # worker also stores some part of s_t1_temp which this gets and corrects
                 for i in inds[2]
-                    arr[:,i] .= Φ(convert(Vector,s_t1[:, i]), ϵ_t[:, i]) # Need to convert for type-checking in Φ
+                    arr[:,i] .= Φ(convert(Vector,s_t1[:, i]), ϵ_t_vec[:, i]) # Need to convert for type-checking in Φ
                 end
                 parent(arr) # remove the OffsetArray wrapper
             end
+            ϵ_t = distribute(ϵ_t_vec)
         else
              for i in 1:n_particles
                 ϵ_t[:, i] .= rand(F_ϵ)
@@ -260,52 +432,147 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             if parallel
                 if fixed_sched == [1.0] ## TPF would be faster with mutation at start and adaptive TPF can't be parallelized like this
-                    φ_old = spmd(tpf_helper!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+                    @show "SPMD"
+                    @time spmd(tpf_helper!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                             Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
                             n_obs_t, stage, inc_weights, norm_weights,
                             s_t1_temp, ϵ_t,
-                            Φ, Ψ_t, QQ, det_HH_t, inv_HH_t,
-                            r_star = r_star,
-                            initialize = stage == 1, poolmodel = poolmodel,
-                            fixed_sched = fixed_sched,
-                            findroot = findroot, xtol = xtol,
-                            resampling_method = resampling_method, target_accept_rate = target_accept_rate,
-                            accept_rate = accept_rate, n_mh_steps = n_mh_steps,
-                            verbose = verbose; pids=workers())
+                            Φ, Ψ_t, QQ, unnormalized_wts,
+                            r_star, stage == 1, poolmodel,
+                            fixed_sched, findroot, xtol,
+                            resampling_method, target_accept_rate,
+                            accept_rate, n_mh_steps,
+                            verbose; pids=workers())
+                    φ_old = 1.0 ## Can do this because it's given in fixed_sched
 
                 # Resample processors if necessary
-                    unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
-                    processor_wt[:L] = sum(unnormalized_wts[:L])
-                    procs_wt2 = convert(Vector,processor_wt)
-                    alpha_k = processor_wt2 ./ sum(processor_wt2)
-                    alpha_args = sortperm(alpha_k)
-                    EP_t = 1/sum(alpha_k .^ 2)
+                     procs_wt = @sync @distributed (vcat) for p in workers()
+                         sum(unnormalized_wts[:L])
+                     end
+                    # procs_wt = [remotecall_fetch(sum_vals, p, unnormalized_wts) for p in workers()] ## Run in parallel
 
-                    if EP_t < nworkers()/2
-                        replace_inds = n_particles ÷ (2*nworkers())
-                        for i in 1:floor(nworkers()/2)
-                            first_proc = alpha_args[i]
-                            last_proc = alpha_args[nworkers()+1-i]
+                    α_k = procs_wt ./ sum(procs_wt)
+                    alpha_args = sortperm(α_k)
+                    EP_t = 1/sum(α_k .^ 2)
 
+                    if EP_t < nworkers()#/2
+                        @show "EP 2"
+                        @time begin
+                            replace_inds = n_particles ÷ (2*nworkers())
+                        for i in 1:(nworkers() ÷ 2)
+                        # @sync @distributed for i in 1:(nworkers())# ÷ 2) ## Run in parallel by choosing workers to run each iteration on
+                            @show i
+                            proc_i = i+1
+                            proc_ind = findfirst(x -> x==i, alpha_args) ## Index in sorted array of weights of this processor
+                            @show "Hi"
+                            #=if proc_ind > nworkers() ÷ 2
+                                @show myid()
+                                continue
+                            end=#
+                            j = nworkers()+1-proc_ind ## Other worker's index
+                            proc_j = alpha_args[nworkers()+1-proc_ind]+1 ## Other worker
+                            @show "Bye"
+
+                            # tmp1 = copy(unnormalized_wts[:L][1:replace_inds])
+                            # unnormalized_wts[:L][1:replace_inds] = remotecall_fetch(get_local_inds, proc_j, unnormalized_wts, replace_inds)
+                            tmp1 = @spawnat proc_i set_dvals4(unnormalized_wts, replace_inds, proc_j)
+
+                            # @show "Work"
+                            # passobj(proc_i, proc_j, :tmp1)
+                            @show "Passed"
+                            @spawnat proc_j set_dvals3(unnormalized_wts, replace_inds, tmp1)
+
+                            @show "Hello?"
+#=
                             # Either take each DArray and change its indices directly
                             ## or change the localparts on each processor to match.
                             ### Let's do the former unless it doesn't change what's on each processor.
                             #### Hmmm, indexing into DArrays is hard but easy for localparts so let's do the latter.
 
-                            tmp1 = @fetchfrom first_proc localpart(unnormalized_weights)
-                            tmp2 = @fetchfrom last_proc localpart(unnormalized_weights)
-                            remotecall_fetch(set_dvals, last_proc, unnormalized_weights, 1:replace_inds, tmp1[1:replace_inds])
-                            remotecall_fetch(set_dvals, first_proc, unnormalized_weights, 1:replace_inds, tmp2[1:replace_inds])
+                            #=tmp1 = @fetchfrom first_proc localpart(unnormalized_wts)
+                            tmp2 = @fetchfrom last_proc localpart(unnormalized_wts)
+
+                            # This sends objects from proc to main, then to other proc
+                            ## passobj would pass directly between procs but might override values.
+                            ### I fix this with own implementation of passobj allowing for different name
+                            passobj_newname(last_proc, first_proc, :unnormalized_wts[:L])=#
+
+                            ## Define the localpart of the vector separately on each proc (as its own var)
+
+                            #function pass_objs(src_proc, dest_proc, replace_inds)
+                            src_proc = last_proc
+                            dest_proc = first_proc
+                                @defineat src_proc zz=unnormalized_wts[:L][1:replace_inds]
+                                @defineat dest_proc zzz=unnormalized_wts[:L][1:replace_inds]
+                                passobj(src_proc, dest_proc, :zz)
+                                @spawnat dest_proc set_dvals(unnormalized_wts[:L], replace_inds, zz)
+
+                                passobj(dest_proc, src_proc, :zzz)
+                                @spawnat src_proc set_dvals(unnormalized_wts[:L], replace_inds, zzz)
+
+                         #=function set_dvals(x,inds,final_val)
+                         x[:L][1:inds] = final_val[1:inds]
+                         end=#
+#=
+                                @defineat src_proc z=first_local[:L][1:replace_inds]
+                                passobj(src_proc, dest_proc, :z)#, :last_local)
+                                remotecall_fetch(set_dvals, dest_proc, first_local, 1:replace_inds, z)
+                                @spawnat dest_proc set_dvals(,1:replace_inds,z)=#
+                                ## Need to store the object so it can be passed into the next proc correctly.
+                            #end
+
+                            @everywhere function pass_objs(src_proc, dest_proc, replace_inds)
+                                @defineat src_proc zz=unnormalized_wts[:L][1:replace_inds]
+                                @defineat dest_proc zzz=unnormalized_wts[:L][1:replace_inds]
+                                passobj(src_proc, dest_proc, :zz)
+                                @spawnat dest_proc set_dvals(unnormalized_wts[:L], replace_inds, zz)
+
+                                passobj(dest_proc, src_proc, :zzz)
+                                @spawnat src_proc set_dvals(unnormalized_wts[:L], replace_inds, zzz)
+                            end
+                            @show myid(), last_proc, first_proc
+                            @show @fetchfrom last_proc localpart(unnormalized_wts)
+                            @show @fetchfrom first_proc localpart(unnormalized_wts)
+                            pass_objs(last_proc, first_proc, replace_inds)
+                            pass_objs(last_proc, first_proc, replace_inds) #s_t1_temp
+                            pass_objs(last_proc, first_proc, replace_inds) #s_t_nontemp
+                            pass_objs(last_proc, first_proc, replace_inds) #norm_weights
+=#
+#=
+                            # Ah! Use passobj in ParallelDataTransfer
+                            #@inline set_dvals2(x,inds) = x[:L][inds]
+                            #function set_dvals3
+                            #@spawnat first_proc set_dvals2(unnormalized_wts, 1:replace_inds)
+                            #@spawnat last_proc set_dvals3(tmp1)
+
+                            #=ParallelDataTransfer.sendto(last_proc, tmp1=tmp1)
+                            ParallelDataTransfer.sendto(first_proc, tmp2=tmp2)
+                            @spawnat last_proc set_dvals(unnormalized_wts,replace_inds, tmp1)
+                            @spawnat first_proc set_dvals(unnormalized_wts, replace_inds, tmp2)=#
+                            #=remotecall_fetch(set_dvals, last_proc, unnormalized_wts, 1:replace_inds, tmp1[1:replace_inds])
+                            remotecall_fetch(set_dvals, first_proc, unnormalized_wts, 1:replace_inds, tmp2[1:replace_inds])=#
 
                             tmp1 = @fetchfrom first_proc localpart(s_t1_temp)
                             tmp2 = @fetchfrom last_proc localpart(s_t1_temp)
+                            ParallelDataTransfer.sendto(last_proc, tmp1=tmp1)
+                            ParallelDataTransfer.sendto(first_proc, tmp2=tmp2)
+                            @spawnat last_proc set_dvals(s_t1_temp,replace_inds, tmp1)
+                            @spawnat first_proc set_dvals(s_t1_temp, replace_inds, tmp2)
+                            #=tmp1 = @fetchfrom first_proc localpart(s_t1_temp)
+                            tmp2 = @fetchfrom last_proc localpart(s_t1_temp)
                             remotecall_fetch(set_dvals, last_proc, s_t1_temp, 1:replace_inds, tmp1[1:replace_inds])
-                            remotecall_fetch(set_dvals, first_proc, s_t1_temp, 1:replace_inds, tmp2[1:replace_inds])
+                            remotecall_fetch(set_dvals, first_proc, s_t1_temp, 1:replace_inds, tmp2[1:replace_inds])=#
 
                             tmp1 = @fetchfrom first_proc localpart(s_t_nontemp)
                             tmp2 = @fetchfrom last_proc localpart(s_t_nontemp)
+                            ParallelDataTransfer.sendto(last_proc, tmp1=tmp1)
+                            ParallelDataTransfer.sendto(first_proc, tmp2=tmp2)
+                            @spawnat last_proc set_dvals(s_t_nontemp,replace_inds, tmp1)
+                            @spawnat first_proc set_dvals(s_t_nontemp, replace_inds, tmp2)
+                            #=tmp1 = @fetchfrom first_proc localpart(s_t_nontemp)
+                            tmp2 = @fetchfrom last_proc localpart(s_t_nontemp)
                             remotecall_fetch(set_dvals, last_proc, s_t_nontemp, 1:replace_inds, tmp1[1:replace_inds])
-                            remotecall_fetch(set_dvals, first_proc, s_t_nontemp, 1:replace_inds, tmp2[1:replace_inds])
+                            remotecall_fetch(set_dvals, first_proc, s_t_nontemp, 1:replace_inds, tmp2[1:replace_inds])=#
 
                             ## ϵ_t only needs to be stored when tempering
                             #=tmp1 = @fetchfrom first_proc localpart(ϵ_t)
@@ -337,16 +604,22 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
                             tmp1 = @fetchfrom first_proc localpart(norm_weights)
                             tmp2 = @fetchfrom last_proc localpart(norm_weights)
+                            ParallelDataTransfer.sendto(last_proc, tmp1=tmp1)
+                            ParallelDataTransfer.sendto(first_proc, tmp2=tmp2)
+                            @spawnat last_proc set_dvals(norm_weights,replace_inds, tmp1)
+                            @spawnat first_proc set_dvals(norm_weights, replace_inds, tmp2)=#
+                            #=tmp1 = @fetchfrom first_proc localpart(norm_weights)
+                            tmp2 = @fetchfrom last_proc localpart(norm_weights)
                             remotecall_fetch(set_dvals, last_proc, norm_weights, 1:replace_inds, tmp1[1:replace_inds])
-                            remotecall_fetch(set_dvals, first_proc, norm_weights, 1:replace_inds, tmp2[1:replace_inds])
+                            remotecall_fetch(set_dvals, first_proc, norm_weights, 1:replace_inds, tmp2[1:replace_inds])=#
                         end
-                        @distributed for i in workers()
-                            processor_wt[:L] = sum(unnormalized_wts[:L])
-                        end
+                        #=procs_wt = @sync @distributed (vcat) for p in workers()
+                         sum(unnormalized_wts[:L])
+                     end=# # unnecessary b/c it will be re-calculated later
                     end
-
+                end
                 # Update loglikelihood
-                loglh[t] += log(mean(inc_weights))
+                loglh[t] += log(mean(convert(Vector, inc_weights)))
                 end
             else
                 ### 1. Correction
@@ -443,13 +716,13 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     end
 end
 
-
+#=
 # Function for parallel Bootstrap Particle Filter
         function tpf_helper!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                              Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
                              n_obs_t, stage, inc_weights, norm_weights,
                              s_t1_temp, ϵ_t,
-                             Φ, Ψ_t, QQ, det_HH_t, inv_HH_t;
+                             Φ, Ψ_t, QQ;
                              r_star::S = 2.0,
                              initialize = 1, poolmodel::Bool = false,
                              fixed_sched::Vector{S} = zeros(0),
@@ -476,12 +749,12 @@ end
 
             # Modifies inc_weights, norm_weights
             correction!(inc_weights, norm_weights, φ_new, coeff_terms,
-                        log_e_1_terms, log_e_2_terms, n_obs_t, parallel = parallel)
+                        log_e_1_terms, log_e_2_terms, n_obs_t)
 
             ### 2. Selection
             # Modifies s_t1_temp, s_t_nontemp, ϵ_t
             selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
-                           resampling_method = resampling_method, parallel = parallel)
+                           resampling_method = resampling_method)
 
             c = update_c(c, accept_rate, target_accept_rate)
             if VERBOSITY[verbose] >= VERBOSITY[:high]
@@ -502,8 +775,4 @@ end
 
             return φ_old
         end
-
-## Set values on a specific processor
-@everywhere function set_dvals(x,inds,final_val)
-    x[:L][inds] .= final_val
-end
+=#

@@ -8,7 +8,7 @@ module StateSpaceRoutines
     using Roots: fzero
     using Distributed
     using SharedArrays, SparseArrays
-    using DistributedArrays, OffsetArrays, DistributedArrays.SPMD ## Necessary when using parallel in TPF to communicate across servers
+    using DistributedArrays, OffsetArrays, DistributedArrays.SPMD, ParallelDataTransfer ## Necessary when using parallel in TPF to communicate across servers
 
     export
 

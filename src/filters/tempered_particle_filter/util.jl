@@ -34,3 +34,14 @@ function fast_mvnormal_pdf(x::Vector{Float64}, det_Σ::Float64, inv_Σ::Matrix{F
     exp_term   = exp(-(1/2) * dot(x, inv_Σ * x))
     return coeff_term*exp_term
 end
+
+# passobj from ParallelDataTransfer.jl but allowing target to have different name
+function passobj_newname(src::Int, target::AbstractVector{Int}, nm::Symbol, nm_new::Symbol;
+                 from_mod=Main, to_mod=Main)
+    r = RemoteChannel(src)
+    @spawnat(src, put!(r, getfield(from_mod, nm))) ## Need some sort of nm[:L]
+    @sync for to in target
+        @spawnat(to, Core.eval(to_mod, Expr(:(=), nm_new, fetch(r))))
+    end
+    nothing
+end

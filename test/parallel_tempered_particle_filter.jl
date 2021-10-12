@@ -1,3 +1,4 @@
+@show "OK?"
 using JLD, JLD2, Test, Distributions, Random, StateSpaceRoutines, BenchmarkTools, ParallelDataTransfer, FLoops, DistributedArrays, OffsetArrays
 
 @show "Parallel 12"
@@ -18,7 +19,7 @@ s_init = tpf_main_input["s_init"]
 tuning = Dict(:r_star => 2., :c_init => 0.3, :target_accept_rate => 0.4,
               :resampling_method => :systematic, :n_mh_steps => 1,
               :n_particles => 1000, :n_presample_periods => 0,
-              :allout => true, :parallel => true)
+              :allout => true, :parallel => true, :fixed_sched => [1.0])
 
 # Define Φ and Ψ (can't be saved to JLD)
 Φ(s_t::AbstractVector{Float64}, ϵ_t::AbstractVector{Float64}) = TTT*s_t + RRR*ϵ_t + CCC
@@ -37,8 +38,8 @@ inc_weights = test_file_inputs["inc_weights"]
 HH = cov(F_u)
 s_t_nontemp = test_file_inputs["s_t_nontemp"]
 
-ENV["frbnyjuliamemory"] = "5G"
-myprocs = addprocs_frbny(12)
+ENV["frbnyjuliamemory"] = "1G"
+myprocs = addprocs_frbny(2)
 @everywhere using JLD, JLD2, Test, Distributions, Random, StateSpaceRoutines, BenchmarkTools, ParallelDataTransfer
 
 
@@ -59,7 +60,7 @@ StateSpaceRoutines.sendto(workers(), log_e_2_terms = log_e_2_terms)
 StateSpaceRoutines.sendto(workers(), data = data)
 StateSpaceRoutines.sendto(workers(), s_t_nontemp = s_t_nontemp)
 StateSpaceRoutines.sendto(workers(), HH = HH)=#
-
+#=
 s_t_nontemp = distribute(s_t_nontemp)
 
 @btime weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
@@ -118,12 +119,15 @@ end
 @btime StateSpaceRoutines.mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c,
                                     tuning[:n_mh_steps], parallel = true)
 @btime out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true)
-
+=#
 ## Whole TPF Tests
 Random.seed!(47)
 out_no_parallel = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = false)
 Random.seed!(47)
 out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true)
+
+@btime out_no_parallel = tempered_particle_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init; $tuning..., verbose = :none, parallel = false)
+@btime out_parallel_one_worker = tempered_particle_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init; $tuning..., verbose = :none, parallel = true)
 @testset "TPF tests" begin
     @test out_no_parallel[1] ≈ -302.99967306704133
     @test out_parallel_one_worker[1] ≈ -302.99967306704133

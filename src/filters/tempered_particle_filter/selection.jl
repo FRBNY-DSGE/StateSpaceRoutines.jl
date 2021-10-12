@@ -26,15 +26,16 @@ function selection!(norm_weights::Vector{Float64}, s_t1_temp::M, s_t_nontemp, ϵ
     return nothing
 end
 
-function selection!(norm_weights::Vector{Float64}, s_t1_temp::M, s_t_nontemp::M, ϵ_t::AbstractMatrix{Float64};
-                    resampling_method::Symbol = :multinomial) where M<:DArray{Float64}
+# Parallel BSPF
+function selection!(norm_weights::DArray{Float64,1}, s_t1_temp::M, s_t_nontemp, ϵ_t::M;
+                    resampling_method::Symbol = :multinomial) where M<:DArray{Float64,2}
     # Resampling
-    is = resample(norm_weights, method = resampling_method)
+    is = resample(convert(Vector, norm_weights[:L]), method = resampling_method)
 
     # Update arrays using resampled indices
-    s_t1_temp1   = distribute(convert(Array, s_t1_temp)[:, is])
-    s_t_nontemp1 = distribute(convert(Array, s_t_nontemp)[:, is])
-    ϵ_t1         = ϵ_t[:, is]
+    s_t1_temp[:L]   = s_t1_temp[:L][:, is]
+    s_t_nontemp[:L] = s_t_nontemp[:L][:, is]
+    ϵ_t[:L]         = ϵ_t[:L][:, is]
 
     return nothing
 end
