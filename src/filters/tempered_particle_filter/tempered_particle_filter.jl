@@ -179,6 +179,17 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             x[:L][1:replaced]
         end
 
+        function set_dvals2(x, replaced, proc_j)
+            tmp = copy(x[:L][1:replaced])
+            x[:L][1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
+            passobj(proc_i, proc_j, :tmp)
+        end
+        @everywhere function set_dvals2(x, replaced, proc_j)
+            tmp = copy(x[:L][1:replaced])
+            x[:L][1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
+            passobj(proc_i, proc_j, :tmp)
+        end
+
         function set_dvals3(x, replaced, tmps)
             x[:L][1:replaced] = tmps
         end
@@ -425,30 +436,74 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
                     if EP_t < nworkers()/2
                         replace_inds = n_particles ÷ (2*nworkers())
+                        # ParallelDataTransfer.sendto(workers(), replace_inds = replace_inds)
+                        # ParallelDataTransfer.sendto(workers(), alpha_args = alpha_args)
                         add_to_proc = workers()[1] - 1 ## Add 1 to remove master worker when parallel
+
+                        @sync @distributed for i in 1:(nworkers() ÷ 2)
+                            proc_i = myid()
+                            proc_ind = findfirst(x -> x == proc_i - add_to_proc, alpha_args)
+
+                            j = nworkers()+1-proc_ind ## Other worker's index
+                            proc_j = alpha_args[nworkers()+1-proc_ind]+add_to_proc ## Other worker
+
+                            tmp1 = unnormalized_wts[:L][1:replace_inds]
+                            passobj(proc_i, proc_j, :tmp1)
+                            unnormalized_wts[:L][1:replace_inds] = remotecall_fetch(get_local_inds, proc_j,
+                                                                                    unnormalized_wts, replace_inds)
+                            @spawnat proc_j set_dvals3(unnormalized_wts, replace_inds, tmp1)
+
+                            tmp1 = s_t1_temp[:L][1:replace_inds]
+                            passobj(proc_i, proc_j, :tmp1)
+                            s_t1_temp[:L][1:replace_inds] = remotecall_fetch(get_local_inds, proc_j,
+                                                                                    s_t1_temp, replace_inds)
+                            @spawnat proc_j set_dvals3(s_t1_temp, replace_inds, tmp1)
+
+                            tmp1 = s_t_nontemp[:L][1:replace_inds]
+                            passobj(proc_i, proc_j, :tmp1)
+                            s_t_nontemp[:L][1:replace_inds] = remotecall_fetch(get_local_inds, proc_j,
+                                                                                    s_t_nontemp, replace_inds)
+                            @spawnat proc_j set_dvals3(s_t_nontemp, replace_inds, tmp1)
+
+                            tmp1 = norm_weights[:L][1:replace_inds]
+                            passobj(proc_i, proc_j, :tmp1)
+                            norm_weights[:L][1:replace_inds] = remotecall_fetch(get_local_inds, proc_j,
+                                                                                    norm_weights, replace_inds)
+                            @spawnat proc_j set_dvals3(norm_weights, replace_inds, tmp1)
+                        end
+#=
                         for i in 1:(nworkers() ÷ 2) ## Run in parallel by choosing workers to run each iteration on
                             proc_i = alpha_args[i] + add_to_proc
                             proc_j = alpha_args[nworkers()+1-i] + add_to_proc
 
+                            @async begin
                             # Pass relevant objects between processors
                             @spawnat proc_i set_dvals4(unnormalized_wts, replace_inds, proc_j)
+                            @spawnat proc_j set_dvals2(unnormalized_wts, replace_inds, proc_i)
                             @spawnat proc_j set_dvals3(unnormalized_wts, replace_inds, tmp1)
+                            @spawnat proc_i set_dvals3(unnormalized_wts, replace_inds, tmp)
 
                             @spawnat proc_i set_dvals4(s_t1_temp, replace_inds, proc_j)
+                            @spawnat proc_j set_dvals2(s_t1_temp, replace_inds, proc_i)
                             @spawnat proc_j set_dvals3(s_t1_temp, replace_inds, tmp1)
+                            @spawnat proc_i set_dvals3(s_t1_temp, replace_inds, tmp)
 
                             @spawnat proc_i set_dvals4(s_t_nontemp, replace_inds, proc_j)
+                            @spawnat proc_j set_dvals2(s_t_nontemp, replace_inds, proc_i)
                             @spawnat proc_j set_dvals3(s_t_nontemp, replace_inds, tmp1)
+                            @spawnat proc_i set_dvals3(s_t_nontemp, replace_inds, tmp)
 
                             @spawnat proc_i set_dvals4(norm_weights, replace_inds, proc_j)
+                            @spawnat proc_j set_dvals2(norm_weights, replace_inds, proc_i)
                             @spawnat proc_j set_dvals3(norm_weights, replace_inds, tmp1)
-
+                            @spawnat proc_i set_dvals3(norm_weights, replace_inds, tmp)
+                            end
                             # These objects are not reset for BSPF:
                             ## ϵ_t only needs to be stored when tempering
                             ## coeff_terms, log_e_1_terms, and log_e_2_terms are reset in the next iteration
                             ## inc_weights is reset and only the mean is used in the iteration
-                            ## recalcualting procs_wt unnecessary b/c it will be re-calculated in next iteration
-                        end
+                            ## recalculating procs_wt unnecessary b/c it will be re-calculated in next iteration
+                        end=#
                     end
 
                     # Update loglikelihood

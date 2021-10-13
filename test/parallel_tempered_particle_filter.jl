@@ -2,7 +2,7 @@
 using JLD, JLD2, Test, Distributions, Random, StateSpaceRoutines, BenchmarkTools, ParallelDataTransfer, FLoops, DistributedArrays, OffsetArrays, DistributedArrays.SPMD
 
 addproc_num = 12 ## Set to 0 to not add workers
-nparts_mill = false
+nparts_mill = true
 nparts_mult = nparts_mill ? 10 : 1
 
 @show "Parallel " * string(addproc_num)

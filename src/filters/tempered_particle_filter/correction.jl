@@ -182,13 +182,13 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                     # Initialization step (using 2π instead of φ_old)
                     coeff_terms[:L][i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
                     log_e_1_terms[:L][i] = 0.
-                    log_e_2_terms[:L][i] = log(Ψ(s_t_nontemp[:,i]))
+                    log_e_2_terms[:L][i] = log(Ψ(s_t_nontemp[:L][:,i]))
                 end
             else
                 for i in 1:n_particles
                     coeff_terms[:L][i] = (φ_old)^(-n_obs/2)
-                    log_e_1_terms[:L][i] = -φ_old * log(Ψ(s_t_nontemp[:,i]))
-                    log_e_2_terms[:L][i] = log(Ψ(s_t_nontemp[:,i]))
+                    log_e_1_terms[:L][i] = -φ_old * log(Ψ(s_t_nontemp[:L][:,i]))
+                    log_e_2_terms[:L][i] = log(Ψ(s_t_nontemp[:L][:,i]))
                 end
             end
         else
