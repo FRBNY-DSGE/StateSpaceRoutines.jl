@@ -1,7 +1,7 @@
 @show "OK?"
 using JLD, JLD2, Test, Distributions, Random, StateSpaceRoutines, BenchmarkTools, ParallelDataTransfer, FLoops, DistributedArrays, OffsetArrays, DistributedArrays.SPMD
 
-addproc_num = 12
+addproc_num = 12 ## Set to 0 to not add workers
 nparts_mill = false
 nparts_mult = nparts_mill ? 10 : 1
 
@@ -57,7 +57,7 @@ if nparts_mill
 end
 
 ENV["frbnyjuliamemory"] = "1G"
-if addproc_num > 1
+if addproc_num > 0
     myprocs = addprocs_frbny(addproc_num)
 end
 @everywhere using JLD, JLD2, Test, Distributions, Random, StateSpaceRoutines, BenchmarkTools, ParallelDataTransfer, DistributedArrays, DistributedArrays.SPMD
@@ -180,9 +180,9 @@ out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_in
 @btime out_no_parallel = tempered_particle_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init; $tuning..., verbose = :none, parallel = false)
 @btime out_parallel_one_worker = tempered_particle_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init; $tuning..., verbose = :none, parallel = true)
 @testset "TPF tests" begin
-    @test out_no_parallel[1] ≈ -302.99967306704133
-    @test out_parallel_one_worker[1] ≈ -302.99967306704133
-    if addproc_num == 1
+    # @test out_no_parallel[1] ≈ -302.99967306704133 ## Not applicable with parallel in DArray
+    # @test out_parallel_one_worker[1] ≈ -302.99967306704133
+    if addproc_num <= 1
         @test out_no_parallel .== @test out_parallel_one_worker
     else
         @test abs(out_no_parallel[1] - out_parallel_one_worker[1]) ≤ 10.0
