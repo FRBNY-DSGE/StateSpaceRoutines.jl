@@ -210,7 +210,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     end
 
 
-    function tpf_helper!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+    @everywhere function tpf_helper!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                              Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
                              n_obs_t, stage, inc_weights, norm_weights,
                              s_t1_temp, ϵ_t,
@@ -268,65 +268,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             return nothing
         end
-
-    @everywhere function tpf_helper!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
-                             Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
-                             n_obs_t, stage, inc_weights, norm_weights,
-                             s_t1_temp, ϵ_t,
-                             Φ, Ψ_t, QQ, unnormalized_wts,
-                             r_star::S = 2.0,
-                             initialize = 1, poolmodel::Bool = false,
-                             fixed_sched::Vector{S} = zeros(0),
-                             findroot::Function = bisection, xtol::S = 1e-3,
-                             resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
-                             accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
-                             verbose::Symbol = :high) where S<:AbstractFloat
-
-            ### 1. Correction
-            # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
-            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
-                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
-                           initialize = stage == 1, parallel = true,
-                           poolmodel = poolmodel)
-
-            φ_new = fixed_sched[stage] ## Function only runs w/ Bootstrap PF so this is 1.0
-            #=φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
-                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
-                           xtol = xtol, parallel = parallel)=#
-
-            if VERBOSITY[verbose] >= VERBOSITY[:high]
-                @show φ_new
-            end
-
-            # Modifies inc_weights, norm_weights
-            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
-                        log_e_1_terms, log_e_2_terms, n_obs_t)
-
-            ### 2. Selection
-            # Modifies s_t1_temp, s_t_nontemp, ϵ_t
-            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
-                           resampling_method = resampling_method)
-
-            c = update_c(c, accept_rate, target_accept_rate)
-            if VERBOSITY[verbose] >= VERBOSITY[:high]
-                @show c
-                println("------------------------------")
-            end
-
-            ### 3. Mutation
-            # Modifies s_t_nontemp, ϵ_t
-            if stage != 1 ## Note this never runs in Bootstrap PF case
-                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
-                                        s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
-                                        poolmodel = poolmodel)
-            end
-
-            φ_old = φ_new
-
-        unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
-
-        return nothing
-    end
 
     for t = 1:T
         begin_time = time_ns()
@@ -440,38 +381,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                         # ParallelDataTransfer.sendto(workers(), alpha_args = alpha_args)
                         add_to_proc = workers()[1] - 1 ## Add 1 to remove master worker when parallel
 
-                        @sync @distributed for i in 1:(nworkers() ÷ 2)
-                            proc_i = myid()
-                            proc_ind = findfirst(x -> x == proc_i - add_to_proc, alpha_args)
-
-                            j = nworkers()+1-proc_ind ## Other worker's index
-                            proc_j = alpha_args[nworkers()+1-proc_ind]+add_to_proc ## Other worker
-
-                            tmp1 = unnormalized_wts[:L][1:replace_inds]
-                            passobj(proc_i, proc_j, :tmp1)
-                            unnormalized_wts[:L][1:replace_inds] = remotecall_fetch(get_local_inds, proc_j,
-                                                                                    unnormalized_wts, replace_inds)
-                            @spawnat proc_j set_dvals3(unnormalized_wts, replace_inds, tmp1)
-
-                            tmp1 = s_t1_temp[:L][1:replace_inds]
-                            passobj(proc_i, proc_j, :tmp1)
-                            s_t1_temp[:L][1:replace_inds] = remotecall_fetch(get_local_inds, proc_j,
-                                                                                    s_t1_temp, replace_inds)
-                            @spawnat proc_j set_dvals3(s_t1_temp, replace_inds, tmp1)
-
-                            tmp1 = s_t_nontemp[:L][1:replace_inds]
-                            passobj(proc_i, proc_j, :tmp1)
-                            s_t_nontemp[:L][1:replace_inds] = remotecall_fetch(get_local_inds, proc_j,
-                                                                                    s_t_nontemp, replace_inds)
-                            @spawnat proc_j set_dvals3(s_t_nontemp, replace_inds, tmp1)
-
-                            tmp1 = norm_weights[:L][1:replace_inds]
-                            passobj(proc_i, proc_j, :tmp1)
-                            norm_weights[:L][1:replace_inds] = remotecall_fetch(get_local_inds, proc_j,
-                                                                                    norm_weights, replace_inds)
-                            @spawnat proc_j set_dvals3(norm_weights, replace_inds, tmp1)
-                        end
-#=
                         for i in 1:(nworkers() ÷ 2) ## Run in parallel by choosing workers to run each iteration on
                             proc_i = alpha_args[i] + add_to_proc
                             proc_j = alpha_args[nworkers()+1-i] + add_to_proc
@@ -503,7 +412,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                             ## coeff_terms, log_e_1_terms, and log_e_2_terms are reset in the next iteration
                             ## inc_weights is reset and only the mean is used in the iteration
                             ## recalculating procs_wt unnecessary b/c it will be re-calculated in next iteration
-                        end=#
+                        end
                     end
 
                     # Update loglikelihood
