@@ -8,20 +8,14 @@ Resample particles using `norm_weights`. This function modifies `s_t1_temp`,
 `s_t_nontemp`, and `ϵ_t` in place.
 """
 function selection!(norm_weights::Vector{Float64}, s_t1_temp::M, s_t_nontemp, ϵ_t::M;
-                    resampling_method::Symbol = :multinomial, parallel::Bool = false) where M<:AbstractMatrix{Float64}
+                    resampling_method::Symbol = :multinomial) where M<:AbstractMatrix{Float64}
     # Resampling
-    is = parallel ? resample(norm_weights[:L], method = resampling_method) : resample(norm_weights, method = resampling_method)
+    is = resample(norm_weights, method = resampling_method)
 
     # Update arrays using resampled indices
-    if parallel
-        s_t1_temp[:L]   = s_t1_temp[:L][:, is]
-        s_t_nontemp[:L] = s_t_nontemp[:L][:, is]
-        ϵ_t[:L]         = ϵ_t[:L][:, is]
-    else
-        s_t1_temp   .= s_t1_temp[:, is]
-        s_t_nontemp .= s_t_nontemp[:, is]
-        ϵ_t         .= ϵ_t[:, is]
-    end
+    s_t1_temp   .= s_t1_temp[:, is]
+    s_t_nontemp .= s_t_nontemp[:, is]
+    ϵ_t         .= ϵ_t[:, is]
 
     return nothing
 end

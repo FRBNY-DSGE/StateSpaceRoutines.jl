@@ -138,11 +138,11 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         Vector{Float64}(undef, n_particles)
 =#
     # TODO: Ensure each worker has all of a particle
-    s_t1_temp     = parallel ? distribute(copy(s_init)) :
+    s_t1_temp     = parallel ? distribute(copy(s_init), dist = [1, nworkers()]) :
         Matrix{Float64}(copy(s_init))
-    s_t_nontemp   = parallel ? dzeros(n_states, n_particles) :
+    s_t_nontemp   = parallel ? dzeros((n_states, n_particles), workers(), [1,nworkers()]) :
         Matrix{Float64}(undef, n_states, n_particles)
-    ϵ_t           = parallel ? dzeros(n_shocks, n_particles) :
+    ϵ_t           = parallel ? dzeros((n_shocks, n_particles), workers(), [1,nworkers()]) :
         Matrix{Float64}(undef, n_shocks, n_particles)
     coeff_terms   = parallel ? dzeros(n_particles) :
         Vector{Float64}(undef, n_particles)
@@ -170,7 +170,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     #--------------------------------------------------------------
 
     ## Store unnormalized weights for resample with processors when BSPF in parallel
-    if parallel && fixed_sched == [1.0]
+    if parallel
         unnormalized_wts = dones(n_particles)
         function get_local_inds(x, replaced)
             x[:L][1:replaced]
@@ -190,11 +190,29 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             passobj(proc_i, proc_j, :tmp)
         end
 
+        function set_dvals2_mat(x, replaced, proc_j)
+            tmp = copy(x[:L][:,1:replaced])
+            x[:L][:,1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
+            passobj(proc_i, proc_j, :tmp)
+        end
+        @everywhere function set_dvals2_mat(x, replaced, proc_j)
+            tmp = copy(x[:L][:,1:replaced])
+            x[:L][:,1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
+            passobj(proc_i, proc_j, :tmp)
+        end
+
         function set_dvals3(x, replaced, tmps)
             x[:L][1:replaced] = tmps
         end
         @everywhere function set_dvals3(x, replaced, tmps)
             x[:L][1:replaced] = tmps
+        end
+
+        function set_dvals3_mat(x, replaced, tmps)
+            x[:L][:,1:replaced] = tmps
+        end
+        @everywhere function set_dvals3_mat(x, replaced, tmps)
+            x[:L][:,1:replaced] = tmps
         end
 
         function set_dvals4(x, replaced, proc_j)
@@ -207,16 +225,25 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             x[:L][1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
             passobj(proc_i, proc_j, :tmp1)
         end
+
+        function set_dvals4_mat(x, replaced, proc_j)
+            tmp1 = copy(x[:L][:,1:replaced])
+            x[:L][:,1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
+            passobj(proc_i, proc_j, :tmp1)
+        end
+        @everywhere function set_dvals4_mat(x, replaced, proc_j)
+            tmp1 = copy(x[:L][:,1:replaced])
+            x[:L][:,1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
+            passobj(proc_i, proc_j, :tmp1)
+        end
     end
-
-
-    @everywhere function tpf_helper!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+    if parallel && fixed_sched == [1.0]
+        function tpf_helper!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                              Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
                              n_obs_t, stage, inc_weights, norm_weights,
                              s_t1_temp, ϵ_t,
                              Φ, Ψ_t, QQ, unnormalized_wts,
-                             r_star::S = 2.0,
-                             initialize = 1, poolmodel::Bool = false,
+                             r_star::S = 2.0, poolmodel::Bool = false,
                              fixed_sched::Vector{S} = zeros(0),
                              findroot::Function = bisection, xtol::S = 1e-3,
                              resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
@@ -264,10 +291,304 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             φ_old = φ_new
 
-        unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
+            @show unnormalized_wts[:L]
+            @show inc_weights[:L]
+            unnormalized_wts[:L] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
 
             return nothing
         end
+
+        @everywhere function tpf_helper!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+                                         Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                                         n_obs_t, stage, inc_weights, norm_weights,
+                                         s_t1_temp, ϵ_t,
+                                         Φ, Ψ_t, QQ, unnormalized_wts,
+                                         r_star::S = 2.0, poolmodel::Bool = false,
+                                         fixed_sched::Vector{S} = zeros(0),
+                                         findroot::Function = bisection, xtol::S = 1e-3,
+                                         resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
+                                         accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
+                                         verbose::Symbol = :high) where S<:AbstractFloat
+
+            ### 1. Correction
+            # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
+            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
+                           initialize = stage == 1, parallel = true,
+                           poolmodel = poolmodel)
+
+            φ_new = fixed_sched[stage] ## Function only runs w/ Bootstrap PF so this is 1.0
+            #=φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
+                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
+                           xtol = xtol, parallel = parallel)=#
+
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show φ_new
+            end
+
+            # Modifies inc_weights, norm_weights
+            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
+                        log_e_1_terms, log_e_2_terms, n_obs_t)
+
+            ### 2. Selection
+            # Modifies s_t1_temp, s_t_nontemp, ϵ_t
+            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+                           resampling_method = resampling_method)
+
+            c = update_c(c, accept_rate, target_accept_rate)
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show c
+                println("------------------------------")
+            end
+
+            ### 3. Mutation
+            # Modifies s_t_nontemp, ϵ_t
+            if stage != 1 ## Note this never runs in Bootstrap PF case
+                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
+                                        s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
+                                        poolmodel = poolmodel)
+            end
+
+            φ_old = φ_new
+
+            @show unnormalized_wts[:L]
+            @show inc_weights[:L]
+            unnormalized_wts[:L] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
+
+            return nothing
+        end
+    elseif parallel
+        function one_iter!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec,
+                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                           n_obs_t, stage, inc_weights, norm_weights,
+                           s_t1_temp, ϵ_t, unnormalized_wts,
+                           r_star::S = 2.0, poolmodel::Bool = false,
+                           fixed_sched::Vector{S} = zeros(0),
+                           findroot::Function = bisection, xtol::S = 1e-3,
+                           resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
+                           accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
+                           verbose::Symbol = :high) where S<:AbstractFloat
+            ### 1. Correction
+            # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
+            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec[:L][1],
+                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
+                           initialize = stage == 1, parallel = parallel,
+                           poolmodel = poolmodel)
+
+            φ_new = next_φ(φ_vec[:L][1], coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
+                       r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
+                       xtol = xtol)
+
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show φ_new
+            end
+
+            # Modifies inc_weights, norm_weights
+            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
+                        log_e_1_terms, log_e_2_terms, n_obs_t)
+
+            # selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+            #            resampling_method = resampling_method)
+            φ_vec[:L][1] = φ_new
+
+            # unnormalized_wts[:L] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
+        end
+
+        @everywhere function one_iter!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec,
+                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                           n_obs_t, stage, inc_weights, norm_weights,
+                           s_t1_temp, ϵ_t, unnormalized_wts,
+                           r_star::S = 2.0, poolmodel::Bool = false,
+                           fixed_sched::Vector{S} = zeros(0),
+                           findroot::Function = bisection, xtol::S = 1e-3,
+                           resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
+                           accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
+                           verbose::Symbol = :high) where S<:AbstractFloat
+            ### 1. Correction
+            # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
+            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec[:L][1],
+                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
+                           initialize = stage == 1, parallel = parallel,
+                           poolmodel = poolmodel)
+
+            φ_new = next_φ(φ_vec[:L][1], coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
+                       r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
+                       xtol = xtol)
+
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show φ_new
+            end
+
+            # Modifies inc_weights, norm_weights
+            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
+                        log_e_1_terms, log_e_2_terms, n_obs_t)
+
+            # selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+            #            resampling_method = resampling_method)
+            φ_vec[:L][1] = φ_new
+
+            # unnormalized_wts[:L] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
+        end
+
+        function tempered_iter!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec,
+                                Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                                n_obs_t, stage, inc_weights, norm_weights,
+                                s_t1_temp, ϵ_t, c_vec,
+                                Φ, Ψ_t, QQ, unnormalized_wts,
+                                r_star::S = 2.0, poolmodel::Bool = false,
+                                fixed_sched::Vector{S} = zeros(0),
+                                findroot::Function = bisection, xtol::S = 1e-3,
+                                resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
+                                accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
+                                verbose::Symbol = :high) where S<:AbstractFloat
+            if stage != 1
+                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_vec[:L][1], y_t,
+                                        s_t_nontemp, s_t1_temp, ϵ_t, c_vec[:L][1], n_mh_steps;
+                                        poolmodel = poolmodel)
+            end
+
+            ### 1. Correction
+            # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
+            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec[:L][1],
+                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
+                           initialize = stage == 1, parallel = parallel,
+                           poolmodel = poolmodel)
+
+            φ_new = next_φ(φ_vec[:L][1], coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
+                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
+                           xtol = xtol)
+
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show φ_new
+            end
+
+            # Modifies inc_weights, norm_weights
+            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
+                        log_e_1_terms, log_e_2_terms, n_obs_t)
+
+            # selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+            #            resampling_method = resampling_method)
+
+            c_vec[:L][1] = update_c(c_vec[:L][1], accept_rate, target_accept_rate)
+            φ_vec[:L][1] = φ_new
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show c_vec[:L][1]
+                println("------------------------------")
+            end
+
+            unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
+        end
+
+        @everywhere function tempered_iter!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec,
+                                            Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                                            n_obs_t, stage, inc_weights, norm_weights,
+                                            s_t1_temp, ϵ_t, c_vec,
+                                            Φ, Ψ_t, QQ, unnormalized_wts,
+                                            r_star::S = 2.0, poolmodel::Bool = false,
+                                            fixed_sched::Vector{S} = zeros(0),
+                                            findroot::Function = bisection, xtol::S = 1e-3,
+                                            resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
+                                            accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
+                                            verbose::Symbol = :high) where S<:AbstractFloat
+            if stage != 1
+                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_vec[:L][1], y_t,
+                                        s_t_nontemp, s_t1_temp, ϵ_t, c_vec[:L][1], n_mh_steps;
+                                        poolmodel = poolmodel)
+            end
+
+            ### 1. Correction
+            # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
+            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec[:L][1],
+                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
+                           initialize = stage == 1, parallel = parallel,
+                           poolmodel = poolmodel)
+
+            φ_new = next_φ(φ_vec[:L][1], coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
+                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
+                           xtol = xtol)
+
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show φ_new
+            end
+
+            # Modifies inc_weights, norm_weights
+            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
+                        log_e_1_terms, log_e_2_terms, n_obs_t)
+
+            # selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+            #            resampling_method = resampling_method)
+
+            c_vec[:L][1] = update_c(c_vec[:L][1], accept_rate, target_accept_rate)
+            φ_vec[:L][1] = φ_new
+            if VERBOSITY[verbose] >= VERBOSITY[:high]
+                @show c_vec[:L][1]
+                println("------------------------------")
+            end
+            unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
+        end
+
+        function adaptive_tempered_iter!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec,
+                                         Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                                         s_t1_temp, ϵ_t, c_vec,
+                                         Φ, Ψ_t, QQ, stage,
+                                         poolmodel::Bool = false, target_accept_rate::S = 0.4,
+                                         accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
+                                         verbose::Symbol = :high) where S<:AbstractFloat
+            if stage != 1
+                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_vec[:L][1], y_t,
+                                        s_t_nontemp, s_t1_temp, ϵ_t, c_vec[:L][1], n_mh_steps;
+                                        poolmodel = poolmodel)
+            end
+
+            ### 1. Correction
+            # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
+            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec[:L][1],
+                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
+                           initialize = stage == 1, parallel = parallel,
+                           poolmodel = poolmodel)
+        end
+
+        @everywhere function adaptive_tempered_iter!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec,
+                                                     Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                                                     s_t1_temp, ϵ_t, c_vec,
+                                                     Φ, Ψ_t, QQ, stage,
+                                                     poolmodel::Bool = false, target_accept_rate::S = 0.4,
+                                                     accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
+                                                     verbose::Symbol = :high) where S<:AbstractFloat
+            if stage != 1
+                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_vec[:L][1], y_t,
+                                        s_t_nontemp, s_t1_temp, ϵ_t, c_vec[:L][1], n_mh_steps;
+                                        poolmodel = poolmodel)
+            end
+
+            ### 1. Correction
+            # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
+            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec[:L][1],
+                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
+                           initialize = stage == 1, parallel = parallel,
+                           poolmodel = poolmodel)
+        end
+
+
+        function adaptive_correction!(inc_weights, norm_weights, φ_new, coeff_terms,
+                             log_e_1_terms, log_e_2_terms, n_obs_t, unnormalized_wts) where S<:AbstractFloat
+
+            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
+                             log_e_1_terms, log_e_2_terms, n_obs_t)
+
+            # unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
+        end
+
+        @everywhere function adaptive_correction!(inc_weights, norm_weights, φ_new, coeff_terms,
+                             log_e_1_terms, log_e_2_terms, n_obs_t, unnormalized_wts) where S<:AbstractFloat
+
+            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
+                             log_e_1_terms, log_e_2_terms, n_obs_t)
+
+            # unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
+        end
+
+    end
 
     for t = 1:T
         begin_time = time_ns()
@@ -312,16 +633,12 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             if ndims(ϵ_t_vec) == 1 # Edge case where only 1 shock
                 ϵ_t_vec = reshape(ϵ_t_vec, (1, length(ϵ_t_vec)))
             end
-            # Cite for DArray: https://discourse.julialang.org/t/alternative-to-sharedarrays-for-multi-node-cluster/37794
-            s_t_nontemp = DArray((n_states,n_particles), workers(), [1,nworkers()]) do inds # the 1 in dist = [1,x] important because each chunk should have complete columns
-                arr = zeros(inds) # OffsetArray corrects local indices
-                s_t1 = OffsetArray(localpart(s_t1_temp),DistributedArrays.localindices(s_t1_temp)) # worker also stores some part of s_t1_temp which this gets and corrects
-                for i in inds[2]
-                    arr[:,i] .= Φ(convert(Vector,s_t1[:, i]), ϵ_t_vec[:, i]) # Need to convert for type-checking in Φ
+            ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
+            @sync @distributed for w in workers()
+                for i in 1:size(s_t_nontemp[:L],2)
+                    s_t_nontemp[:L][:,i] = Φ(s_t1_temp[:L][:,i], ϵ_t[:L][:,i])
                 end
-                parent(arr) # remove the OffsetArray wrapper
             end
-            ϵ_t = distribute(ϵ_t_vec)
         else
              for i in 1:n_particles
                 ϵ_t[:, i] .= rand(F_ϵ)
@@ -332,6 +649,34 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         # Tempering initialization
         φ_old = 1e-30
         stage = 0
+
+        if parallel && fixed_sched != [1.0]
+            stage += 1
+            c_vec = dfill(c_init, nworkers())
+            φ_vec = dfill(φ_old, nworkers())
+
+            spmd(one_iter!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec,
+                 Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                 n_obs_t, stage, inc_weights, norm_weights,
+                 s_t1_temp, ϵ_t, unnormalized_wts,
+                 r_star, poolmodel,
+                 fixed_sched, findroot, xtol,
+                 resampling_method, target_accept_rate,
+                 accept_rate, n_mh_steps,
+                 verbose; pids=workers())
+
+            inc_weights_vec = convert(Vector, inc_weights)
+            s_t1_temp_vec = convert(Array, s_t1_temp)
+            s_t_nontemp_vec = convert(Array, s_t_nontemp)
+            ϵ_t_vec = convert(Array, ϵ_t)
+
+            selection!(inc_weights_vec, s_t1_temp_vec, s_t_nontemp_vec, ϵ_t_vec)
+
+            s_t1_temp = distribute(s_t1_temp_vec, dist = [1, nworkers()])
+            s_t_nontemp = distribute(s_t_nontemp_vec, dist = [1, nworkers()])
+            ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
+            ## Can use inc_weights b/c resampling at end of each iteration means weight=1 for all particles
+        end
 
         # Distribute particles across processors in each iteration of below loop
         ## Use DistributedArrays.SPMD to run whol thing in parallel
@@ -345,7 +690,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         #--------------------------------------------------------------
         # Main Algorithm
         #--------------------------------------------------------------
-        while φ_old < 1
+        while φ_old < 1 || (parallel && fixed_sched != [1.0])
             stage += 1
 
             if parallel
@@ -355,14 +700,114 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                             n_obs_t, stage, inc_weights, norm_weights,
                             s_t1_temp, ϵ_t,
                             Φ, Ψ_t, QQ, unnormalized_wts,
-                            r_star, stage == 1, poolmodel,
+                            r_star, poolmodel,
                             fixed_sched, findroot, xtol,
                             resampling_method, target_accept_rate,
                             accept_rate, n_mh_steps,
                             verbose; pids=workers())
                     φ_old = 1.0 ## Can do this because it's given in fixed_sched
 
-                # Resample processors if necessary
+                    # Update loglikelihood
+                    loglh[t] += log(mean(convert(Vector, inc_weights)))
+                else
+                    # Parallel but adaptive schedule or fixed schedule but not bootstrap
+                    ## Same as BSPF with different loop order.
+                    ## First, correction, selection.
+                    ## Then start loop w/ mutation, corection, then recalculate φ and resample
+
+                    # Calculating log likelihood after each run
+                    loglh[t] += log(mean(convert(Vector, inc_weights)))
+                    ### 3. Mutation
+                    # Modifies s_t_nontemp, ϵ_t
+                    if φ_old >= 1
+                        if stage != 1
+                            @sync @distributed for p in workers()
+                                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_vec[:L][1], y_t,
+                                                        s_t_nontemp, s_t1_temp, ϵ_t, c_vec[:L][1], n_mh_steps;
+                                                        poolmodel = poolmodel)
+                            end
+                            ## Don't need to use c_init b/c stage = 1 then.
+                        end
+                        break
+                    end
+                    if isempty(fixed_sched)
+                        spmd(adaptive_tempered_iter!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec,
+                             Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                             s_t1_temp, ϵ_t, c_vec,
+                             Φ, Ψ_t, QQ, stage,
+                             poolmodel, target_accept_rate,
+                             accept_rate, n_mh_steps,
+                             verbose; pids=workers())
+
+                        φ_old = next_φ(φ_old, convert(Vector, coeff_terms),
+                                       convert(Vector, log_e_1_terms), convert(Vector, log_e_2_terms),
+                                       n_obs_t, r_star, stage;
+                                       fixed_sched = fixed_sched, findroot = findroot, xtol = xtol)
+
+                        # Correction + update unnormalized_wts
+                        spmd(adaptive_correction!, inc_weights, norm_weights, φ_old, coeff_terms,
+                             log_e_1_terms, log_e_2_terms, n_obs_t, unnormalized_wts; pids=workers())
+
+                        # @show convert(Vector, inc_weights)
+                        # Selection
+                        norm_weights_vec = convert(Vector, norm_weights)
+                        # unnormalized_wts_vec = convert(Vector, unnormalized_wts)
+                        # unnormalized_wts_vec = unnormalized_wts_vec ./ mean(unnormalized_wts_vec)
+                        s_t1_temp_vec = convert(Array, s_t1_temp)
+                        s_t_nontemp_vec = convert(Array, s_t_nontemp)
+                        ϵ_t_vec = convert(Array, ϵ_t)
+
+                        selection!(norm_wts_vec, s_t1_temp_vec, s_t_nontemp_vec, ϵ_t_vec)
+
+                        s_t1_temp = distribute(s_t1_temp_vec, dist = [1, nworkers()])
+                        s_t_nontemp = distribute(s_t_nontemp_vec, dist = [1, nworkers()])
+                        ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
+                        #unnormalized_wts = distribute(unnormalized_wts_vec)
+                    else
+                        spmd(tempered_iter!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec,
+                             Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                             n_obs_t, stage, inc_weights, norm_weights,
+                             s_t1_temp, ϵ_t, c_vec,
+                             Φ, Ψ_t, QQ, unnormalized_wts,
+                             r_star, poolmodel,
+                             fixed_sched, findroot, xtol,
+                             resampling_method, target_accept_rate,
+                             accept_rate, n_mh_steps,
+                             verbose; pids=workers())
+
+                        φ_old = fixed_sched[stage]
+
+                        # Selection
+                        norm_wts_vec = convert(Vector, norm_weights)
+                        # unnormalized_wts_vec = convert(Vector, unnormalized_wts)
+                        # unnormalized_wts_vec = unnormalized_wts_vec ./ mean(unnormalized_wts_vec)
+                        s_t1_temp_vec = convert(Array, s_t1_temp)
+                        s_t_nontemp_vec = convert(Array, s_t_nontemp)
+                        ϵ_t_vec = convert(Array, ϵ_t)
+
+                        selection!(norm_wts_vec, s_t1_temp_vec, s_t_nontemp_vec, ϵ_t_vec)
+
+                        s_t1_temp = distribute(s_t1_temp_vec, dist = [1, nworkers()])
+                        s_t_nontemp = distribute(s_t_nontemp_vec, dist = [1, nworkers()])
+                        ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
+                        # unnormalized_wts = distribute(unnormalized_wts_vec)
+                    end
+                    # Calculate φ_n in adaptive case
+                    ## We do this instead of calculating processor-specific φ_n b/c
+                    ### that would result in some processors needing fewer iterations
+                    ### than others, slowing the code down (have to wait for last worker).
+
+                    ## Remember to store φ information too!
+
+                    # Start loop - oh we're there. Move earlier stuff outside then
+
+                    # Resample between processors if necessary
+                    # Move φ with particle if adaptive
+                    ### For fixed φ, don't need to pass φ
+                end
+
+                if fixed_sched == [1.0]#!isempty(fixed_sched)
+                    # Resample processors if necessary
                     if nworkers() == 1
                         EP_t = 1.0
                     else
@@ -392,31 +837,36 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                             @spawnat proc_j set_dvals3(unnormalized_wts, replace_inds, tmp1)
                             @spawnat proc_i set_dvals3(unnormalized_wts, replace_inds, tmp)
 
-                            @spawnat proc_i set_dvals4(s_t1_temp, replace_inds, proc_j)
-                            @spawnat proc_j set_dvals2(s_t1_temp, replace_inds, proc_i)
-                            @spawnat proc_j set_dvals3(s_t1_temp, replace_inds, tmp1)
-                            @spawnat proc_i set_dvals3(s_t1_temp, replace_inds, tmp)
-
-                            @spawnat proc_i set_dvals4(s_t_nontemp, replace_inds, proc_j)
-                            @spawnat proc_j set_dvals2(s_t_nontemp, replace_inds, proc_i)
-                            @spawnat proc_j set_dvals3(s_t_nontemp, replace_inds, tmp1)
-                            @spawnat proc_i set_dvals3(s_t_nontemp, replace_inds, tmp)
+                            @spawnat proc_i set_dvals4_mat(s_t_nontemp, replace_inds, proc_j)
+                            @spawnat proc_j set_dvals2_mat(s_t_nontemp, replace_inds, proc_i)
+                            @spawnat proc_j set_dvals3_mat(s_t_nontemp, replace_inds, tmp1)
+                            @spawnat proc_i set_dvals3_mat(s_t_nontemp, replace_inds, tmp)
 
                             @spawnat proc_i set_dvals4(norm_weights, replace_inds, proc_j)
                             @spawnat proc_j set_dvals2(norm_weights, replace_inds, proc_i)
                             @spawnat proc_j set_dvals3(norm_weights, replace_inds, tmp1)
                             @spawnat proc_i set_dvals3(norm_weights, replace_inds, tmp)
+
+                                if length(fixed_sched) > 1
+                                    @spawnat proc_i set_dvals4_mat(s_t1_temp, replace_inds, proc_j)
+                                    @spawnat proc_j set_dvals2_mat(s_t1_temp, replace_inds, proc_i)
+                                    @spawnat proc_j set_dvals3_mat(s_t1_temp, replace_inds, tmp1)
+                                    @spawnat proc_i set_dvals3_mat(s_t1_temp, replace_inds, tmp)
+
+                                    @spawnat proc_i set_dvals4_mat(ϵ_t, replace_inds, proc_j)
+                                    @spawnat proc_j set_dvals2_mat(ϵ_t, replace_inds, proc_i)
+                                    @spawnat proc_j set_dvals3_mat(ϵ_t, replace_inds, tmp1)
+                                    @spawnat proc_i set_dvals3_mat(ϵ_t, replace_inds, tmp)
+                                end
                             end
                             # These objects are not reset for BSPF:
                             ## ϵ_t only needs to be stored when tempering
+                            ## s_t1_temp is set to s_t_nontemp at the end of tempering iterations
                             ## coeff_terms, log_e_1_terms, and log_e_2_terms are reset in the next iteration
                             ## inc_weights is reset and only the mean is used in the iteration
                             ## recalculating procs_wt unnecessary b/c it will be re-calculated in next iteration
                         end
                     end
-
-                    # Update loglikelihood
-                    loglh[t] += log(mean(convert(Vector, inc_weights)))
                 end
             else
                 ### 1. Correction
