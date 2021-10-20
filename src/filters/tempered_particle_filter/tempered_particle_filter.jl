@@ -254,7 +254,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
             weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                            Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
-                           initialize = stage == 1, parallel = true,
+                           initialize = stage == 1,
                            poolmodel = poolmodel)
 
             φ_new = fixed_sched[stage] ## Function only runs w/ Bootstrap PF so this is 1.0
@@ -272,8 +272,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             ### 2. Selection
             # Modifies s_t1_temp, s_t_nontemp, ϵ_t
-            # selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
-            #                 resampling_method = resampling_method)
+            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+                            resampling_method = resampling_method)
 
             c = update_c(c, accept_rate, target_accept_rate)
             if VERBOSITY[verbose] >= VERBOSITY[:high]
@@ -291,8 +291,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             φ_old = φ_new
 
-            unnormalized_wts[:L][:] .= unnormalized_wts[:L] .* inc_weights[:L]
-            # unnormalized_wts[:L][:] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
+            # unnormalized_wts[:L][:] .= unnormalized_wts[:L] .* inc_weights[:L]
+            unnormalized_wts[:L][:] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
 
             return nothing
         end
@@ -331,8 +331,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             ### 2. Selection
             # Modifies s_t1_temp, s_t_nontemp, ϵ_t
-            # selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
-            #                resampling_method = resampling_method)
+            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+                           resampling_method = resampling_method)
 
             c = update_c(c, accept_rate, target_accept_rate)
             if VERBOSITY[verbose] >= VERBOSITY[:high]
@@ -350,8 +350,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             φ_old = φ_new
 
-            unnormalized_wts[:L][:] .= unnormalized_wts[:L] .* inc_weights[:L]
-            # unnormalized_wts[:L][:] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
+            # unnormalized_wts[:L][:] .= unnormalized_wts[:L] .* inc_weights[:L]
+            unnormalized_wts[:L][:] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
 
             return nothing
         end
@@ -824,19 +824,23 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                     if nworkers() == 1
                         EP_t = 1.0
                     else
-                        procs_wt = convert(Vector, unnormalized_wts)#=@sync @distributed (vcat) for p in workers()
+                        procs_wt = @sync @distributed (vcat) for p in workers()
                             sum(unnormalized_wts[:L])
-                        end=#
+                        end
 
                         α_k = procs_wt ./ sum(procs_wt)
                         # alpha_args = sortperm(α_k)
                         EP_t = 1/sum(α_k .^ 2)
                     end
 
-                    if EP_t < n_particles/2#nworkers()/2
+                    if EP_t < nworkers()/2
                         # inc_weights_vec = convert(Vector, inc_weights)
-                        unnormalized_wts_vec = procs_wt#convert(Vector, unnormalized_wts)
+                        unnormalized_wts_vec = convert(Vector, unnormalized_wts)
                         unnormalized_wts_vec = unnormalized_wts_vec ./ mean(unnormalized_wts_vec)
+                        ## unnormalized_wts_vec should be divided by mean more regularly to avoid
+                        ### a particle being degenerate. However, since we resample at each step
+                        ### this won't be a problem as long as the n_particles/nworkers is large.
+
                         s_t1_temp_vec = convert(Array, s_t1_temp)
                         s_t_nontemp_vec = convert(Array, s_t_nontemp)
                         ϵ_t_vec = convert(Array, ϵ_t)
