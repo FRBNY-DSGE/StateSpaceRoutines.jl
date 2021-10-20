@@ -834,9 +834,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                         s_t1_temp = distribute(s_t1_temp_vec, dist = [1, nworkers()])
                         s_t_nontemp = distribute(s_t_nontemp_vec, dist = [1, nworkers()])
                         ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
-                        @sync @distributed for p in workers()
-                            unnormalized_wts[:L][:] .= 1.0#dones(length(unnormalized_wts_vec))
-                        end
+                        unnormalized_wts = dones(length(unnormalized_wts_vec))
                     end
                 end
             else
