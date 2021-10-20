@@ -20,147 +20,43 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                         s_t_nontemp::AbstractMatrix{Float64},
                         det_HH::Float64, inv_HH::Matrix{Float64};
                         initialize::Bool = false,
-                        parallel::Bool = false,
                         poolmodel::Bool = false) where V<:AbstractVector{Float64}
     # Sizes
-    n_particles = parallel ? length(coeff_terms[:L]) : length(coeff_terms)
+    n_particles = length(coeff_terms)
     n_obs = length(y_t)
 
     if poolmodel
-        if parallel
+        for i in 1:n_particles
             if initialize
-                for i in 1:n_particles
-                    # Initialization step (using 2π instead of φ_old)
-                    coeff_terms[:L][i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
-                    log_e_1_terms[:L][i] = 0.
-                    log_e_2_terms[:L][i] = log(Ψ(s_t_nontemp[:,i]))
-                end
+                # Initialization step (using 2π instead of φ_old)
+                coeff_terms[i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
+                log_e_1_terms[i] = 0.
+                log_e_2_terms[i] = log(Ψ(s_t_nontemp[:,i]))
             else
-                for i in 1:n_particles
-                    coeff_terms[:L][i] = (φ_old)^(-n_obs/2)
-                    log_e_1_terms[:L][i] = -φ_old * log(Ψ(s_t_nontemp[:,i]))
-                    log_e_2_terms[:L][i] = log(Ψ(s_t_nontemp[:,i]))
-                end
-            end
-
-#=            if initialize
-                coeff_terms[:L] = fill((2*pi)^(-n_obs/2), n_particles)
-                log_e_1_terms[:L] = zeros(n_particles)
-
-
-
-                for i in 1:n_particles
-                    log_e_2_terms[:L][i] = #DArray(size(log_e_2_terms[:L])) do inds
-                    arr = zeros(inds)
-                    s_t_no = OffsetArray(localpart(s_t_nontemp), DistributedArrays.localindices(s_t_nontemp))
-                    for i in inds[1] ## [1] b/c inds is (1:n,) so need to index into tuple first
-                        arr[i] = log(Ψ(convert(Vector,s_t_no[:,i])))
-                    end
-                    parent(arr)
-                end
-            else
-                coeff_terms .= dfill((φ_old)^(-n_obs/2), size(coeff_terms))
-                half_wkr = nworkers()#Int(floor(n_workers()/2)) ## TODO: Might not work if each worker has some part of s_t_nontemp and you only use half the workers here.
-
-                log_e_1_terms .= DArray(size(log_e_1_terms), workers()[1:half_wkr], [1,half_wkr]) do inds
-                    arr = zeros(inds)
-                    s_t_no = OffsetArray(localpart(s_t_nontemp), DistributedArrays.localindices(s_t_nontemp))
-                    for i in inds[1]
-                        arr[i] = -φ_old * log(Ψ(convert(Vector,s_t_no[:,i])))
-                    end
-                    parent(arr)
-                end
-
-                log_e_2_terms .= DArray(size(log_e_2_terms), workers()[1:half_wkr], [1,half_wkr]) do inds
-                    arr = zeros(inds)
-                    s_t_no = OffsetArray(localpart(s_t_nontemp), DistributedArrays.localindices(s_t_nontemp))
-                    for i in inds[1]
-                        arr[i] = log(Ψ(convert(Vector,s_t_no[:,i])))
-                    end
-                    parent(arr)
-                end
-            end=#
-        else
-            for i in 1:n_particles
-                if initialize
-                    # Initialization step (using 2π instead of φ_old)
-                    coeff_terms[i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
-                    log_e_1_terms[i] = 0.
-                    log_e_2_terms[i] = log(Ψ(s_t_nontemp[:,i]))
-                else
-                    coeff_terms[i] = (φ_old)^(-n_obs/2)
-                    log_e_1_terms[i] = -φ_old * log(Ψ(s_t_nontemp[:,i]))
-                    log_e_2_terms[i] = log(Ψ(s_t_nontemp[:,i]))
-                end
+                coeff_terms[i] = (φ_old)^(-n_obs/2)
+                log_e_1_terms[i] = -φ_old * log(Ψ(s_t_nontemp[:,i]))
+                log_e_2_terms[i] = log(Ψ(s_t_nontemp[:,i]))
             end
         end
     else
-        if parallel
-            if initialize
-                for i in 1:n_particles
-                    error    = y_t - Ψ(s_t_nontemp[:, i])
-                    sq_error = dot(error, inv_HH * error)
-
-                    # Initialization step (using 2π instead of φ_old)
-                    coeff_terms[:L][i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
-                    log_e_1_terms[:L][i] = 0.
-                    log_e_2_terms[:L][i] = -1/2 * sq_error
-                end
-            else
-                for i in 1:n_particles
-                    error    = y_t - Ψ(s_t_nontemp[:, i])
-                    sq_error = dot(error, inv_HH * error)
-
-                    # Non-initialization step (tempering and final iteration)
-                    coeff_terms[:L][i]   = (φ_old)^(-n_obs/2)
-                    log_e_1_terms[:L][i] = -1/2 * (-φ_old) * sq_error
-                    log_e_2_terms[:L][i] = -1/2 * sq_error
-                end
-            end
-#=
-            sq_error = DArray((n_particles,), workers()) do inds
-                arr = zeros(inds)
-                s_t_no = OffsetArray(localpart(s_t_nontemp), DistributedArrays.localindices(s_t_nontemp))
-                for i in inds[1] ## [1] b/c inds is (1:n,) so need to index into tuple first
-                    errors = y_t .- Ψ(convert(Vector,s_t_no[:,i]))
-                    arr[i] = dot(errors, inv_HH * errors)
-                end
-                parent(arr)
-            end
-
-            sq_error = convert(Array, sq_error)
+        for i in 1:n_particles
+            error    = y_t - Ψ(s_t_nontemp[:, i])
+            sq_error = dot(error, inv_HH * error)
 
             if initialize
                 # Initialization step (using 2π instead of φ_old)
-                coeff_terms   .= dfill((2*pi)^(-n_obs/2) * det_HH^(-1/2), size(coeff_terms))
-                log_e_1_terms .= dzeros(size(log_e_1_terms))
-                log_e_2_terms .= -1/2 * sq_error#dfill(-1/2 * sq_error, size(log_e_2_terms))
+                coeff_terms[i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
+                log_e_1_terms[i] = 0.
+                log_e_2_terms[i] = -1/2 * sq_error
             else
                 # Non-initialization step (tempering and final iteration)
-                coeff_terms   .= dfill((φ_old)^(-n_obs/2), size(coeff_terms))
-                log_e_1_terms .= -1/2 * (-φ_old) * sq_error#dfill(-1/2 * (-φ_old) * sq_error, size(log_e_1_terms))
-                log_e_2_terms .= -1/2 * sq_error#dfill(-1/2 * sq_error, size(log_e_2_terms))
-            end=#
-        else
-            for i in 1:n_particles
-                error    = y_t - Ψ(s_t_nontemp[:, i])
-                sq_error = dot(error, inv_HH * error)
-
-                if initialize
-                    # Initialization step (using 2π instead of φ_old)
-                    coeff_terms[i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
-                    log_e_1_terms[i] = 0.
-                    log_e_2_terms[i] = -1/2 * sq_error
-                else
-                    # Non-initialization step (tempering and final iteration)
-                    coeff_terms[i]   = (φ_old)^(-n_obs/2)
-                    log_e_1_terms[i] = -1/2 * (-φ_old) * sq_error
-                    log_e_2_terms[i] = -1/2 * sq_error
-                end
+                coeff_terms[i]   = (φ_old)^(-n_obs/2)
+                log_e_1_terms[i] = -1/2 * (-φ_old) * sq_error
+                log_e_2_terms[i] = -1/2 * sq_error
             end
         end
-end
-return nothing
+    end
+    return nothing
 end
 
 # Parallel version
@@ -169,58 +65,47 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                         s_t_nontemp::DArray{Float64,2},
                         det_HH::Float64, inv_HH::Matrix{Float64};
                         initialize::Bool = false,
-                        parallel::Bool = true,
                         poolmodel::Bool = false) where V<:DArray{Float64,1}
     # Sizes
     n_particles = length(coeff_terms[:L])
     n_obs = length(y_t)
 
     if poolmodel
-        if parallel
-            if initialize
-                for i in 1:n_particles
-                    # Initialization step (using 2π instead of φ_old)
-                    coeff_terms[:L][i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
-                    log_e_1_terms[:L][i] = 0.
-                    log_e_2_terms[:L][i] = log(Ψ(s_t_nontemp[:L][:,i]))
-                end
-            else
-                for i in 1:n_particles
-                    coeff_terms[:L][i] = (φ_old)^(-n_obs/2)
-                    log_e_1_terms[:L][i] = -φ_old * log(Ψ(s_t_nontemp[:L][:,i]))
-                    log_e_2_terms[:L][i] = log(Ψ(s_t_nontemp[:L][:,i]))
-                end
+        if initialize
+            for i in 1:n_particles
+                # Initialization step (using 2π instead of φ_old)
+                coeff_terms[:L][i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
+                log_e_1_terms[:L][i] = 0.
+                log_e_2_terms[:L][i] = log(Ψ(s_t_nontemp[:L][:,i]))
             end
         else
-            @show "Why are you running DArray but not in parallel?"
-            @assert false
+            for i in 1:n_particles
+                coeff_terms[:L][i] = (φ_old)^(-n_obs/2)
+                log_e_1_terms[:L][i] = -φ_old * log(Ψ(s_t_nontemp[:L][:,i]))
+                log_e_2_terms[:L][i] = log(Ψ(s_t_nontemp[:L][:,i]))
+            end
         end
     else
-        if parallel
-            if initialize
-                for i in 1:n_particles
-                    error    = y_t - Ψ(s_t_nontemp[:L][:, i])
-                    sq_error = dot(error, inv_HH * error)
+        if initialize
+            for i in 1:n_particles
+                error    = y_t - Ψ(s_t_nontemp[:L][:, i])
+                sq_error = dot(error, inv_HH * error)
 
-                    # Initialization step (using 2π instead of φ_old)
-                    coeff_terms[:L][i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
-                    log_e_1_terms[:L][i] = 0.
-                    log_e_2_terms[:L][i] = -1/2 * sq_error
-                end
-            else
-                for i in 1:n_particles
-                    error    = y_t - Ψ(s_t_nontemp[:L][:, i])
-                    sq_error = dot(error, inv_HH * error)
-
-                    # Non-initialization step (tempering and final iteration)
-                    coeff_terms[:L][i]   = (φ_old)^(-n_obs/2)
-                    log_e_1_terms[:L][i] = -1/2 * (-φ_old) * sq_error
-                    log_e_2_terms[:L][i] = -1/2 * sq_error
-                end
+                # Initialization step (using 2π instead of φ_old)
+                coeff_terms[:L][i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
+                log_e_1_terms[:L][i] = 0.
+                log_e_2_terms[:L][i] = -1/2 * sq_error
             end
         else
-            @show "Why are you running DArray but not in parallel?"
-            @assert false
+            for i in 1:n_particles
+                error    = y_t - Ψ(s_t_nontemp[:L][:, i])
+                sq_error = dot(error, inv_HH * error)
+
+                # Non-initialization step (tempering and final iteration)
+                coeff_terms[:L][i]   = (φ_old)^(-n_obs/2)
+                log_e_1_terms[:L][i] = -1/2 * (-φ_old) * sq_error
+                log_e_2_terms[:L][i] = -1/2 * sq_error
+            end
         end
     end
     return nothing
