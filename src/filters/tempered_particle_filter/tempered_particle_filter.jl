@@ -272,8 +272,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             ### 2. Selection
             # Modifies s_t1_temp, s_t_nontemp, ϵ_t
-            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
-                           resampling_method = resampling_method)
+            # selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+            #                 resampling_method = resampling_method)
 
             c = update_c(c, accept_rate, target_accept_rate)
             if VERBOSITY[verbose] >= VERBOSITY[:high]
@@ -291,9 +291,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             φ_old = φ_new
 
-            @show unnormalized_wts[:L]
-            @show inc_weights[:L]
-            unnormalized_wts[:L] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
+            unnormalized_wts[:L][:] .= unnormalized_wts[:L] .* inc_weights[:L]
+            # unnormalized_wts[:L][:] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
 
             return nothing
         end
@@ -314,7 +313,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
             weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                            Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
-                           initialize = stage == 1, parallel = true,
+                           initialize = stage == 1,
                            poolmodel = poolmodel)
 
             φ_new = fixed_sched[stage] ## Function only runs w/ Bootstrap PF so this is 1.0
@@ -332,8 +331,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             ### 2. Selection
             # Modifies s_t1_temp, s_t_nontemp, ϵ_t
-            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
-                           resampling_method = resampling_method)
+            # selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
+            #                resampling_method = resampling_method)
 
             c = update_c(c, accept_rate, target_accept_rate)
             if VERBOSITY[verbose] >= VERBOSITY[:high]
@@ -351,9 +350,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             φ_old = φ_new
 
-            @show unnormalized_wts[:L]
-            @show inc_weights[:L]
-            unnormalized_wts[:L] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
+            unnormalized_wts[:L][:] .= unnormalized_wts[:L] .* inc_weights[:L]
+            # unnormalized_wts[:L][:] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
 
             return nothing
         end
@@ -372,7 +370,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
             weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec[:L][1],
                            Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
-                           initialize = stage == 1, parallel = parallel,
+                           initialize = stage == 1,
                            poolmodel = poolmodel)
 
             φ_new = next_φ(φ_vec[:L][1], coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
@@ -408,7 +406,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
             weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec[:L][1],
                            Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
-                           initialize = stage == 1, parallel = parallel,
+                           initialize = stage == 1,
                            poolmodel = poolmodel)
 
             φ_new = next_φ(φ_vec[:L][1], coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
@@ -451,7 +449,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
             weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec[:L][1],
                            Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
-                           initialize = stage == 1, parallel = parallel,
+                           initialize = stage == 1,
                            poolmodel = poolmodel)
 
             φ_new = next_φ(φ_vec[:L][1], coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
@@ -476,7 +474,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                 println("------------------------------")
             end
 
-            unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
+            unnormalized_wts[:L][:] = unnormalized_wts[:L] .* inc_weights[:L]
         end
 
         @everywhere function tempered_iter!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec,
@@ -500,7 +498,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
             weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec[:L][1],
                            Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
-                           initialize = stage == 1, parallel = parallel,
+                           initialize = stage == 1,
                            poolmodel = poolmodel)
 
             φ_new = next_φ(φ_vec[:L][1], coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
@@ -524,7 +522,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                 @show c_vec[:L][1]
                 println("------------------------------")
             end
-            unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
+            unnormalized_wts[:L][:] = unnormalized_wts[:L] .* inc_weights[:L]
         end
 
         function adaptive_tempered_iter!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec,
@@ -544,7 +542,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
             weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec[:L][1],
                            Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
-                           initialize = stage == 1, parallel = parallel,
+                           initialize = stage == 1,
                            poolmodel = poolmodel)
         end
 
@@ -565,7 +563,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
             weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_vec[:L][1],
                            Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
-                           initialize = stage == 1, parallel = parallel,
+                           initialize = stage == 1,
                            poolmodel = poolmodel)
         end
 
@@ -576,7 +574,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             correction!(inc_weights, norm_weights, φ_new, coeff_terms,
                              log_e_1_terms, log_e_2_terms, n_obs_t)
 
-            # unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
+            # unnormalized_wts[:L][:] = unnormalized_wts[:L] .* inc_weights[:L]
         end
 
         @everywhere function adaptive_correction!(inc_weights, norm_weights, φ_new, coeff_terms,
@@ -585,7 +583,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             correction!(inc_weights, norm_weights, φ_new, coeff_terms,
                              log_e_1_terms, log_e_2_terms, n_obs_t)
 
-            # unnormalized_wts[:L] = unnormalized_wts[:L] .* inc_weights[:L]
+            # unnormalized_wts[:L][:] = unnormalized_wts[:L] .* inc_weights[:L]
         end
 
     end
@@ -706,9 +704,24 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                             accept_rate, n_mh_steps,
                             verbose; pids=workers())
                     φ_old = 1.0 ## Can do this because it's given in fixed_sched
+#=
+                    # Selection
+                        inc_weights_vec = convert(Vector, inc_weights)
+                        # unnormalized_wts_vec = convert(Vector, unnormalized_wts)
+                        # unnormalized_wts_vec = unnormalized_wts_vec ./ mean(unnormalized_wts_vec)
+                        s_t1_temp_vec = convert(Array, s_t1_temp)
+                        s_t_nontemp_vec = convert(Array, s_t_nontemp)
+                        ϵ_t_vec = convert(Array, ϵ_t)
 
+                        selection!(inc_weights_vec, s_t1_temp_vec, s_t_nontemp_vec, ϵ_t_vec)
+
+                        s_t1_temp = distribute(s_t1_temp_vec, dist = [1, nworkers()])
+                        s_t_nontemp = distribute(s_t_nontemp_vec, dist = [1, nworkers()])
+                        ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
+=#
                     # Update loglikelihood
-                    loglh[t] += log(mean(convert(Vector, inc_weights)))
+                    # loglh[t] += log(mean(inc_weights_vec))
+                    loglh[t] += log(mean(convert(Vector, inc_weights)))#inc_weights_vec))
                 else
                     # Parallel but adaptive schedule or fixed schedule but not bootstrap
                     ## Same as BSPF with different loop order.
@@ -750,14 +763,14 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
                         # @show convert(Vector, inc_weights)
                         # Selection
-                        norm_weights_vec = convert(Vector, norm_weights)
+                        inc_weights_vec = convert(Vector, inc_weights)
                         # unnormalized_wts_vec = convert(Vector, unnormalized_wts)
                         # unnormalized_wts_vec = unnormalized_wts_vec ./ mean(unnormalized_wts_vec)
                         s_t1_temp_vec = convert(Array, s_t1_temp)
                         s_t_nontemp_vec = convert(Array, s_t_nontemp)
                         ϵ_t_vec = convert(Array, ϵ_t)
 
-                        selection!(norm_wts_vec, s_t1_temp_vec, s_t_nontemp_vec, ϵ_t_vec)
+                        selection!(inc_weights_vec, s_t1_temp_vec, s_t_nontemp_vec, ϵ_t_vec)
 
                         s_t1_temp = distribute(s_t1_temp_vec, dist = [1, nworkers()])
                         s_t_nontemp = distribute(s_t_nontemp_vec, dist = [1, nworkers()])
@@ -778,7 +791,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                         φ_old = fixed_sched[stage]
 
                         # Selection
-                        norm_wts_vec = convert(Vector, norm_weights)
+                        norm_wts_vec = convert(Vector, inc_weights)
                         # unnormalized_wts_vec = convert(Vector, unnormalized_wts)
                         # unnormalized_wts_vec = unnormalized_wts_vec ./ mean(unnormalized_wts_vec)
                         s_t1_temp_vec = convert(Array, s_t1_temp)
@@ -811,17 +824,30 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                     if nworkers() == 1
                         EP_t = 1.0
                     else
-                        procs_wt = @sync @distributed (vcat) for p in workers()
+                        procs_wt = convert(Vector, unnormalized_wts)#=@sync @distributed (vcat) for p in workers()
                             sum(unnormalized_wts[:L])
-                        end
+                        end=#
 
                         α_k = procs_wt ./ sum(procs_wt)
-                        alpha_args = sortperm(α_k)
+                        # alpha_args = sortperm(α_k)
                         EP_t = 1/sum(α_k .^ 2)
                     end
 
-                    if EP_t < nworkers()/2
-                        replace_inds = n_particles ÷ (2*nworkers())
+                    if EP_t < n_particles/2#nworkers()/2
+                        # inc_weights_vec = convert(Vector, inc_weights)
+                        unnormalized_wts_vec = procs_wt#convert(Vector, unnormalized_wts)
+                        unnormalized_wts_vec = unnormalized_wts_vec ./ mean(unnormalized_wts_vec)
+                        s_t1_temp_vec = convert(Array, s_t1_temp)
+                        s_t_nontemp_vec = convert(Array, s_t_nontemp)
+                        ϵ_t_vec = convert(Array, ϵ_t)
+
+                        selection!(unnormalized_wts_vec, s_t1_temp_vec, s_t_nontemp_vec, ϵ_t_vec)
+
+                        s_t1_temp = distribute(s_t1_temp_vec, dist = [1, nworkers()])
+                        s_t_nontemp = distribute(s_t_nontemp_vec, dist = [1, nworkers()])
+                        ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
+                        unnormalized_wts = dones(length(unnormalized_wts_vec))
+                        #=replace_inds = n_particles ÷ (2*nworkers())
                         # ParallelDataTransfer.sendto(workers(), replace_inds = replace_inds)
                         # ParallelDataTransfer.sendto(workers(), alpha_args = alpha_args)
                         add_to_proc = workers()[1] - 1 ## Add 1 to remove master worker when parallel
@@ -865,7 +891,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                             ## coeff_terms, log_e_1_terms, and log_e_2_terms are reset in the next iteration
                             ## inc_weights is reset and only the mean is used in the iteration
                             ## recalculating procs_wt unnecessary b/c it will be re-calculated in next iteration
-                        end
+                        end=#
                     end
                 end
             else
@@ -873,7 +899,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                 # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
                 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                                Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
-                               initialize = stage == 1, parallel = parallel,
+                               initialize = stage == 1,
                                poolmodel = poolmodel)
 
                 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,

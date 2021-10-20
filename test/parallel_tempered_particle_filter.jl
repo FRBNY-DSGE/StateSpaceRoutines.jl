@@ -98,7 +98,7 @@ log_e_2_vec = convert(Vector, log_e_2_terms)
 s_t_nontemp_vec = convert(Matrix, s_t_nontemp)
 @btime weight_kernel!(coeff_vec, log_e_1_vec,
                       log_e_2_vec, φ_old, Ψ, data[:, 47], s_t_nontemp_vec,
-                      det(HH), inv(HH), initialize = false, parallel = false)
+                      det(HH), inv(HH), initialize = false)#, parallel = false)
 
 @btime spmd(weight_kernel!,coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
             pids = workers())
@@ -106,7 +106,7 @@ spmd(weight_kernel!,coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[
             pids = workers())
 weight_kernel!(coeff_vec, log_e_1_vec,
                       log_e_2_vec, φ_old, Ψ, data[:, 47], s_t_nontemp_vec,
-                      det(HH), inv(HH), initialize = false, parallel = false)
+                      det(HH), inv(HH), initialize = false)#, parallel = false)
 # weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
 #                initialize = false, parallel = true)
 φ_new = @sync @distributed (+) for p in workers()
