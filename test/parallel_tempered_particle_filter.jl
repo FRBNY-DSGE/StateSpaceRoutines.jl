@@ -1,7 +1,7 @@
 @show "OK?"
 using JLD, JLD2, Test, Distributions, Random, StateSpaceRoutines, BenchmarkTools, ParallelDataTransfer, FLoops, DistributedArrays, OffsetArrays, DistributedArrays.SPMD
 
-addproc_num = 12 ## Set to 0 to not add workers
+addproc_num = 6 ## Set to 0 to not add workers
 nparts_mill = true
 nparts_mult = nparts_mill ? 10 : 1
 fixed_sched = [1.0]#[0.1,0.15,0.3,1.0]
