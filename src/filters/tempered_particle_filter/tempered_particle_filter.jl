@@ -91,6 +91,11 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     n_obs, T  = size(data)
     n_shocks  = length(F_ϵ)
     n_states  = size(s_init, 1)
+    if length(size(s_init)) == 1
+        n_states = 1
+        QQ = var(F_ϵ) .* ones(1,1)
+        HH = var(F_u) .* ones(1,1)
+    else
     QQerr = false
     HHerr = false
     try
@@ -108,6 +113,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     end
     if HHerr
         HH = zeros(1,1)
+    end
     end
     @assert @isdefined HH
 
@@ -138,12 +144,23 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         Vector{Float64}(undef, n_particles)
 =#
     # TODO: Ensure each worker has all of a particle
-    s_t1_temp     = parallel ? distribute(copy(s_init), dist = [1, nworkers()]) :
-        Matrix{Float64}(copy(s_init))
-    s_t_nontemp   = parallel ? dzeros((n_states, n_particles), workers(), [1,nworkers()]) :
-        Matrix{Float64}(undef, n_states, n_particles)
-    ϵ_t           = parallel ? dzeros((n_shocks, n_particles), workers(), [1,nworkers()]) :
-        Matrix{Float64}(undef, n_shocks, n_particles)
+    # Note: Vector used when n_states == 1 (assumed that n_shocks <= 1 then too)
+    ## TODO: Use vector for ϵ_t when n_shocks = 1, n_states > 1
+    if n_states == 1
+        s_t1_temp     = parallel ? distribute(copy(vec(s_init))) :
+            Vector{Float64}(copy(vec(s_init)))
+        s_t_nontemp   = parallel ? dzeros(n_particles) :
+            Vector{Float64}(undef, n_particles)
+        ϵ_t           = parallel ? dzeros(n_particles) :
+            Vector{Float64}(undef, n_particles)
+    else
+        s_t1_temp     = parallel ? distribute(copy(s_init), dist = [1, nworkers()]) :
+            Matrix{Float64}(copy(s_init))
+        s_t_nontemp   = parallel ? dzeros((n_states, n_particles), workers(), [1,nworkers()]) :
+            Matrix{Float64}(undef, n_states, n_particles)
+        ϵ_t           = parallel ? dzeros((n_shocks, n_particles), workers(), [1,nworkers()]) :
+            Matrix{Float64}(undef, n_shocks, n_particles)
+    end
     coeff_terms   = parallel ? dzeros(n_particles) :
         Vector{Float64}(undef, n_particles)
     log_e_1_terms = parallel ? dzeros(n_particles) :
@@ -243,7 +260,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                              n_obs_t, stage, inc_weights, norm_weights,
                              s_t1_temp, ϵ_t,
                              Φ, Ψ_t, QQ, unnormalized_wts,
-                             r_star::S = 2.0, poolmodel::Bool = false,
+                             poolmodel::Bool = false,
                              fixed_sched::Vector{S} = zeros(0),
                              findroot::Function = bisection, xtol::S = 1e-3,
                              resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
@@ -302,7 +319,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                                          n_obs_t, stage, inc_weights, norm_weights,
                                          s_t1_temp, ϵ_t,
                                          Φ, Ψ_t, QQ, unnormalized_wts,
-                                         r_star::S = 2.0, poolmodel::Bool = false,
+                                         poolmodel::Bool = false,
                                          fixed_sched::Vector{S} = zeros(0),
                                          findroot::Function = bisection, xtol::S = 1e-3,
                                          resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
@@ -628,21 +645,36 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
         # Initialize s_t_nontemp and ϵ_t for this period
         if parallel
-
             ϵ_t_vec = rand(F_ϵ, n_particles)
-            if ndims(ϵ_t_vec) == 1 # Edge case where only 1 shock
-                ϵ_t_vec = reshape(ϵ_t_vec, (1, length(ϵ_t_vec)))
-            end
-            ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
-            @sync @distributed for w in workers()
-                for i in 1:size(s_t_nontemp[:L],2)
-                    s_t_nontemp[:L][:,i] = Φ(s_t1_temp[:L][:,i], ϵ_t[:L][:,i])
+
+            if n_states == 1
+                ϵ_t = distribute(ϵ_t_vec)
+
+                @sync @distributed for w in workers()
+                    s_t_nontemp[:L][:] .= Φ.(s_t1_temp[:L], ϵ_t[:L])
+                end
+            else
+                if ndims(ϵ_t_vec) == 1 # Edge case where only 1 shock
+                    ϵ_t_vec = reshape(ϵ_t_vec, (1, length(ϵ_t_vec)))
+                end
+                ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
+
+                @sync @distributed for w in workers()
+                    for i in 1:size(s_t_nontemp[:L],2)
+                        s_t_nontemp[:L][:,i] = Φ(s_t1_temp[:L][:,i], ϵ_t[:L][:,i])
+                    end
                 end
             end
+
         else
-             for i in 1:n_particles
-                ϵ_t[:, i] .= rand(F_ϵ)
-                s_t_nontemp[:, i] = Φ(s_t1_temp[:, i], ϵ_t[:, i])
+            if n_states > 1
+                for i in 1:n_particles
+                    ϵ_t[:,i] = rand(F_ϵ)
+                    s_t_nontemp[:,i] = Φ(s_t1_temp[:,i], ϵ_t[:,i])
+                end
+            else
+                ϵ_t = rand(F_ϵ, n_particles)
+                s_t_nontemp = Φ.(s_t1_temp, ϵ_t)
             end
         end
 
@@ -685,9 +717,15 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
                 selection!(unnormalized_wts_vec, s_t1_temp_vec, s_t_nontemp_vec, ϵ_t_vec)
 
-                s_t1_temp = distribute(s_t1_temp_vec, dist = [1, nworkers()])
-                s_t_nontemp = distribute(s_t_nontemp_vec, dist = [1, nworkers()])
-                ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
+                if ndims(s_t_nontemp_vec) > 1
+                    s_t1_temp = distribute(s_t1_temp_vec, dist = [1, nworkers()])
+                    s_t_nontemp = distribute(s_t_nontemp_vec, dist = [1, nworkers()])
+                    ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
+                else
+                    s_t1_temp = distribute(s_t1_temp_vec)
+                    s_t_nontemp = distribute(s_t_nontemp_vec)
+                    ϵ_t = distribute(ϵ_t_vec)
+                end
                 unnormalized_wts = dones(length(unnormalized_wts_vec))
             end
         end
@@ -714,7 +752,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                             n_obs_t, stage, inc_weights, norm_weights,
                             s_t1_temp, ϵ_t,
                             Φ, Ψ_t, QQ, unnormalized_wts,
-                            r_star, poolmodel,
+                            poolmodel,
                             fixed_sched, findroot, xtol,
                             resampling_method, target_accept_rate,
                             accept_rate, n_mh_steps,

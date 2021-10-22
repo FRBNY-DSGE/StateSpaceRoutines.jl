@@ -59,6 +59,47 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
     return nothing
 end
 
+# When n_states = 1 so s_t_nontemp
+function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
+                        φ_old::Float64, Ψ::Function, y_t::Vector{Float64},
+                        s_t_nontemp::V,
+                        det_HH::Float64, inv_HH::Matrix{Float64};
+                        initialize::Bool = false,
+                        poolmodel::Bool = false) where V<:AbstractVector{Float64}
+    # Sizes
+    n_particles = length(coeff_terms)
+    n_obs = length(y_t)
+
+    if poolmodel
+        log_e_2_terms .= log.(Ψ.(s_t_nontemp))
+        if initialize
+            coeff_terms .= (2*pi)^(-n_obs/2)
+            log_e_1_terms .= 0.0
+        else
+            coeff_terms .= (φ_old)^(-n_obs/2)
+            log_e_1_terms .= -φ_old .* log_e_2_terms
+        end
+    else
+        for i in 1:n_particles
+            error    = y_t - Ψ(s_t_nontemp[i])
+            sq_error = dot(error, inv_HH * error)
+
+            if initialize
+                # Initialization step (using 2π instead of φ_old)
+                coeff_terms[i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
+                log_e_1_terms[i] = 0.
+                log_e_2_terms[i] = -1/2 * sq_error
+            else
+                # Non-initialization step (tempering and final iteration)
+                coeff_terms[i]   = (φ_old)^(-n_obs/2)
+                log_e_1_terms[i] = -1/2 * (-φ_old) * sq_error
+                log_e_2_terms[i] = -1/2 * sq_error
+            end
+        end
+    end
+    return nothing
+end
+
 # Parallel version
 function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                         φ_old::Float64, Ψ::Function, y_t::Vector{Float64},
@@ -99,6 +140,58 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
         else
             for i in 1:n_particles
                 error    = y_t - Ψ(s_t_nontemp[:L][:, i])
+                sq_error = dot(error, inv_HH * error)
+
+                # Non-initialization step (tempering and final iteration)
+                coeff_terms[:L][i]   = (φ_old)^(-n_obs/2)
+                log_e_1_terms[:L][i] = -1/2 * (-φ_old) * sq_error
+                log_e_2_terms[:L][i] = -1/2 * sq_error
+            end
+        end
+    end
+    return nothing
+end
+
+# Parallel Version when n_states = 1
+function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
+                        φ_old::Float64, Ψ::Function, y_t::Vector{Float64},
+                        s_t_nontemp::V,
+                        det_HH::Float64, inv_HH::Matrix{Float64};
+                        initialize::Bool = false,
+                        poolmodel::Bool = false) where V<:DArray{Float64,1}
+    # Sizes
+    n_particles = length(coeff_terms[:L])
+    n_obs = length(y_t)
+
+    if poolmodel
+        if initialize
+            for i in 1:n_particles
+                # Initialization step (using 2π instead of φ_old)
+                coeff_terms[:L][i] = (2*pi)^(-n_obs/2) # this may need to be adjusted
+                log_e_1_terms[:L][i] = 0.
+                log_e_2_terms[:L][i] = log(Ψ(s_t_nontemp[:L][i]))
+            end
+        else
+            for i in 1:n_particles
+                coeff_terms[:L][i] = (φ_old)^(-n_obs/2)
+                log_e_1_terms[:L][i] = -φ_old * log(Ψ(s_t_nontemp[:L][i]))
+                log_e_2_terms[:L][i] = log(Ψ(s_t_nontemp[:L][i]))
+            end
+        end
+    else
+        if initialize
+            for i in 1:n_particles
+                error    = y_t - Ψ(s_t_nontemp[:L][i])
+                sq_error = dot(error, inv_HH * error)
+
+                # Initialization step (using 2π instead of φ_old)
+                coeff_terms[:L][i]   = (2*pi)^(-n_obs/2) * det_HH^(-1/2)
+                log_e_1_terms[:L][i] = 0.
+                log_e_2_terms[:L][i] = -1/2 * sq_error
+            end
+        else
+            for i in 1:n_particles
+                error    = y_t - Ψ(s_t_nontemp[:L][i])
                 sq_error = dot(error, inv_HH * error)
 
                 # Non-initialization step (tempering and final iteration)
