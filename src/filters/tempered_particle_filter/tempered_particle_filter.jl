@@ -275,9 +275,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                            poolmodel = poolmodel)
 
             φ_new = fixed_sched[stage] ## Function only runs w/ Bootstrap PF so this is 1.0
-            #=φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
-                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
-                           xtol = xtol, parallel = parallel)=#
 
             if VERBOSITY[verbose] >= VERBOSITY[:high]
                 @show φ_new
@@ -334,9 +331,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                            poolmodel = poolmodel)
 
             φ_new = fixed_sched[stage] ## Function only runs w/ Bootstrap PF so this is 1.0
-            #=φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
-                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
-                           xtol = xtol, parallel = parallel)=#
 
             if VERBOSITY[verbose] >= VERBOSITY[:high]
                 @show φ_new
@@ -406,7 +400,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
                        resampling_method = resampling_method)
-            φ_old = φ_new
 
             unnormalized_wts[:L][:] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
         end
@@ -442,7 +435,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
                        resampling_method = resampling_method)
-            φ_old = φ_new
 
             unnormalized_wts[:L][:] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
         end
@@ -471,7 +463,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                            initialize = stage == 1,
                            poolmodel = poolmodel)
 
-            φ_old = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
+            φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
                            r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
                            xtol = xtol)
 
@@ -485,13 +477,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
                        resampling_method = resampling_method)
-
-            c_vec[:L][1] = update_c(c_vec[:L][1], accept_rate, target_accept_rate)
-            φ_old = φ_new
-            if VERBOSITY[verbose] >= VERBOSITY[:high]
-                @show c_vec[:L][1]
-                println("------------------------------")
-            end
 
             unnormalized_wts[:L][:] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
         end
@@ -877,34 +862,29 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                 # Modifies inc_weights, norm_weights
                 correction!(inc_weights, norm_weights, φ_new, coeff_terms,
                             log_e_1_terms, log_e_2_terms, n_obs_t)
-
+                #end
                 ### 2. Selection
                 # Modifies s_t1_temp, s_t_nontemp, ϵ_t
-                if parallel
-                    s_t_nontemp_std = convert(Array, s_t_nontemp)
-                    s_t1_temp_std = convert(Array, s_t1_temp)
-
-                    selection!(norm_weights, s_t1_temp_std, s_t_nontemp_std, ϵ_t;
+                if fixed_sched == [1.0]
+                    ## Only need to resample s_t_nontemp when no mutation b/c rest reset in next time iteration.
+                    selection!(norm_weights, s_t_nontemp;
                                resampling_method = resampling_method)
-
-                    s_t_nontemp = distribute(s_t_nontemp_std)
-                    s_t1_temp = distribute(s_t1_temp_std)
                 else
                     selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
                                resampling_method = resampling_method)
                 end
-
+#end
                 loglh[t] += log(mean(inc_weights))
-
-                c = update_c(c, accept_rate, target_accept_rate)
-                if VERBOSITY[verbose] >= VERBOSITY[:high]
-                    @show c
-                    println("------------------------------")
-                end
 
                 ### 3. Mutation
                 # Modifies s_t_nontemp, ϵ_t
                 if stage != 1
+                    c = update_c(c, accept_rate, target_accept_rate)
+                    if VERBOSITY[verbose] >= VERBOSITY[:high]
+                        @show c
+                        println("------------------------------")
+                    end
+
                     accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
                                             s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
                                             poolmodel = poolmodel)
