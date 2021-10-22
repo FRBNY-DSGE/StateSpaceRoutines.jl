@@ -286,24 +286,11 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
             ### 2. Selection
             # Modifies s_t1_temp, s_t_nontemp, ϵ_t
-            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
-                            resampling_method = resampling_method)
+            ## Only need to resample s_t_nontemp when no mutation b/c rest reset in next time iteration.
+            selection!(norm_weights, s_t_nontemp;
+                       resampling_method = resampling_method)
 
-            c = update_c(c, accept_rate, target_accept_rate)
-            if VERBOSITY[verbose] >= VERBOSITY[:high]
-                @show c
-                println("------------------------------")
-            end
-
-            ### 3. Mutation
-            # Modifies s_t_nontemp, ϵ_t
-            if stage != 1 ## Note this never runs in Bootstrap PF case
-                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
-                                        s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
-                                        poolmodel = poolmodel)
-            end
-
-            φ_old = φ_new
+            # Mutation never called for BSPF b/c stage == 1 always
 
             # unnormalized_wts[:L][:] .= unnormalized_wts[:L] .* inc_weights[:L]
             unnormalized_wts[:L][:] .= mean(unnormalized_wts[:L] .* inc_weights[:L])
@@ -837,11 +824,18 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
 
                         selection!(unnormalized_wts_vec, s_t1_temp_vec, s_t_nontemp_vec, ϵ_t_vec)
 
-                        s_t1_temp = distribute(s_t1_temp_vec, dist = [1, nworkers()])
-                        s_t_nontemp = distribute(s_t_nontemp_vec, dist = [1, nworkers()])
-                        ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
+                        if ndims(s_t_nontemp_vec) > 1
+                            s_t1_temp = distribute(s_t1_temp_vec, dist = [1, nworkers()])
+                            s_t_nontemp = distribute(s_t_nontemp_vec, dist = [1, nworkers()])
+                    ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
+                        else
+                            s_t1_temp = distribute(s_t1_temp_vec)
+                            s_t_nontemp = distribute(s_t_nontemp_vec)
+                            ϵ_t = distribute(ϵ_t_vec)
+                        end
                         unnormalized_wts = dones(length(unnormalized_wts_vec))
                     end
+                    @show "Resample end"
                 end
             else
                 ### 1. Correction
