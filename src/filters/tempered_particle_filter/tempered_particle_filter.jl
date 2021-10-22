@@ -531,10 +531,16 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                                 resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
                                 accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
                                 verbose::Symbol = :high) where S<:AbstractFloat
-            if stage != 1
+            if stage > 2
                 accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_old, y_t,
                                         s_t_nontemp, s_t1_temp, ϵ_t, c_vec[:L][1], n_mh_steps;
                                         poolmodel = poolmodel)
+
+                c_vec[:L][1] = update_c(c_vec[:L][1], accept_rate, target_accept_rate)
+                if VERBOSITY[verbose] >= VERBOSITY[:high]
+                    @show c_vec[:L][1]
+                    println("------------------------------")
+                end
             end
 
             ### 1. Correction
@@ -573,10 +579,16 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                                             resampling_method::Symbol = :multinomial, target_accept_rate::S = 0.4,
                                             accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
                                             verbose::Symbol = :high) where S<:AbstractFloat
-            if stage != 1
+            if stage > 2
                 accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_old, y_t,
                                         s_t_nontemp, s_t1_temp, ϵ_t, c_vec[:L][1], n_mh_steps;
                                         poolmodel = poolmodel)
+
+                c_vec[:L][1] = update_c(c_vec[:L][1], accept_rate, target_accept_rate)
+                if VERBOSITY[verbose] >= VERBOSITY[:high]
+                    @show c_vec[:L][1]
+                    println("------------------------------")
+                end
             end
 
             ### 1. Correction
@@ -788,9 +800,12 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                     ## Same as BSPF with different loop order.
                     ## First, correction, selection.
                     ## Then start loop w/ mutation, corection, then recalculate φ and resample
+                    stage -= 1
+                    @show φ_old
 
                     # Calculating log likelihood after each run
                     loglh[t] += log(mean(convert(Vector, inc_weights)))
+
                     ### 3. Mutation
                     # Modifies s_t_nontemp, ϵ_t
                     if φ_old >= 1
@@ -804,7 +819,10 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                         end
                         break
                     end
-                    if isempty(fixed_sched)
+                    stage += 1
+
+                    if adaptive_φ
+                        @show "Start of tempered iter"
                         spmd(adaptive_tempered_iter!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                              Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
                              s_t1_temp, ϵ_t, c_vec,
