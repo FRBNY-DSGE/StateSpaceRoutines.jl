@@ -189,7 +189,7 @@ out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_in
     # @test out_no_parallel[1] ≈ -302.99967306704133 ## Not applicable with parallel in DArray
     # @test out_parallel_one_worker[1] ≈ -302.99967306704133
     if addproc_num <= 1
-        @test out_no_parallel .== @test out_parallel_one_worker
+        @test all(out_no_parallel .== out_parallel_one_worker)
     else
         @test abs(out_no_parallel[1] - out_parallel_one_worker[1]) ≤ 10.0
     end
