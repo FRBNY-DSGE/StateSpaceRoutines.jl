@@ -71,42 +71,11 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
                                   s_init::AbstractArray{S}; n_particles::Int = 100,
                                   n_presample_periods::Int = 0, allout::Bool = true,
                                   parallel::Bool = false, get_t_particle_dist::Bool = false,
-                                  verbose::Symbol = :high,
-                                  dynamic_measurement::Bool = false) where S<:AbstractFloat
+                                  verbose::Symbol = :high) where S<:AbstractFloat
 
     #--------------------------------------------------------------
     # Setup
     #--------------------------------------------------------------
-
-    # If using fixed φ schedule, check well-formed
-    adaptive_φ = isempty(fixed_sched)
-    if !adaptive_φ
-        @assert fixed_sched[end] == 1 "φ schedule must be a range from [a,1] s.t. a > 0."
-    end
-
-    # Initialize constants
-    n_obs, T  = size(data)
-    n_shocks  = length(F_ϵ)
-    n_states  = size(s_init, 1)
-    QQerr = false
-    HHerr = false
-    try
-        QQ = cov(F_ϵ)
-    catch
-        QQerr = true
-    end
-    try
-        HH = cov(F_u)
-    catch
-        HHerr = true
-    end
-    if QQerr
-        QQ = F_ϵ.σ * ones(1,1)
-    end
-    if HHerr
-        HH = zeros(1,1)
-    end
-    @assert @isdefined HH
 
     # Initialize output vectors
     loglh = zeros(T)
@@ -119,23 +88,19 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
     end
 
     # Initialize working variables
-    s_t1_temp     = Matrix{Float64}(copy(s_init))
-    s_t_nontemp   = Matrix{Float64}(undef, n_states, n_particles)
-    ϵ_t           = Matrix{Float64}(undef, n_shocks, n_particles)
+    n_states  = size(s_init, 1)
 
-    sendto(workers(), s_t1_temp = s_t1_temp)
-    sendto(workers(), s_t_nontemp = s_t_nontemp)
-    sendto(workers(), ϵ_t = ϵ_t)
-
-    coeff_terms   = Vector{Float64}(undef, n_particles)
-    log_e_1_terms = Vector{Float64}(undef, n_particles)
-    log_e_2_terms = Vector{Float64}(undef, n_particles)
-
-    inc_weights   = Vector{Float64}(undef, n_particles)
-    norm_weights  = Vector{Float64}(undef, n_particles)
-
-    c = c_init
-    accept_rate = target_accept_rate
+    if n_states == 1
+        s_t_nontemp   = parallel ? dzeros(n_particles) :
+            Vector{Float64}(undef, n_particles)
+        ϵ_t           = parallel ? dzeros(n_particles) :
+            Vector{Float64}(undef, n_particles)
+    else
+        s_t_nontemp   = parallel ? dzeros((n_states, n_particles), workers(), [1,nworkers()]) :
+            Matrix{Float64}(undef, n_states, n_particles)
+        ϵ_t           = parallel ? dzeros((n_shocks, n_particles), workers(), [1,nworkers()]) :
+            Matrix{Float64}(undef, n_shocks, n_particles)
+    end
 
     #--------------------------------------------------------------
     # Main Algorithm: Tempered Particle Filter
@@ -154,36 +119,38 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
 
         y_t = data[:, t]
 
-        # Remove rows/columns of series with NaN values
-        # Handle measurement equation
-        Ψ_t  = x -> Ψ(x)[nonmissing]
-        sendto(workers(), Ψ_t = Ψ_t)
-
-
         # Adjust other values to remove rows/columns with NaN values
         nonmissing = isfinite.(y_t)
         y_t        = y_t[nonmissing]
         n_obs_t    = length(y_t)
-        HH_t     = HH[nonmissing, nonmissing] # poolmodel -> keep missing is ok
-        inv_HH_t = inv(HH_t) # poolmodel -> don't need inv_HH
-        det_HH_t = det(HH_t) # poolmodel -> don't need det_HH
 
-        # Initialize s_t_nontemp and ϵ_t for this period
+        # Remove rows/columns of series with NaN values
+        # Handle measurement equation
+        Ψ_t  = x -> Ψ(x)[nonmissing]
         if parallel
-            # Send to workers
-            ϵ_t = rand(F_ϵ, n_particles)
-            if ndims(ϵ_t) == 1 # Edge case where only 1 shock
-                ϵ_t = reshape(ϵ_t, (1, length(ϵ_t)))
-            end
-            #sendto(workers(), s_t1_temp = s_t1_temp)
-            #sendto(workers(), ϵ_t = ϵ_t)
-            # sendto(workers(), Φ = Φ) ## Should be sent to all workers before calling the function
+            sendto(workers(), Ψ_t = Ψ_t)
+        end
 
-            state_transition_closure(i::Int) = Φ(s_t1_temp[:, i], ϵ_t[:, i])
-            @everywhere state_transition_closure(i::Int) = Φ(s_t1_temp[:, i], ϵ_t[:, i])
+        if parallel
+            ϵ_t_vec = rand(F_ϵ, n_particles)
 
-            s_t_nontemp .= @sync @distributed (hcat) for i in 1:n_particles
-                state_transition_closure(i)
+            if n_states == 1
+                ϵ_t = distribute(ϵ_t_vec)
+
+                @sync @distributed for w in workers()
+                    s_t_nontemp[:L][:] .= Φ.(s_t_nontemp[:L], ϵ_t[:L])
+                end
+            else
+                if ndims(ϵ_t_vec) == 1 # Edge case where only 1 shock
+                    ϵ_t_vec = reshape(ϵ_t_vec, (1, length(ϵ_t_vec)))
+                end
+                ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
+
+                @sync @distributed for w in workers()
+                    for i in 1:size(s_t_nontemp[:L],2)
+                        s_t_nontemp[:L][:,i] = Φ(s_t_nontemp[:L][:,i], ϵ_t[:L][:,i])
+                    end
+                end
             end
         else
             # Step 0: For later use
@@ -212,7 +179,7 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
 
             # Step 3: Log Likelihood Update
             diff = y_t .- mean(Z_t_t1, dims = 1)
-            loglh[t] = logpdf(MvNormal(Zcov), diff)#logpdf(x=y, mean=np.zeros(dim_z), cov=S)
+            loglh[t] = logpdf(MvNormal(Zcov), diff)
         end
 
         if get_t_particle_dist
@@ -220,105 +187,22 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
         end
 
         times[t] = time_ns() - begin_time
-    end
 
-    if get_t_particle_dist && allout
-        return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times, t_particle_dist
-    elseif get_t_particle_dist
-        return sum(loglh[n_presample_periods + 1:end]), t_particle_dist
-    elseif allout
-        return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times
-    else
-        return sum(loglh[n_presample_periods + 1:end])
-    end
-
-        # Tempering initialization
-        φ_old = 1e-30
-        stage = 0
-
-        # Pass in objects that are only changed with iteration in t
-        if parallel
-            sendto(workers(), y_t = y_t)
-            sendto(workers(), HH_t = HH_t)
-            if !poolmodel
-                sendto(workers(), inv_HH_t = inv_HH_t)
-                #sendto(workers(), det_HH_t = det_HH_t)
-            end
-        end
-
-        #--------------------------------------------------------------
-        # Main Algorithm
-        #--------------------------------------------------------------
-        while φ_old < 1
-            stage += 1
-
-            ### 1. Correction
-            # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
-            weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
-                           Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t;
-                           initialize = stage == 1, parallel = parallel,
-                           poolmodel = poolmodel)
-
-            φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, n_obs_t,
-                           r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
-                           xtol = xtol)
-
-            if VERBOSITY[verbose] >= VERBOSITY[:high]
-                @show φ_new
-            end
-
-            # Modifies inc_weights, norm_weights
-            correction!(inc_weights, norm_weights, φ_new, coeff_terms,
-                        log_e_1_terms, log_e_2_terms, n_obs_t)
-
-            ### 2. Selection
-            # Modifies s_t1_temp, s_t_nontemp, ϵ_t
-            selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
-                       resampling_method = resampling_method)
-
-            loglh[t] += log(mean(inc_weights))
-
-            c = update_c(c, accept_rate, target_accept_rate)
-            if VERBOSITY[verbose] >= VERBOSITY[:high]
-                @show c
-                println("------------------------------")
-            end
-
-            ### 3. Mutation
-            # Modifies s_t_nontemp, ϵ_t
-            if stage != 1
-                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_new, y_t,
-                                        s_t_nontemp, s_t1_temp, ϵ_t, c, n_mh_steps;
-                                        parallel = parallel,
-                                        poolmodel = poolmodel)
-            end
-
-            φ_old = φ_new
-        end # of loop over stages
-
-        if get_t_particle_dist
-            # save the normalized weights in the column for period t
-            t_norm_weights[:,t] .= norm_weights
-            t_particle_dist[t] = copy(s_t_nontemp)
-        end
-
-        times[t] = time_ns() - begin_time
         if VERBOSITY[verbose] >= VERBOSITY[:low]
             print("\n")
             @show loglh[t]
             print("Completion of one period $times[t]")
         end
-        s_t1_temp .= s_t_nontemp
-    end # of loop over periods
+    end
 
     if VERBOSITY[verbose] >= VERBOSITY[:low]
         println("=============================================")
     end
 
     if get_t_particle_dist && allout
-        return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times, t_particle_dist, t_norm_weights
+        return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times, t_particle_dist
     elseif get_t_particle_dist
-        return sum(loglh[n_presample_periods + 1:end]), t_particle_dist, t_norm_weights
+        return sum(loglh[n_presample_periods + 1:end]), t_particle_dist
     elseif allout
         return sum(loglh[n_presample_periods + 1:end]), loglh[n_presample_periods + 1:end], times
     else
