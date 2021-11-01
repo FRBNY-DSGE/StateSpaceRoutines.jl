@@ -72,8 +72,7 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
                                   n_presample_periods::Int = 0, allout::Bool = true,
                                   parallel::Bool = false, get_t_particle_dist::Bool = false,
                                   verbose::Symbol = :high,
-                                  dynamic_measurement::Bool = false,
-                                  poolmodel::Bool = false) where S<:AbstractFloat
+                                  dynamic_measurement::Bool = false) where S<:AbstractFloat
 
     #--------------------------------------------------------------
     # Setup
@@ -138,15 +137,6 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
     c = c_init
     accept_rate = target_accept_rate
 
-    # If not using a dynamic measurement equation, then define measurement equation
-    # applying to all states, even if they are missing (but not time variables)
-    if !dynamic_measurement
-        Ψ_allstates = Ψ
-    end
-    if !(poolmodel || dynamic_measurement)
-            sendto(workers(), Ψ_allstates = Ψ_allstates)
-        end
-
     #--------------------------------------------------------------
     # Main Algorithm: Tempered Particle Filter
     #--------------------------------------------------------------
@@ -166,32 +156,17 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
 
         # Remove rows/columns of series with NaN values
         # Handle measurement equation
-        if !(poolmodel || dynamic_measurement)
-            Ψ_t  = x -> Ψ(x)[nonmissing]
-        elseif poolmodel && dynamic_measurement
-            Ψ_t = x -> Ψ(x,y_t,t)[nonmissing]
-            Ψ_allstates = x -> Ψ(x,y_t,t)
-        elseif poolmodel
-            Ψ_t = x -> Ψ(x,y_t)[nonmissing]
-            Ψ_allstates = x -> Ψ(x,y_t)
-        else
-            Ψ_t  = x -> Ψ(x,t)[nonmissing]
-            Ψ_allstates = x -> Ψ(x,t)
-        end
-
+        Ψ_t  = x -> Ψ(x)[nonmissing]
         sendto(workers(), Ψ_t = Ψ_t)
 
-        if poolmodel || dynamic_measurement
-            sendto(workers(), Ψ_allstates = Ψ_allstates)
-        end
 
         # Adjust other values to remove rows/columns with NaN values
         nonmissing = isfinite.(y_t)
         y_t        = y_t[nonmissing]
         n_obs_t    = length(y_t)
-        HH_t     = poolmodel ? HH : HH[nonmissing, nonmissing] # poolmodel -> keep missing is ok
-        inv_HH_t = poolmodel ? zeros(1,1) : inv(HH_t) # poolmodel -> don't need inv_HH
-        det_HH_t = poolmodel ? 0. : det(HH_t) # poolmodel -> don't need det_HH
+        HH_t     = HH[nonmissing, nonmissing] # poolmodel -> keep missing is ok
+        inv_HH_t = inv(HH_t) # poolmodel -> don't need inv_HH
+        det_HH_t = det(HH_t) # poolmodel -> don't need det_HH
 
         # Initialize s_t_nontemp and ϵ_t for this period
         if parallel
@@ -233,19 +208,11 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
             Zbar = Z_t_t1 * update_prod
             Zcov = Zbar * Zbar'
 
-            if poolmodel
-                s_t_nontemp .+= Ψ_t(s_t_nontemp) ##TODO: Fix poolmodel case
-            else
-                s_t_nontemp .+= Xbar * Zbar' * inv(Zcov) * (y_t .- Z_t_t1)
-            end
+            s_t_nontemp .+= Xbar * Zbar' * inv(Zcov) * (y_t .- Z_t_t1)
 
             # Step 3: Log Likelihood Update
-            if poolmodel
-                loglh[t] = log(Ψ_t(s_t_nontemp))
-            else
-                diff = y_t .- mean(Z_t_t1, dims = 1)
-                loglh[t] = logpdf(MvNormal(Zcov), diff)#logpdf(x=y, mean=np.zeros(dim_z), cov=S)
-            end
+            diff = y_t .- mean(Z_t_t1, dims = 1)
+            loglh[t] = logpdf(MvNormal(Zcov), diff)#logpdf(x=y, mean=np.zeros(dim_z), cov=S)
         end
 
         if get_t_particle_dist
