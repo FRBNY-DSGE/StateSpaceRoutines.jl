@@ -49,7 +49,7 @@ function selection!(norm_weights::Vector{Float64}, s_t1_temp::M, s_t_nontemp, ϵ
 end
 
 # BSPF Selection with n_states = 1
-function selection!(norm_weights::Vector{Float64}, s_t_nontemp;
+function selection!(norm_weights::Vector{Float64}, s_t_nontemp::M;
                     resampling_method::Symbol = :multinomial) where M<:AbstractVector{Float64}
     # Resampling
     is = resample(norm_weights, method = resampling_method)
@@ -61,7 +61,7 @@ function selection!(norm_weights::Vector{Float64}, s_t_nontemp;
 end
 
 # Parallel Selection when n_states = 1
-function selection!(norm_weights::DArray{Float64,1}, s_t1_temp::M, s_t_nontemp, ϵ_t::M;
+function selection!(norm_weights::DArray{Float64,1}, s_t1_temp::M, s_t_nontemp::M, ϵ_t::M;
                     resampling_method::Symbol = :multinomial) where M<:DArray{Float64,1}
     # Resampling
     is = resample(convert(Vector, norm_weights[:L]), method = resampling_method)
