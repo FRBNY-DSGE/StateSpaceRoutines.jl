@@ -42,7 +42,7 @@ function weight_kernel!(coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
                 log_e_1_terms .= 0.0
             else
                 coeff_terms .= (φ_old)^(-n_obs/2)
-                log_e_1_terms .= -φ_old .* log_e_1_terms
+                log_e_1_terms .= -φ_old .* log_e_2_terms
             end
         else
             for i in 1:n_particles
