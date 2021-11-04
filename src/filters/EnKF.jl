@@ -70,14 +70,20 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
                                   F_ϵ::Distribution, F_u::Distribution,
                                   s_init::AbstractArray{S}; n_particles::Int = 100,
                                   n_presample_periods::Int = 0, allout::Bool = true,
-                                  parallel::Bool = false, get_t_particle_dist::Bool = false,
-                                  verbose::Symbol = :high) where S<:AbstractFloat
+                                  get_t_particle_dist::Bool = false,
+                                  verbose::Symbol = :low) where S<:AbstractFloat
 
     #--------------------------------------------------------------
     # Setup
     #--------------------------------------------------------------
 
+    # Initialize working variables
+    n_states  = size(s_init, 1)
+    n_obs     = length(F_u)
+    n_shocks = length(F_ϵ)
+
     # Initialize output vectors
+    T = n_obs == 1 ? length(data) : size(data,2)
     loglh = zeros(T)
     times = zeros(T)
 
@@ -87,20 +93,23 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
         t_particle_dist = Dict{Int64,Matrix{Float64}}()
     end
 
-    # Initialize working variables
-    n_states  = size(s_init, 1)
-
     if n_states == 1
-        s_t_nontemp   = parallel ? dzeros(n_particles) :
-            Vector{Float64}(undef, n_particles)
-        ϵ_t           = parallel ? dzeros(n_particles) :
-            Vector{Float64}(undef, n_particles)
+        s_t_nontemp   = copy(vec(s_init))
+        ϵ_t           = Vector{Float64}(undef, n_particles)
     else
-        s_t_nontemp   = parallel ? dzeros((n_states, n_particles), workers(), [1,nworkers()]) :
-            Matrix{Float64}(undef, n_states, n_particles)
-        ϵ_t           = parallel ? dzeros((n_shocks, n_particles), workers(), [1,nworkers()]) :
-            Matrix{Float64}(undef, n_shocks, n_particles)
+        s_t_nontemp   = copy(s_init)
+        ϵ_t           = Matrix{Float64}(undef, n_shocks, n_particles)
     end
+
+    if n_obs == 1
+        Z_t_t1        = Vector{Float64}(undef, n_particles)
+    else
+        Z_t_t1        = Matrix{Float64}(undef, n_obs, n_particles)
+    end
+
+    Xbar = similar(s_t_nontemp)
+    Zbar = similar(Z_t_t1)
+    Zcov = n_obs == 1 ? 1.0 : Matrix{Float64}(undef, n_obs, n_obs)
 
     #--------------------------------------------------------------
     # Main Algorithm: Tempered Particle Filter
@@ -127,60 +136,45 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
         # Remove rows/columns of series with NaN values
         # Handle measurement equation
         Ψ_t  = x -> Ψ(x)[nonmissing]
-        if parallel
-            sendto(workers(), Ψ_t = Ψ_t)
-        end
 
-        if parallel
-            ϵ_t_vec = rand(F_ϵ, n_particles)
+        # Step 0: For later use
+        avg_wts = fill(1.0 / n_particles, (n_particles, n_particles))
+        update_prod = I - avg_wts
 
-            if n_states == 1
-                ϵ_t = distribute(ϵ_t_vec)
-
-                @sync @distributed for w in workers()
-                    s_t_nontemp[:L][:] .= Φ.(s_t_nontemp[:L], ϵ_t[:L])
-                end
-            else
-                if ndims(ϵ_t_vec) == 1 # Edge case where only 1 shock
-                    ϵ_t_vec = reshape(ϵ_t_vec, (1, length(ϵ_t_vec)))
-                end
-                ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
-
-                @sync @distributed for w in workers()
-                    for i in 1:size(s_t_nontemp[:L],2)
-                        s_t_nontemp[:L][:,i] = Φ(s_t_nontemp[:L][:,i], ϵ_t[:L][:,i])
-                    end
-                end
-            end
+        # Step 1: Predict
+        ##TODO: Need pseudoinverse for regular EnKF (not TEnKF)
+        ##TODO: Do transposes if using TEnKF
+        ϵ_t = rand(F_ϵ, n_particles)
+        if n_states == 1
+            s_t_nontemp .= Φ.(s_t_nontemp, ϵ_t)
+            Z_t_t1 .= Ψ_t.(s_t_nontemp) .+ rand(F_u, n_particles)
         else
-            # Step 0: For later use
-            avg_wts = fill(1.0 / n_particles, (n_particles, n_particles))
-            update_prod = I - avg_wts
-
-            # Step 1: Predict
-            ##TODO: Need pseudoinverse for regular EnKF (not TEnKF)
-            ##TODO: Do transposes if using TEnKF
-             for i in 1:n_particles
-                 ϵ_t[:, i] .= rand(F_ϵ)
-                 s_t_nontemp[:, i] = Φ(s_t1_temp[:, i], ϵ_t[:, i])
-
-                 Z_t_t1 = Ψ_t(s_t_nontemp[:,i]) + rand(F_u) ##TODO: Use Ψ_allstates as appropriate
-                 ## This is different from econsieve and more in line with the equation
-                 ## econsieve doesn't add measurement error to Z-bar.
-                 ## In expectation, there is no difference.
+            for i in 1:n_particles
+                s_t_nontemp[:, i] = Φ(s_t_nontemp[:, i], ϵ_t[:, i])
+                ## A way to speed up the above code is by changing s_t_nontemp directly in Φ!
+                Z_t_t1[:,i] = Ψ_t(s_t_nontemp[:,i])# + rand(F_u)
+                ## This is different from econsieve and more in line with the equation
+                ## econsieve doesn't add measurement error to Z-bar.
+                ## In expectation, there is no difference.
             end
-
-            # Step 2: Update
-            Xbar = s_t_nontemp * update_prod
-            Zbar = Z_t_t1 * update_prod
-            Zcov = Zbar * Zbar'
-
-            s_t_nontemp .+= Xbar * Zbar' * inv(Zcov) * (y_t .- Z_t_t1)
-
-            # Step 3: Log Likelihood Update
-            diff = y_t .- mean(Z_t_t1, dims = 1)
-            loglh[t] = logpdf(MvNormal(Zcov), diff)
         end
+
+        # Step 2: Update
+        mul!(Xbar, s_t_nontemp, update_prod)
+        mul!(Zbar, Z_t_t1, update_prod)
+        if n_obs == 1
+            Zcov = var(Z_bar) + var(F_u)
+        else
+            Zcov = cov(Z_t_t1, dims = 2) .+ cov(F_u)#mul!(Zcov, Zbar, Zbar')
+        end
+
+        # s_t_nontemp .+= Xbar * Zbar' * (Zcov \ (y_t .- Z_t_t1))
+        s_t_nontemp .+= Xbar * Zbar' * (((n_particles - 1) * Zcov) \ (y_t .- Z_t_t1 .- rand(F_u,n_particles)))
+        ## Backslash operator checks singularity (at least checks if matrix is rectangular) so TEnKF = EnKF
+
+        # Step 3: Log Likelihood Update
+        diff = y_t .- vec(mean(Z_t_t1, dims = 2))
+        loglh[t] = logpdf(MvNormal(Zcov), diff)
 
         if get_t_particle_dist
             t_particle_dist[t] = copy(s_t_nontemp)
@@ -194,7 +188,6 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
             print("Completion of one period $times[t]")
         end
     end
-
     if VERBOSITY[verbose] >= VERBOSITY[:low]
         println("=============================================")
     end

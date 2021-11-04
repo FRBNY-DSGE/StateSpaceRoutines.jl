@@ -15,6 +15,9 @@ module StateSpaceRoutines
         init_stationary_states, kalman_filter, chand_recursion, kalman_likelihood,
         kalman_filtered_states,
 
+        # filters/EnKF.jl
+        ensemble_kalman_filter,
+
         # filters/tempered_particle_filter
         tempered_particle_filter, initialize_state_draws,
         solve_inefficiency, mutation, weight_kernel!, next_φ,correction!,
@@ -29,6 +32,7 @@ module StateSpaceRoutines
     include("util.jl")
     include("filters/util.jl")
     include("filters/kalman_filter.jl")
+    include("filters/EnKF.jl")
     include("filters/chand_recursion.jl")
     include("filters/tempered_particle_filter/util.jl")
     include("filters/tempered_particle_filter/initialization.jl")
