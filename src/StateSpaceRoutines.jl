@@ -35,6 +35,7 @@ module StateSpaceRoutines
     include("filters/tempered_particle_filter/correction.jl")
     include("filters/tempered_particle_filter/selection.jl")
     include("filters/tempered_particle_filter/mutation.jl")
+    include("filters/tempered_particle_filter/parallel_tpf_helpers.jl")
     include("filters/tempered_particle_filter/tempered_particle_filter.jl")
 
     include("smoothers/util.jl")
