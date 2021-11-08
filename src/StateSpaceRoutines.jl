@@ -2,7 +2,7 @@ isdefined(Base, :__precompile__) && __precompile__(false)
 
 module StateSpaceRoutines
 
-    using Distributions: Distribution, MvNormal, pdf, Weights, sample, logpdf
+    using Distributions: Distribution, MvNormal, pdf, Weights, sample, logpdf, Normal
     using Tracker
     using LinearAlgebra, Statistics
     using Roots: fzero

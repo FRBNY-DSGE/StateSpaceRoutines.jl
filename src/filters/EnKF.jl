@@ -41,18 +41,18 @@ where `S<:AbstractFloat` and
 """
 ## TODO: Allow Φ and Ψ to vary over time (do the same in TPF), just like in Kalman Filter.
 function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
-                                  F_ϵ::Distribution, F_u::Distribution,
-                                  s_init::AbstractArray{S}; n_particles::Int = 100,
-                                  n_presample_periods::Int = 0, allout::Bool = true,
-                                  get_t_particle_dist::Bool = false,
-                                  verbose::Symbol = :none) where S<:AbstractFloat
+                                F_ϵ::Distribution, F_u::Distribution,
+                                s_init::AbstractArray{S}; n_particles::Int = 100,
+                                n_presample_periods::Int = 0, allout::Bool = true,
+                                get_t_particle_dist::Bool = false,
+                                parallel::Bool = false, verbose::Symbol = :none) where S<:AbstractFloat
 
     #--------------------------------------------------------------
     # Setup
     #--------------------------------------------------------------
 
     # Initialize working variables
-    n_states  = size(s_init, 1)
+    n_states  = length(size(s_init)) == 1 ? 1 : size(s_init, 1)
     n_obs     = length(F_u)
     n_shocks = length(F_ϵ)
 
@@ -100,28 +100,49 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
         # Initialization
         #--------------------------------------------------------------
 
-        y_t = data[:, t]
+        if (length(size(data)) == 1) || (size(data,1) == 1)
+            y_t = data[t] ## Assume not missing
+            nonmissing = isfinite.([y_t])
+            n_obs_t = 1
 
-        # Adjust other values to remove rows/columns with NaN values
-        nonmissing = isfinite.(y_t)
-        y_t        = y_t[nonmissing]
-        n_obs_t    = length(y_t)
+            Ψ_t  = x -> Ψ(x)
+        else
+            y_t = data[:, t]
 
-        # Remove rows/columns of series with NaN values
-        # Handle measurement equation
-        Ψ_t  = x -> Ψ(x)[nonmissing]
+            # Adjust other values to remove rows/columns with NaN values
+            nonmissing = isfinite.(y_t)
+            y_t        = y_t[nonmissing]
+            n_obs_t    = length(y_t)
+
+            # Remove rows/columns of series with NaN values
+            # Handle measurement equation
+            Ψ_t  = x -> Ψ(x)[nonmissing]
+        end
 
         # Step 0: For later use
-        avg_wts = fill(1.0 / n_particles, (n_particles, n_particles))
-        update_prod = I - avg_wts
+        if n_states > 1 || n_obs > 1
+            avg_wts = fill(1.0 / n_particles, (n_particles, n_particles))
+            update_prod = I - avg_wts
+        end
 
         # Step 1: Predict
         ##TODO: Need pseudoinverse for regular EnKF (not TEnKF)
         ##TODO: Do transposes if using TEnKF
         ϵ_t = rand(F_ϵ, n_particles)
         if n_states == 1
-            s_t_nontemp .= Φ.(s_t_nontemp, ϵ_t)
-            Z_t_t1 .= Ψ_t.(s_t_nontemp) .+ rand(F_u, n_particles)
+            s_t_nontemp = Φ.(s_t_nontemp, ϵ_t)
+            if n_obs == 1
+                Z_t_t1 = Ψ_t.(s_t_nontemp) .+ rand(F_u, n_particles)
+            else
+                for i in 1:n_particles
+                    Z_t_t1[:,i] = Ψ_t(s_t_nontemp[i]) .+ rand(F_u)
+                end
+             end
+        elseif n_obs == 1
+            for i in 1:n_particles
+                s_t_nontemp[:, i] = Φ(s_t_nontemp[:, i], ϵ_t[:, i])
+                Z_t_t1[i] = Ψ_t(s_t_nontemp[:,i])# + rand(F_u)
+            end
         else
             for i in 1:n_particles
                 s_t_nontemp[:, i] = Φ(s_t_nontemp[:, i], ϵ_t[:, i])
@@ -134,21 +155,40 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
         end
 
         # Step 2: Update
-        mul!(Xbar, s_t_nontemp, update_prod)
-        mul!(Zbar, Z_t_t1, update_prod)
-        if n_obs == 1
-            Zcov = var(Z_bar) + var(F_u)
+        if n_states == 1
+            mul!(Xbar, s_t_nontemp, 1/n_particles)
         else
-            Zcov = cov(Z_t_t1, dims = 2) .+ cov(F_u)#mul!(Zcov, Zbar, Zbar')
+            mul!(Xbar, s_t_nontemp, update_prod)
+        end
+
+        if n_obs == 1
+            mul!(Zbar, Z_t_t1, 1/n_particles)
+            Zcov = var(Zbar) + var(F_u)
+        else
+            mul!(Zbar, Z_t_t1, update_prod)
+            #mul!(Zcov, Zbar, Zbar')
+            Zcov = cov(Z_t_t1, dims = 2) .+ cov(F_u)
         end
 
         # s_t_nontemp .+= Xbar * Zbar' * (Zcov \ (y_t .- Z_t_t1))
-        s_t_nontemp .+= Xbar * Zbar' * (((n_particles - 1) * Zcov) \ (y_t .- Z_t_t1 .- rand(F_u,n_particles)))
+        if n_states == 1 && n_obs == 1
+            s_t_nontemp .+= Xbar .* Zbar .* ((y_t .- Z_t_t1 .- rand(F_u,n_particles)) ./ ((n_particles - 1) * Zcov))
+        elseif n_states == 1
+            obs_mat = Zbar' * (((n_particles - 1) * Zcov) \ (y_t .- Z_t_t1 .- rand(F_u,n_particles)))
+            # s_t_nontemp .+= vec(Xbar' * Zbar' * (((n_particles - 1) * Zcov) \ (y_t .- Z_t_t1 .- rand(F_u,n_particles))))
+                @inbounds @simd for i = 1:length(s_t_nontemp)
+                    s_t_nontemp[i] += dot(Xbar, obs_mat[:,i])
+                end
+        elseif n_obs == 1
+            s_t_nontemp .+= Xbar * Zbar .* ((y_t .- Z_t_t1 .- rand(F_u,n_particles)) ./ ((n_particles - 1) * Zcov))
+        else
+            s_t_nontemp .+= Xbar * Zbar' * (((n_particles - 1) * Zcov) \ (y_t .- Z_t_t1 .- rand(F_u,n_particles)))
+        end
         ## Backslash operator checks singularity (at least checks if matrix is rectangular) so TEnKF = EnKF
 
         # Step 3: Log Likelihood Update
-        diff = y_t .- vec(mean(Z_t_t1, dims = 2))
-        loglh[t] = logpdf(MvNormal(Zcov), diff)
+        diff = n_obs == 1 ? y_t - mean(Z_t_t1) : y_t .- vec(mean(Z_t_t1, dims = 2))
+        loglh[t] = n_obs == 1 ? logpdf(Normal(Zcov), diff) : logpdf(MvNormal(Zcov), diff)
 
         if get_t_particle_dist
             t_particle_dist[t] = copy(s_t_nontemp)
