@@ -16,6 +16,7 @@ end
 n_particles = 1000
 n_presample_periods = 0
 allout = true
+get_t_particle_dist = true
 
 # Define Φ and Ψ (can't be saved to JLD)
 Φ(s_t::AbstractVector{Float64}, ϵ_t::AbstractVector{Float64}) = TTT*s_t + RRR*ϵ_t + CCC
@@ -37,7 +38,8 @@ for i in 1:length(iters100)
     end
     out = ensemble_kalman_filter(data, Φ, Ψ, F_ϵ, F_u, s_init;
                                  n_particles = n_particles, n_presample_periods = n_presample_periods,
-                                 allout = allout, verbose = :none)
+                                 allout = allout, get_t_particle_dist = get_t_particle_dist,
+                                 verbose = :none)
     iters100[i] = out[1]
 
     temp_out = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; #fixed_sched = [1.0],
@@ -52,9 +54,8 @@ end
                        n_particles = $n_particles, n_presample_periods = $n_presample_periods,
                        allout = $allout, verbose = :none) ## 472.4 ms
 
-
-@assert abs(mean(iters100) - sum(kalman_out[1])) < 0.5 ## Randomness from the particles + initial states
-# @assert abs(mean(tpf_iters) - sum(kalman_out[1])) < 0.5 ## Generally not true
+@assert abs(mean(iters100) - sum(kalman_out[1])) < 0.75 ## Randomness from the particles + initial states
+# @assert abs(mean(tpf_iters) - sum(kalman_out[1])) < 0.75 ## Generally not true
 
 
 # Testing that EnKF works when n_particles < n_states (this is the classic case for EnKF)
@@ -69,7 +70,8 @@ for i in 1:length(iters_low)
     end
     out = ensemble_kalman_filter(data, Φ, Ψ, F_ϵ, F_u, s_init2;
                                  n_particles = n_particles, n_presample_periods = n_presample_periods,
-                                 allout = allout, verbose = :none)
+                                 allout = allout, get_t_particle_dist = get_t_particle_dist,
+                                 verbose = :none)
     iters_low[i] = out[1]
 end
 
