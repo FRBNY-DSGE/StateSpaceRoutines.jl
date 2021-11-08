@@ -102,9 +102,6 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
 
         if (length(size(data)) == 1) || (size(data,1) == 1)
             y_t = data[t] ## Assume not missing
-            nonmissing = isfinite.([y_t])
-            n_obs_t = 1
-
             Ψ_t  = x -> Ψ(x)
         else
             y_t = data[:, t]
@@ -126,31 +123,25 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
         end
 
         # Step 1: Predict
-        ##TODO: Need pseudoinverse for regular EnKF (not TEnKF)
-        ##TODO: Do transposes if using TEnKF
         ϵ_t = rand(F_ϵ, n_particles)
         if n_states == 1
             s_t_nontemp = Φ.(s_t_nontemp, ϵ_t)
             if n_obs == 1
-                Z_t_t1 = Ψ_t.(s_t_nontemp)# .+ rand(F_u, n_particles)
+                Z_t_t1 = Ψ_t.(s_t_nontemp)
             else
                 for i in 1:n_particles
-                    @views Z_t_t1[:,i] = Ψ_t(s_t_nontemp[i])# .+ rand(F_u)
+                    Z_t_t1[:,i] = Ψ_t(s_t_nontemp[i])
                 end
              end
         elseif n_obs == 1
             for i in 1:n_particles
-                @views s_t_nontemp[:, i] = Φ(s_t_nontemp[:, i], ϵ_t[:, i])
-                Z_t_t1[i] = Ψ_t(s_t_nontemp[:,i])# + rand(F_u)
+                s_t_nontemp[:, i] = Φ(s_t_nontemp[:, i], ϵ_t[:, i])
+                Z_t_t1[i] = Ψ_t(s_t_nontemp[:,i])
             end
         else
             for i in 1:n_particles
-                s_t_nontemp[:, i] = Φ(s_t_nontemp[:, i], ϵ_t[:, i]) #views
-                Z_t_t1[:,i] = Ψ_t(s_t_nontemp[:,i]) + rand(F_u) #views
-                ## This is different from econsieve for speed gains.
-                ## econsieve doesn't add measurement error to Z-bar,
-                ### instead adding var(F_u) later.
-                ## In expectation, there is no difference.
+                s_t_nontemp[:, i] = Φ(s_t_nontemp[:, i], ϵ_t[:, i])
+                Z_t_t1[:,i] = Ψ_t(s_t_nontemp[:,i])
             end
         end
 
@@ -163,12 +154,10 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
 
         if n_obs == 1
             Zbar = Z_t_t1 .- mean(Z_t_t1)
-            mul!(Zbar, Z_t_t1, 1/n_particles)
-            #Zcov = var(Zbar) + var(F_u)
+            Zcov = var(Zbar) + var(F_u)
         else
             mul!(Zbar, Z_t_t1, update_prod)
-            mul!(Zcov, Zbar, Zbar')
-            # Zcov = cov(Z_t_t1, dims = 2) .+ cov(F_u)
+            Zcov = cov(Z_t_t1, dims = 2) .+ cov(F_u)
         end
 
         # s_t_nontemp .+= Xbar * Zbar' * (Zcov \ (y_t .- Z_t_t1))
@@ -183,14 +172,13 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
         elseif n_obs == 1
             s_t_nontemp .+= Xbar * (Zbar .* ((y_t .- Z_t_t1 .- rand(F_u,n_particles)) ./ ((n_particles - 1) * Zcov)))
         else
-            s_t_nontemp .+= Xbar * Zbar' * (Zcov \ (y_t .- Z_t_t1))# .- rand(F_u,n_particles)))
-            #s_t_nontemp .+= Xbar * Zbar' * (((n_particles - 1) * Zcov) \ (y_t .- Z_t_t1 .- rand(F_u,n_particles)))
+            s_t_nontemp .+= Xbar * Zbar' * (((n_particles - 1) * Zcov) \ (y_t .- Z_t_t1 .- rand(F_u,n_particles)))
         end
         ## Backslash operator checks singularity (at least checks if matrix is rectangular) so TEnKF = EnKF
 
         # Step 3: Log Likelihood Update
         diff = n_obs == 1 ? y_t - mean(Z_t_t1) : y_t .- vec(mean(Z_t_t1, dims = 2))
-        loglh[t] = n_obs == 1 ? logpdf(Normal(Zcov), diff) : logpdf(MvNormal(Zcov ./ (n_particles - 1)), diff)
+        loglh[t] = n_obs == 1 ? logpdf(Normal(Zcov), diff) : logpdf(MvNormal(Zcov),diff)
 
         if get_t_particle_dist
             t_particle_dist[t] = copy(s_t_nontemp)
