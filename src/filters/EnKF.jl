@@ -64,7 +64,7 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
     # Initialize matrix of normalized weight per particle by time period
     # and a matrix of the particle locations, if desired by user
     if get_t_particle_dist
-        t_particle_dist = Dict{Int64,Matrix{Float64}}()
+        t_particle_dist = n_states == 1 ? Dict{Int64,Vector{Float64}}() : Dict{Int64,Matrix{Float64}}()
     end
 
     if n_states == 1
