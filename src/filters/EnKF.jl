@@ -146,7 +146,7 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
         else
             for i in 1:n_particles
                 s_t_nontemp[:, i] = Φ(s_t_nontemp[:, i], ϵ_t[:, i]) #views
-                Z_t_t1[:,i] = Ψ_t(s_t_nontemp[:,i])# + rand(F_u) #views
+                Z_t_t1[:,i] = Ψ_t(s_t_nontemp[:,i]) + rand(F_u) #views
                 ## This is different from econsieve for speed gains.
                 ## econsieve doesn't add measurement error to Z-bar,
                 ### instead adding var(F_u) later.
@@ -163,12 +163,12 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
 
         if n_obs == 1
             Zbar = Z_t_t1 .- mean(Z_t_t1)
-            #mul!(Zbar, Z_t_t1, 1/n_particles)
-            Zcov = var(Zbar) + var(F_u)
+            mul!(Zbar, Z_t_t1, 1/n_particles)
+            #Zcov = var(Zbar) + var(F_u)
         else
             mul!(Zbar, Z_t_t1, update_prod)
-            #mul!(Zcov, Zbar, Zbar')
-            Zcov = cov(Z_t_t1, dims = 2) .+ cov(F_u)
+            mul!(Zcov, Zbar, Zbar')
+            # Zcov = cov(Z_t_t1, dims = 2) .+ cov(F_u)
         end
 
         # s_t_nontemp .+= Xbar * Zbar' * (Zcov \ (y_t .- Z_t_t1))
@@ -183,14 +183,14 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
         elseif n_obs == 1
             s_t_nontemp .+= Xbar * (Zbar .* ((y_t .- Z_t_t1 .- rand(F_u,n_particles)) ./ ((n_particles - 1) * Zcov)))
         else
-            #s_t_nontemp .+= Xbar * Zbar' * (Zcov \ (y_t .- Z_t_t1))# .- rand(F_u,n_particles)))
-            s_t_nontemp .+= Xbar * Zbar' * (((n_particles - 1) * Zcov) \ (y_t .- Z_t_t1 .- rand(F_u,n_particles)))
+            s_t_nontemp .+= Xbar * Zbar' * (Zcov \ (y_t .- Z_t_t1))# .- rand(F_u,n_particles)))
+            #s_t_nontemp .+= Xbar * Zbar' * (((n_particles - 1) * Zcov) \ (y_t .- Z_t_t1 .- rand(F_u,n_particles)))
         end
         ## Backslash operator checks singularity (at least checks if matrix is rectangular) so TEnKF = EnKF
 
         # Step 3: Log Likelihood Update
         diff = n_obs == 1 ? y_t - mean(Z_t_t1) : y_t .- vec(mean(Z_t_t1, dims = 2))
-        loglh[t] = n_obs == 1 ? logpdf(Normal(Zcov), diff) : logpdf(MvNormal(Zcov),diff)# ./ (n_particles - 1)), diff)
+        loglh[t] = n_obs == 1 ? logpdf(Normal(Zcov), diff) : logpdf(MvNormal(Zcov ./ (n_particles - 1)), diff)
 
         if get_t_particle_dist
             t_particle_dist[t] = copy(s_t_nontemp)
