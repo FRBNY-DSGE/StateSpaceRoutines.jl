@@ -124,24 +124,75 @@ function ensemble_kalman_filter(data::AbstractArray, Φ::Function, Ψ::Function,
 
         # Step 1: Predict
         ϵ_t = rand(F_ϵ, n_particles)
-        if n_states == 1
-            s_t_nontemp = Φ.(s_t_nontemp, ϵ_t)
-            if n_obs == 1
-                Z_t_t1 = Ψ_t.(s_t_nontemp)
+
+        if parallel
+            if n_states == 1 && n_obs == 1
+                s_t_dist = distribute(s_t_nontemp)
+                Z_t_dist = distribute(Z_t_t1)
+                ϵ_t_dist = distribute(ϵ_t)
+
+                @sync @distributed for w in workers()
+                    for i in 1:length(s_t_dist[:L])
+                        s_t_dist[:L][i] = Φ(s_t_dist[:L][i], ϵ_t_dist[:L][i])
+                        Z_t_dist[:L][i] = Ψ(s_t_dist[:L][i])
+                    end
+                end
+            elseif n_obs == 1
+                Z_t_dist = distribute(Z_t_t1)
+                s_t_dist = distribute(s_t_nontemp, dist = [1,nworkers()])
+                ϵ_t_dist = distribute(ϵ_t, dist = [1,nworkers()])
+
+                @sync @distributed for w in workers()
+                    for i in 1:length(Z_t_dist)
+                        s_t_dist[:L][:,i] = Φ(s_t_dist[:L][:,i], ϵ_t_dist[:L][:,i])
+                        Z_t_dist[:L][i] = Ψ(s_t_dist[:L][:,i])
+                    end
+                end
+            elseif n_states == 1
+                s_t_dist = distribute(s_t_nontemp)
+                Z_t_dist = distribute(Z_t_t1, dist = [1,nworkers()])
+                ϵ_t_dist = distribute(ϵ_t)
+
+                @sync @distributed for w in workers()
+                    for i in 1:length(s_t_dist[:L])
+                        s_t_dist[:L][i] = Φ(s_t_dist[:L][i], ϵ_t_dist[:L][i])
+                        Z_t_dist[:L][:,i] = Ψ(s_t_dist[:L][i])
+                    end
+                end
+            else
+                s_t_dist = distribute(s_t_nontemp, dist = [1,nworkers()])
+                Z_t_dist = distribute(Z_t_t1, dist = [1,nworkers()])
+                ϵ_t_dist = distribute(ϵ_t, dist = [1,nworkers()])
+
+                @sync @distributed for w in workers()
+                    for i in 1:size(s_t_dist[:L],2)
+                        s_t_dist[:L][:,i] = Φ(s_t_dist[:L][:,i], ϵ_t_dist[:L][:,i])
+                        Z_t_dist[:L][:,i] = Ψ(s_t_dist[:L][:,i])
+                    end
+                end
+            end
+            s_t_nontemp = n_states == 1 ? convert(Vector, s_t_dist) : convert(Matrix, s_t_dist)
+            Z_t_t1 = n_obs == 1 ? convert(Vector, Z_t_dist) : convert(Matrix, Z_t_dist)
+        else
+            if n_states == 1
+                s_t_nontemp = Φ.(s_t_nontemp, ϵ_t)
+                if n_obs == 1
+                    Z_t_t1 = Ψ_t.(s_t_nontemp)
+                else
+                    for i in 1:n_particles
+                        Z_t_t1[:,i] = Ψ_t(s_t_nontemp[i])
+                    end
+                end
+            elseif n_obs == 1
+                for i in 1:n_particles
+                    s_t_nontemp[:, i] = Φ(s_t_nontemp[:, i], ϵ_t[:, i])
+                    Z_t_t1[i] = Ψ_t(s_t_nontemp[:,i])
+                end
             else
                 for i in 1:n_particles
-                    Z_t_t1[:,i] = Ψ_t(s_t_nontemp[i])
+                    s_t_nontemp[:, i] = Φ(s_t_nontemp[:, i], ϵ_t[:, i])
+                    Z_t_t1[:,i] = Ψ_t(s_t_nontemp[:,i])
                 end
-             end
-        elseif n_obs == 1
-            for i in 1:n_particles
-                s_t_nontemp[:, i] = Φ(s_t_nontemp[:, i], ϵ_t[:, i])
-                Z_t_t1[i] = Ψ_t(s_t_nontemp[:,i])
-            end
-        else
-            for i in 1:n_particles
-                s_t_nontemp[:, i] = Φ(s_t_nontemp[:, i], ϵ_t[:, i])
-                Z_t_t1[:,i] = Ψ_t(s_t_nontemp[:,i])
             end
         end
 

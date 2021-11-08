@@ -1,4 +1,4 @@
-using JLD2, Distributions, StateSpaceRoutines, ModelConstructors, BenchmarkTools
+using JLD2, Distributions, StateSpaceRoutines, BenchmarkTools
 # Read in from JLD
 data, TTT, RRR, CCC, ZZ, DD, F_ϵ, F_u, s_init = JLD2.jldopen("reference/tpf_main_inputs.jld2") do tpf_main_input
     tpf_main_input["data"],
@@ -87,18 +87,79 @@ one_one_Ψ(s_t::Float64) = (ZZ1 .* s_t .+ DD)[1]
 F_u1 = Normal(var(F_u)[1])
 F_ϵ1 = Normal(var(F_ϵ)[1])
 s_init1 = s_init[1,:]
+n_particles = 1000
 
 one_outs = ensemble_kalman_filter(data, one_Φ, one_Ψ, F_ϵ1, F_u, s_init1;
                                   n_particles = n_particles, n_presample_periods = n_presample_periods,
-                                  allout = allout, verbose = :none)
+                                  allout = allout, get_t_particle_dist = get_t_particle_dist,
+                                  verbose = :none)
 
 obs_one_outs = ensemble_kalman_filter(vec(data[1,:]), one_Φ, one_one_Ψ, F_ϵ1, F_u1, s_init1;
-                                  n_particles = n_particles, n_presample_periods = n_presample_periods,
-                                  allout = allout, verbose = :none)
+                                      n_particles = n_particles, n_presample_periods = n_presample_periods,
+                                      allout = allout, get_t_particle_dist = get_t_particle_dist,
+                                      verbose = :none)
 
 # Case when n_obs = 1 but n_states > 1
 one_two_Ψ(s_t::Vector{Float64}) = (ZZ * s_t .+ DD)[1]
 
 obs_two_outs = ensemble_kalman_filter(vec(data[1,:]), Φ, one_two_Ψ, F_ϵ, F_u1, s_init;
-                                  n_particles = n_particles, n_presample_periods = n_presample_periods,
-                                  allout = allout, verbose = :none)
+                                      n_particles = n_particles, n_presample_periods = n_presample_periods,
+                                      allout = allout, get_t_particle_dist = get_t_particle_dist,
+                                      verbose = :none)
+
+# Test Parallel with 1 worker
+para1 = zeros(50) # Run EnKF 100 times to get loglh close to truth
+for i in 1:length(para1)
+    if i % 20 == 0
+        @show i
+    end
+    out = ensemble_kalman_filter(data, Φ, Ψ, F_ϵ, F_u, s_init;
+                                 n_particles = n_particles, n_presample_periods = n_presample_periods,
+                                 allout = allout, get_t_particle_dist = get_t_particle_dist,
+                                 verbose = :none, parallel = true)
+    para1[i] = out[1]
+end
+@assert abs(mean(para1) - sum(kalman_out[1])) < 0.75
+
+@show "Parallel Timing"
+@btime ensemble_kalman_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init;
+                       n_particles = $n_particles, n_presample_periods = $n_presample_periods,
+                       allout = $allout, verbose = :none, parallel = true) ##
+
+# Test Parallel with multiple workers
+addprocs_frbny(8)
+
+@everywhere using JLD2, Distributions, StateSpaceRoutines, ModelConstructors, BenchmarkTools, ParallelDataTransfer
+
+@everywhere data, TTT, RRR, CCC, ZZ, DD, F_ϵ, F_u, s_init = JLD2.jldopen("reference/tpf_main_inputs.jld2") do tpf_main_input
+    tpf_main_input["data"],
+    tpf_main_input["TTT"],
+    tpf_main_input["RRR"],
+    tpf_main_input["CCC"],
+    tpf_main_input["ZZ"],
+    tpf_main_input["DD"],
+    tpf_main_input["F_epsilon"],
+    tpf_main_input["F_u"],
+    tpf_main_input["s_init"]
+end
+
+@everywhere Φ(s_t::AbstractVector{Float64}, ϵ_t::AbstractVector{Float64}) = TTT*s_t + RRR*ϵ_t + CCC
+@everywhere Ψ(s_t::AbstractVector{Float64}) = ZZ*s_t + DD
+
+para_mult = zeros(50) # Run EnKF 100 times to get loglh close to truth
+for i in 1:length(para_mult)
+    if i % 20 == 0
+        @show i
+    end
+    out = ensemble_kalman_filter(data, Φ, Ψ, F_ϵ, F_u, s_init;
+                                 n_particles = n_particles, n_presample_periods = n_presample_periods,
+                                 allout = allout, get_t_particle_dist = get_t_particle_dist,
+                                 verbose = :none, parallel = true)
+    para_mult[i] = out[1]
+end
+@assert abs(mean(para_mult) - sum(kalman_out[1])) < 0.75
+
+@show "Parallel Timing w/ multiple workers"
+@btime ensemble_kalman_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init;
+                       n_particles = $n_particles, n_presample_periods = $n_presample_periods,
+                       allout = $allout, verbose = :none, parallel = true) ##

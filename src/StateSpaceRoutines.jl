@@ -6,7 +6,7 @@ module StateSpaceRoutines
     using Tracker
     using LinearAlgebra, Statistics
     using Roots: fzero
-    using Distributed
+    using Distributed, DistributedArrays
     using SharedArrays, SparseArrays
 
     export
