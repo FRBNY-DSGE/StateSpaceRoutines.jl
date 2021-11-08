@@ -60,6 +60,18 @@ function selection!(norm_weights::Vector{Float64}, s_t_nontemp::M;
     return nothing
 end
 
+# BSPF Selection with n_states > 1
+function selection!(norm_weights::Vector{Float64}, s_t_nontemp::M;
+                    resampling_method::Symbol = :multinomial) where M<:AbstractMatrix{Float64}
+    # Resampling
+    is = resample(norm_weights, method = resampling_method)
+
+    # Update array using resampled indices
+    s_t_nontemp .= s_t_nontemp[:,is]
+
+    return nothing
+end
+
 # Parallel Selection when n_states = 1
 function selection!(norm_weights::DArray{Float64,1}, s_t1_temp::M, s_t_nontemp::M, ϵ_t::M;
                     resampling_method::Symbol = :multinomial) where M<:DArray{Float64,1}
@@ -82,6 +94,18 @@ function selection!(norm_weights::DArray{Float64,1}, s_t_nontemp::M;
 
     # Update arrays using resampled indices
     s_t_nontemp[:L] = s_t_nontemp[:L][is]
+
+    return nothing
+end
+
+# Parallel BSPF Selection when n_states > 1
+function selection!(norm_weights::DArray{Float64,1}, s_t_nontemp::M;
+                    resampling_method::Symbol = :multinomial) where M<:DArray{Float64,2}
+    # Resampling
+    is = resample(convert(Vector, norm_weights[:L]), method = resampling_method)
+
+    # Update arrays using resampled indices
+    s_t_nontemp[:L] = s_t_nontemp[:L][:,is]
 
     return nothing
 end
