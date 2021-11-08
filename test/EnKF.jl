@@ -53,8 +53,8 @@ end
                        allout = $allout, verbose = :none) ## 472.4 ms
 
 
-# @assert abs(mean(iters100) - sum(kalman_out[1])) < 0.5 ## Randomness from the particles + initial states
-@assert abs(mean(tpf_iters) - sum(kalman_out[1])) < 0.5
+@assert abs(mean(iters100) - sum(kalman_out[1])) < 0.5 ## Randomness from the particles + initial states
+# @assert abs(mean(tpf_iters) - sum(kalman_out[1])) < 0.5 ## Generally not true
 
 
 # Testing that EnKF works when n_particles < n_states (this is the classic case for EnKF)
