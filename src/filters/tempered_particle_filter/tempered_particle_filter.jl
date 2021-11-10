@@ -129,20 +129,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     end
 
     # Initialize working variables
-#=
-    s_t1_temp     = parallel ? SharedMatrix{Float64}(copy(s_init)) :
-        Matrix{Float64}(copy(s_init))
-    s_t_nontemp   = parallel ? SharedMatrix{Float64}(n_states, n_particles) :
-        Matrix{Float64}(undef, n_states, n_particles)
-    ϵ_t           = parallel ? SharedMatrix{Float64}(n_shocks, n_particles) :
-        Matrix{Float64}(undef, n_shocks, n_particles)
-    coeff_terms   = parallel ? SharedVector{Float64}(n_particles) :
-        Vector{Float64}(undef, n_particles)
-    log_e_1_terms = parallel ? SharedVector{Float64}(n_particles) :
-        Vector{Float64}(undef, n_particles)
-    log_e_2_terms = parallel ? SharedVector{Float64}(n_particles) :
-        Vector{Float64}(undef, n_particles)
-=#
     # TODO: Ensure each worker has all of a particle
     # Note: Vector used when n_states == 1 (assumed that n_shocks <= 1 then too)
     ## TODO: Use vector for ϵ_t when n_shocks = 1, n_states > 1
