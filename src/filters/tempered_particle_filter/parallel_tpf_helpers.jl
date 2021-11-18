@@ -1,39 +1,3 @@
-function get_local_inds(x, replaced)
-    x[:L][1:replaced]
-end
-
-function set_dvals2(x, replaced, proc_j)
-    tmp = copy(x[:L][1:replaced])
-    x[:L][1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
-    passobj(proc_i, proc_j, :tmp)
-end
-
-function set_dvals2_mat(x, replaced, proc_j)
-    tmp = copy(x[:L][:,1:replaced])
-    x[:L][:,1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
-    passobj(proc_i, proc_j, :tmp)
-end
-
-function set_dvals3(x, replaced, tmps)
-    x[:L][1:replaced] = tmps
-end
-
-function set_dvals3_mat(x, replaced, tmps)
-    x[:L][:,1:replaced] = tmps
-end
-
-function set_dvals4(x, replaced, proc_j)
-    tmp1 = copy(x[:L][1:replaced])
-    x[:L][1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
-    passobj(proc_i, proc_j, :tmp1)
-end
-
-function set_dvals4_mat(x, replaced, proc_j)
-    tmp1 = copy(x[:L][:,1:replaced])
-    x[:L][:,1:replaced] = remotecall_fetch(get_local_inds, proc_j, x, replaced)
-    passobj(proc_i, proc_j, :tmp1)
-end
-
 function tpf_helper!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                      Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
                      n_obs_t, stage, inc_weights, norm_weights,
