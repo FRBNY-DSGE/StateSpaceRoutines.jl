@@ -58,6 +58,7 @@ where `S<:AbstractFloat` and
 - `parallel::Bool`: whether to use `SharedArray`s
 - `verbose::Symbol`: amount to print to STDOUT. One of `:none`, `:low`, or
   `:high`
+- `parallel_testing::Bool`: Set Random.seeds if testing parallel implementation
 
 ### Outputs
 
@@ -76,7 +77,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                                   parallel::Bool = false, get_t_particle_dist::Bool = false,
                                   verbose::Symbol = :high,
                                   dynamic_measurement::Bool = false,
-                                  poolmodel::Bool = false) where S<:AbstractFloat
+                                  poolmodel::Bool = false, parallel_testing::Bool = false) where S<:AbstractFloat
     #--------------------------------------------------------------
     # Setup
     #--------------------------------------------------------------
@@ -177,8 +178,10 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         unnormalized_wts = dones(n_particles)
     end
 
-#@time begin
     for t = 1:T
+        if parallel_testing
+            Random.seed!(t)
+        end
         begin_time = time_ns()
         if VERBOSITY[verbose] >= VERBOSITY[:low]
             println("============================================================")
@@ -236,7 +239,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                     end
                 end
             end
-
         else
             if n_states > 1
                 for i in 1:n_particles
@@ -253,9 +255,17 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         φ_old = 1e-30
         stage = 0
 
+        if parallel_testing
+            @everywhere testings = 0
+            @everywhere Random.seed!(testings)
+        end
+
         if parallel && fixed_sched != [1.0]
             stage += 1
-            c_vec = dfill(c_init, nworkers())
+            if parallel_testing
+                @everywhere testings += 5
+                @everywhere Random.seed!(testings)
+            end
 
             if adaptive_φ
                 spmd(adaptive_weight_kernel!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
@@ -283,8 +293,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                      s_t1_temp, ϵ_t, unnormalized_wts,
                      r_star, poolmodel,
                      fixed_sched, findroot, xtol,
-                     resampling_method, target_accept_rate,
-                     accept_rate, n_mh_steps,
+                     resampling_method, n_mh_steps,
                      verbose; pids=workers())
                 φ_old = fixed_sched[stage]
             end
@@ -335,11 +344,17 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
         #--------------------------------------------------------------
         # Main Algorithm
         #--------------------------------------------------------------
+
         while φ_old < 1 || (parallel && fixed_sched != [1.0])
             stage += 1
 
             if parallel
                 if fixed_sched == [1.0] ## TPF would be faster with mutation at start and adaptive TPF can't be parallelized like this
+                    if parallel_testing
+                        @everywhere testings += 5
+                        @everywhere Random.seed!(testings)
+                    end
+
                     spmd(tpf_helper!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                             Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
                             n_obs_t, stage, inc_weights, norm_weights,
@@ -347,8 +362,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                             Φ, Ψ_t, QQ, unnormalized_wts,
                             poolmodel,
                             fixed_sched, findroot, xtol,
-                            resampling_method, target_accept_rate,
-                            accept_rate, n_mh_steps,
+                            resampling_method, n_mh_steps,
                             verbose; pids=workers())
                     φ_old = 1.0 ## Can do this because it's given in fixed_sched
 
@@ -360,7 +374,6 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                     ## First, correction, selection.
                     ## Then start loop w/ mutation, corection, then recalculate φ and resample
                     stage -= 1
-                    @show φ_old
 
                     # Calculating log likelihood after each run
                     loglh[t] += log(mean(convert(Vector, inc_weights)))
@@ -381,14 +394,18 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                     stage += 1
 
                     if adaptive_φ
-                        @show "Start of tempered iter"
                         spmd(adaptive_tempered_iter!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                              Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
                              s_t1_temp, ϵ_t, c_vec,
-                             Φ, Ψ_t, QQ, stage,
+                             Φ, Ψ_t, QQ, stage, accept_rate,
                              poolmodel, target_accept_rate,
-                             accept_rate, n_mh_steps,
+                             n_mh_steps,
                              verbose; pids=workers())
+
+                        if parallel_testing
+                            @everywhere testings += 5
+                            @everywhere Random.seed!(testings)
+                        end
 
                         φ_new = next_φ(φ_old, convert(Vector, coeff_terms),
                                        convert(Vector, log_e_1_terms), convert(Vector, log_e_2_terms),
@@ -400,18 +417,36 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                              log_e_1_terms, log_e_2_terms, n_obs_t, unnormalized_wts, s_t1_temp, s_t_nontemp, ϵ_t, resampling_method; pids=workers())
 
                         φ_old = φ_new
-                        @show "End of tempered iter", φ_old
                     else
-                        spmd(tempered_iter!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
-                             Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
-                             n_obs_t, stage, inc_weights, norm_weights,
-                             s_t1_temp, ϵ_t, c_vec,
-                             Φ, Ψ_t, QQ, unnormalized_wts,
-                             r_star, poolmodel,
-                             fixed_sched, findroot, xtol,
-                             resampling_method, target_accept_rate,
-                             accept_rate, n_mh_steps,
-                             verbose; pids=workers())
+                        if !parallel_testing
+                            spmd(tempered_iter!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+                                 Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                                 n_obs_t, stage, inc_weights, norm_weights,
+                                 s_t1_temp, ϵ_t, c_vec,
+                                 Φ, Ψ_t, QQ, unnormalized_wts,
+                                 r_star, poolmodel,
+                                 fixed_sched, findroot, xtol,
+                                 resampling_method, target_accept_rate,
+                                 accept_rate, n_mh_steps,
+                                 verbose; pids=workers())
+                        else
+                            spmd(tempered_iter_test!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
+                                 Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
+                                 n_obs_t, stage, inc_weights, norm_weights,
+                                 s_t1_temp, ϵ_t, c_vec,
+                                 Φ, Ψ_t, QQ, unnormalized_wts,
+                                 r_star, poolmodel,
+                                 fixed_sched, findroot, xtol,
+                                 resampling_method, target_accept_rate,
+                                 accept_rate, n_mh_steps,
+                                 verbose; pids=workers())
+
+                            @everywhere testings += 5
+                            @everywhere Random.seed!(testings)
+
+                            spmd(selection_test!, norm_weights, s_t1_temp, s_t_nontemp, ϵ_t,
+                                 unnormalized_wts, inc_weights, resampling_method)
+                        end
 
                         φ_old = fixed_sched[stage]
                     end
@@ -429,44 +464,46 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                     ### For fixed φ, don't need to pass φ
                 end
 
-                if true#fixed_sched == [1.0]#!isempty(fixed_sched)
-                    # Resample processors if necessary
-                    if nworkers() == 1
-                        EP_t = 1.0
+                # Resample processors if necessary
+                if nworkers() == 1
+                    EP_t = 1.0
+                else
+                    procs_wt = @sync @distributed (vcat) for p in workers()
+                        unnormalized_wts[:L][1]
+                    end
+
+                    α_k = procs_wt ./ sum(procs_wt)
+                    EP_t = 1/sum(α_k .^ 2)
+                end
+
+                if EP_t < nworkers()/2
+                    unnormalized_wts_vec = convert(Vector, unnormalized_wts)
+                    ## unnormalized_wts_vec should be divided by mean regularly when this condition not called
+                    ### to avoid a particle being degenerate. However, since we resample at each step
+                    ### this won't be a problem as long as this step is called enough.
+
+                    s_t1_temp_vec = convert(Array, s_t1_temp)
+                    s_t_nontemp_vec = convert(Array, s_t_nontemp)
+                    ϵ_t_vec = convert(Array, ϵ_t)
+
+                    selection!(unnormalized_wts_vec, s_t1_temp_vec, s_t_nontemp_vec, ϵ_t_vec)
+
+                    if ndims(s_t_nontemp_vec) > 1
+                        s_t1_temp = distribute(s_t1_temp_vec, dist = [1, nworkers()])
+                        s_t_nontemp = distribute(s_t_nontemp_vec, dist = [1, nworkers()])
+                        ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
                     else
-                        procs_wt = @sync @distributed (vcat) for p in workers()
-                            unnormalized_wts[:L][1]
-                        end
-
-                        α_k = procs_wt ./ sum(procs_wt)
-                        EP_t = 1/sum(α_k .^ 2)
+                        s_t1_temp = distribute(s_t1_temp_vec)
+                        s_t_nontemp = distribute(s_t_nontemp_vec)
+                        ϵ_t = distribute(ϵ_t_vec)
                     end
-
-                    if EP_t < nworkers()/2
-                        unnormalized_wts_vec = convert(Vector, unnormalized_wts)
-                        ## unnormalized_wts_vec should be divided by mean regularly when this condition not called
-                        ### to avoid a particle being degenerate. However, since we resample at each step
-                        ### this won't be a problem as long as this step is called enough.
-
-                        s_t1_temp_vec = convert(Array, s_t1_temp)
-                        s_t_nontemp_vec = convert(Array, s_t_nontemp)
-                        ϵ_t_vec = convert(Array, ϵ_t)
-
-                        selection!(unnormalized_wts_vec, s_t1_temp_vec, s_t_nontemp_vec, ϵ_t_vec)
-
-                        if ndims(s_t_nontemp_vec) > 1
-                            s_t1_temp = distribute(s_t1_temp_vec, dist = [1, nworkers()])
-                            s_t_nontemp = distribute(s_t_nontemp_vec, dist = [1, nworkers()])
-                    ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
-                        else
-                            s_t1_temp = distribute(s_t1_temp_vec)
-                            s_t_nontemp = distribute(s_t_nontemp_vec)
-                            ϵ_t = distribute(ϵ_t_vec)
-                        end
-                        unnormalized_wts = dones(length(unnormalized_wts_vec))
-                    end
+                    unnormalized_wts = dones(length(unnormalized_wts_vec))
                 end
             else
+                if parallel_testing
+                    @everywhere testings += 5
+                    @everywhere Random.seed!(testings)
+                end
                 ### 1. Correction
                 # Modifies coeff_terms, log_e_1_terms, log_e_2_terms
                 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
@@ -478,6 +515,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                                r_star, stage; fixed_sched = fixed_sched, findroot = findroot,
                                xtol = xtol)
 
+
                 if VERBOSITY[verbose] >= VERBOSITY[:high]
                     @show φ_new
                 end
@@ -485,7 +523,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                 # Modifies inc_weights, norm_weights
                 correction!(inc_weights, norm_weights, φ_new, coeff_terms,
                             log_e_1_terms, log_e_2_terms, n_obs_t)
-                #end
+
                 ### 2. Selection
                 # Modifies s_t1_temp, s_t_nontemp, ϵ_t
                 if fixed_sched == [1.0]
@@ -496,7 +534,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                     selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
                                resampling_method = resampling_method)
                 end
-#end
+
                 loglh[t] += log(mean(inc_weights))
 
                 ### 3. Mutation
