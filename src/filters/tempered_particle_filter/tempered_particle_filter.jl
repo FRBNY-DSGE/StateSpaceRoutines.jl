@@ -161,7 +161,8 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     ## TODO: assert that localindices for each worker is the same across all DArrays
 
     c = c_init
-    accept_rate = target_accept_rate
+    c_vec = dfill(c_init, nworkers())
+    accept_rate = parallel ? dfill(target_accept_rate, nworkers()) : target_accept_rate
 
     # If not using a dynamic measurement equation, then define measurement equation
     # applying to all states, even if they are missing (but not time variables)
@@ -383,7 +384,14 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                     if φ_old >= 1
                         if stage != 1
                             @sync @distributed for p in workers()
-                                accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_old, y_t,
+                                c_vec[:L][1] = update_c(c_vec[:L][1], accept_rate[:L][1], target_accept_rate)
+
+                                if VERBOSITY[verbose] >= VERBOSITY[:high]
+                                    @show c_vec
+                                    println("------------------------------")
+                                end # Reset immediately in the next time iteration
+
+                                accept_rate[:L][1] = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_old, y_t,
                                                         s_t_nontemp, s_t1_temp, ϵ_t, c_vec[:L][1], n_mh_steps;
                                                         poolmodel = poolmodel)
                             end
@@ -568,7 +576,9 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
             print("Completion of one period $times[t]")
         end
         if parallel
-            s_t1_temp = s_t_nontemp
+            @sync @distributed for p in workers()
+                s_t1_temp[:L][:] .= s_t_nontemp[:L][:]
+            end
         else
             s_t1_temp .= s_t_nontemp
         end

@@ -90,26 +90,24 @@ end
 function adaptive_tempered_iter!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                                  Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
                                  s_t1_temp, ϵ_t, c_vec,
-                                 Φ, Ψ_t, QQ, stage,
+                                 Φ, Ψ_t, QQ, stage, accept_rate,
                                  poolmodel::Bool = false, target_accept_rate::S = 0.4,
-                                 accept_rate::S = target_accept_rate, n_mh_steps::Int = 1,
+                                 n_mh_steps::Int = 1, ##accept_rate is DVector
                                  verbose::Symbol = :high) where S<:AbstractFloat
     if stage > 2 ## 2 b/c first call is w/ stage == 2
-        accept_rate = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_old, y_t,
-                                s_t_nontemp, s_t1_temp, ϵ_t, c_vec[:L][1], n_mh_steps;
-                                poolmodel = poolmodel)
-
         ## c updated separately for each worker. This allows
         ## proposal covariance matrix to scale differently by worker
         ## so we match acceptance rates for all workers,
         ## which should be better.
-
-        # No need to update if no mutation step
-        c_vec[:L][1] = update_c(c_vec[:L][1], accept_rate, target_accept_rate)
+        c_vec[:L][1] = update_c(c_vec[:L][1], accept_rate[:L][1], target_accept_rate)
         if VERBOSITY[verbose] >= VERBOSITY[:high]
-            @show c
+            @show c_vec[:L][1]
             println("------------------------------")
         end
+
+        accept_rate[:L][1] = mutation!(Φ, Ψ_t, QQ, det_HH_t, inv_HH_t, φ_old, y_t,
+                                s_t_nontemp, s_t1_temp, ϵ_t, c_vec[:L][1], n_mh_steps;
+                                poolmodel = poolmodel)
     end
 
     ### 1. Correction
