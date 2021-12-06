@@ -359,11 +359,9 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                     spmd(tpf_helper!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                             Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
                             n_obs_t, stage, inc_weights, norm_weights,
-                            s_t1_temp, ϵ_t,
-                            Φ, Ψ_t, QQ, unnormalized_wts,
+                            s_t1_temp, ϵ_t, unnormalized_wts,
                             poolmodel,
-                            fixed_sched, findroot, xtol,
-                            resampling_method, n_mh_steps,
+                            resampling_method,
                             verbose; pids=workers())
                     φ_old = 1.0 ## Can do this because it's given in fixed_sched
 
@@ -432,21 +430,21 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
                                  n_obs_t, stage, inc_weights, norm_weights,
                                  s_t1_temp, ϵ_t, c_vec,
                                  Φ, Ψ_t, QQ, unnormalized_wts,
-                                 r_star, poolmodel,
+                                 accept_rate, r_star, poolmodel,
                                  fixed_sched, findroot, xtol,
                                  resampling_method, target_accept_rate,
-                                 accept_rate, n_mh_steps,
+                                 n_mh_steps,
                                  verbose; pids=workers())
                         else
                             spmd(tempered_iter_test!, coeff_terms, log_e_1_terms, log_e_2_terms, φ_old,
                                  Ψ_allstates, y_t, s_t_nontemp, det_HH_t, inv_HH_t,
                                  n_obs_t, stage, inc_weights, norm_weights,
                                  s_t1_temp, ϵ_t, c_vec,
-                                 Φ, Ψ_t, QQ, unnormalized_wts,
-                                 r_star, poolmodel,
+                                 Φ, Ψ_t, QQ,
+                                 accept_rate, r_star, poolmodel,
                                  fixed_sched, findroot, xtol,
-                                 resampling_method, target_accept_rate,
-                                 accept_rate, n_mh_steps,
+                                 target_accept_rate,
+                                 n_mh_steps,
                                  verbose; pids=workers())
 
                             @everywhere testings += 5
