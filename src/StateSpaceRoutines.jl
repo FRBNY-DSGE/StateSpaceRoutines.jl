@@ -7,8 +7,8 @@ module StateSpaceRoutines
     using LinearAlgebra, Statistics
     using Roots: fzero
     using Distributed
-    using SharedArrays, SparseArrays, Random
-    using DistributedArrays, OffsetArrays, DistributedArrays.SPMD ## Necessary when using parallel in TPF to communicate across servers
+    using SparseArrays, Random
+    using DistributedArrays, DistributedArrays.SPMD ## Necessary when using parallel in TPF to communicate across servers
 
     export
 
