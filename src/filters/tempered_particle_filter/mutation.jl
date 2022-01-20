@@ -105,6 +105,38 @@ function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
     return accept_rate
 end
 
+# Parallel Mutation w/ 1 state
+function mutation!(Φ::Function, Ψ::Function, QQ::Matrix{Float64},
+                   det_HH::Float64, inv_HH::Matrix{Float64}, φ_new::Float64,
+                   y_t::Vector{Float64}, s_t::M, s_t1::M,
+                   ϵ_t::M, c::Float64, n_mh_steps::Int;
+                   poolmodel::Bool = false) where M<:DArray{Float64,1}
+    # Sizes
+    n_obs = size(y_t, 1)
+    n_particles = size(ϵ_t[:L], 2)
+
+    # Initialize vector of acceptances
+    accept_vec = Vector{Int}(undef, n_particles)
+
+    # Used to generate new draws of ϵ
+    dist_ϵ = MvNormal(c^2 * diag(QQ))
+
+    # Used to calculate posteriors
+    scaled_det_HH = det_HH/(φ_new^n_obs)
+    scaled_inv_HH = inv_HH*φ_new
+
+    # Take Metropolis-Hastings steps
+    for i in 1:n_particles
+        s_t[:L][i], ϵ_t[:L][i], accept_vec[i] =
+            mh_steps(Φ, Ψ, dist_ϵ, y_t, s_t1[:L][i], s_t[:L][i], ϵ_t[:L][i],
+                     scaled_det_HH, scaled_inv_HH, n_mh_steps;
+                     poolmodel = poolmodel)
+    end
+
+    # Calculate and return acceptance rate
+    accept_rate = sum(accept_vec) / (n_mh_steps*n_particles)
+    return accept_rate
+end
 
 """
 ```
@@ -132,7 +164,10 @@ function mh_steps(Φ::Function, Ψ::Function, dist_ϵ::MvNormal, y_t::Vector{Flo
 
     for j = 1:n_mh_steps
         # Draw ϵ_new and s_new
-        ϵ_new = ϵ_t + rand(dist_ϵ)
+        ϵ_new = ϵ_t .+ rand(dist_ϵ)
+        if length(ϵ_new) == 1 && length(s_t1) == 1
+            ϵ_new = ϵ_new[1]
+        end
         s_new = Φ(s_t1, ϵ_new)
 
         # Calculate posterior

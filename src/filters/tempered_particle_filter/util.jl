@@ -35,6 +35,17 @@ function fast_mvnormal_pdf(x::Vector{Float64}, det_Σ::Float64, inv_Σ::Matrix{F
     return coeff_term*exp_term
 end
 
+# For univariate normal
+function fast_mvnormal_pdf(x::Float64, det_Σ::Float64, inv_Σ::Matrix{Float64})
+    coeff_term = (2*pi * det_Σ)^(-1/2)
+    exp_term   = exp(-(1/2) * inv_Σ[1,1] * x^2)
+    return coeff_term*exp_term
+end
+
+function fast_mvnormal_pdf(x::Float64)
+    return pdf(Normal(), x)
+end
+
 # passobj from ParallelDataTransfer.jl but allowing target to have different name
 function passobj_newname(src::Int, target::AbstractVector{Int}, nm::Symbol, nm_new::Symbol;
                  from_mod=Main, to_mod=Main)

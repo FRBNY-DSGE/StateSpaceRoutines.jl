@@ -15,7 +15,7 @@ tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; verbose = :high,
 - `Ψ::Function`: measurement equation: y_t = Ψ(s_t) + u_t
 - `F_ϵ::Distribution`: shock distribution: ϵ_t ~ F_ϵ
 - `F_u::Distribution`: measurement error distribution: u_t ~ F_u
-- `s_init::Matrix{S}`: `Ns` x `n_particles` matrix of initial state vectors s_0
+- `s_init::Array{S}`: `Ns` x `n_particles` matrix of initial state vectors s_0
 
 where `S<:AbstractFloat` and
 
@@ -82,28 +82,30 @@ function tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ::Functio
     # Run the main helper function which will do TPF.
     ## This splits between parallel and non-parallel
     ## implementations for type stability.
-    return parallel ? parallel_tempered_particle_filter(data, Φ, Ψ,
-                                                        F_ϵ, F_u,
-                                                        s_init; n_particles = n_particles, fixed_sched, r_star,
-                                                        findroot, xtol,
-                                                        resampling_method, n_mh_steps,
-                                                        c_init, target_accept_rate,
-                                                        n_presample_periods, allout,
-                                                        get_t_particle_dist,
-                                                        verbose, dynamic_measurement,
-                                                        poolmodel, parallel_testing) :
-                      sequential_tempered_particle_filter(data, Φ, Ψ,
-                                                          F_ϵ, F_u,
-                                                          s_init; n_particles = n_particles, fixed_sched = fixed_sched,
-                                                          r_star = r_star, findroot = findroot,
-                                                          xtol = xtol, resampling_method = resampling_method,
-                                                          n_mh_steps = n_mh_steps, c_init = c_init,
-                                                          target_accept_rate = target_accept_rate,
-                                                          n_presample_periods = n_presample_periods, allout = allout,
-                                                          get_t_particle_dist = get_t_particle_dist,
-                                                          verbose = verbose, dynamic_measurement = dynamic_measurement,
-                                                          poolmodel = poolmodel, parallel_testing = parallel_testing)
-
+    return if parallel
+        parallel_tempered_particle_filter(data, Φ, Ψ,
+                                          F_ϵ, F_u,
+                                          s_init; n_particles = n_particles, fixed_sched, r_star,
+                                          findroot, xtol,
+                                          resampling_method, n_mh_steps,
+                                          c_init, target_accept_rate,
+                                          n_presample_periods, allout,
+                                          get_t_particle_dist,
+                                          verbose, dynamic_measurement,
+                                          poolmodel, parallel_testing)
+    else
+        sequential_tempered_particle_filter(data, Φ, Ψ,
+                                            F_ϵ, F_u,
+                                            s_init; n_particles = n_particles, fixed_sched = fixed_sched,
+                                            r_star = r_star, findroot = findroot,
+                                            xtol = xtol, resampling_method = resampling_method,
+                                            n_mh_steps = n_mh_steps, c_init = c_init,
+                                            target_accept_rate = target_accept_rate,
+                                            n_presample_periods = n_presample_periods, allout = allout,
+                                            get_t_particle_dist = get_t_particle_dist,
+                                            verbose = verbose, dynamic_measurement = dynamic_measurement,
+                                            poolmodel = poolmodel, parallel_testing = parallel_testing)
+    end
 end
 
 
@@ -135,11 +137,11 @@ function sequential_tempered_particle_filter(data::AbstractArray, Φ::Function, 
     n_obs, T  = size(data)
     n_shocks  = length(F_ϵ)
     n_states  = size(s_init, 1)
+
     if length(size(s_init)) == 1
         n_states = 1
-        QQ = var(F_ϵ) .* ones(1,1)
-        HH = var(F_u) .* ones(1,1)
-    else
+    end
+
     QQerr = false
     HHerr = false
     try
@@ -153,11 +155,14 @@ function sequential_tempered_particle_filter(data::AbstractArray, Φ::Function, 
         HHerr = true
     end
     if QQerr
-        QQ = F_ϵ.σ * ones(1,1)
+        QQ = var(F_ϵ) * ones(1,1)
     end
     if HHerr
-        HH = zeros(1,1)
-    end
+        HH = try
+            var(F_u) .* ones(1,1)
+        catch
+            zeros(1,1)
+        end
     end
     @assert @isdefined HH
 
@@ -175,12 +180,12 @@ function sequential_tempered_particle_filter(data::AbstractArray, Φ::Function, 
     # Initialize working variables
     # Note: Vector used when n_states == 1 (assumed that n_shocks <= 1 then too)
     ## TODO: Use vector for ϵ_t when n_shocks = 1, n_states > 1
-    s_t1_temp     = n_states > 1 ? Matrix{Float64}(copy(s_init)) :
-        Vector{Float64}(copy(vec(s_init)))
-    s_t_nontemp   = n_states > 1 ? Matrix{Float64}(undef, n_states, n_particles) :
-        Vector{Float64}(undef, n_particles)
-    ϵ_t           = n_shocks > 1 ? Matrix{Float64}(undef, n_shocks, n_particles) :
-        Vector{Float64}(undef, n_particles)
+    s_t1_temp     = (n_states == 1 && n_shocks == 1) ? Vector{Float64}(copy(vec(s_init))) :
+        (ndims(s_init) > 1 ? Matrix{Float64}(copy(s_init)) : Matrix{Float64}(reshape(copy(s_init),(1,length(s_init)))))
+    s_t_nontemp   = (n_states == 1 && n_shocks == 1) ? Vector{Float64}(undef, n_particles) :
+        Matrix{Float64}(undef, n_states, n_particles)
+    ϵ_t           = (n_states == 1 && n_shocks == 1) ? Vector{Float64}(undef, n_particles) :
+        Matrix{Float64}(undef, n_shocks, n_particles)
 
     coeff_terms   = Vector{Float64}(undef, n_particles)
     log_e_1_terms = Vector{Float64}(undef, n_particles)
@@ -242,14 +247,14 @@ function sequential_tempered_particle_filter(data::AbstractArray, Φ::Function, 
         det_HH_t = poolmodel ? 0. : det(HH_t) # poolmodel -> don't need det_HH
 
         # Initialize s_t_nontemp and ϵ_t for this period
-        if n_states > 1
+        if n_states > 1 || n_shocks > 1
             for i in 1:n_particles
                 ϵ_t[:,i] .= rand(F_ϵ)
                 s_t_nontemp[:,i] .= Φ(s_t1_temp[:,i], ϵ_t[:,i])
             end
         else
             ϵ_t = rand(F_ϵ, n_particles)
-            s_t_nontemp = Φ.(s_t1_temp, ϵ_t)
+            s_t_nontemp = Φ(s_t1_temp, ϵ_t)
         end
 
         # Tempering initialization
@@ -380,11 +385,11 @@ function parallel_tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ
     n_obs, T  = size(data)
     n_shocks  = length(F_ϵ)
     n_states  = size(s_init, 1)
+
     if length(size(s_init)) == 1
         n_states = 1
-        QQ = var(F_ϵ) .* ones(1,1)
-        HH = var(F_u) .* ones(1,1)
-    else
+    end
+
     QQerr = false
     HHerr = false
     try
@@ -398,13 +403,15 @@ function parallel_tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ
         HHerr = true
     end
     if QQerr
-        QQ = F_ϵ.σ * ones(1,1)
+        QQ = var(F_ϵ) * ones(1,1)
     end
     if HHerr
-        HH = zeros(1,1)
+        HH = try
+            var(F_u) .* ones(1,1)
+        catch
+            zeros(1,1)
+        end
     end
-    end
-    @assert @isdefined HH
 
     # Initialize output vectors
     loglh = zeros(T)
@@ -421,11 +428,12 @@ function parallel_tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ
     # TODO: Ensure each worker has all of a particle
     # Note: Vector used when n_states == 1 (assumed that n_shocks <= 1 then too)
     ## TODO: Use vector for ϵ_t when n_shocks = 1, n_states > 1
-    s_t1_temp     = n_states == 1 ? distribute(copy(vec(s_init))) :
-        distribute(copy(s_init), dist = [1, nworkers()])
-    s_t_nontemp   = n_states == 1 ? dzeros(n_particles) :
+    s_t1_temp     = (n_states == 1 && n_shocks == 1) ? distribute(copy(vec(s_init))) :
+        (ndims(s_init) > 1 ? distribute(copy(s_init), dist = [1, nworkers()]) :
+        distribute(reshape(copy(s_init), (1,length(s_init))), dist = [1, nworkers()]))
+    s_t_nontemp   = (n_states == 1 && n_shocks == 1) ? dzeros(n_particles) :
         dzeros((n_states, n_particles), workers(), [1,nworkers()])
-    ϵ_t           = n_states == 1 ? dzeros(n_particles) :
+    ϵ_t           = (n_states == 1 && n_shocks == 1) ? dzeros(n_particles) :
         dzeros((n_shocks, n_particles), workers(), [1,nworkers()])
 
     coeff_terms   = dzeros(n_particles)
@@ -495,14 +503,14 @@ function parallel_tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ
         # Initialize s_t_nontemp and ϵ_t for this period
         ϵ_t_vec = rand(F_ϵ, n_particles)
 
-        if n_states == 1
+        if n_states == 1 && n_shocks == 1
             ϵ_t = distribute(ϵ_t_vec)
 
             @sync @distributed for w in workers()
                 s_t_nontemp[:L][:] .= Φ.(s_t1_temp[:L], ϵ_t[:L])
             end
         else
-            if ndims(ϵ_t_vec) == 1 # Edge case where only 1 shock
+            if n_shocks == 1 # Edge case where only 1 shock
                 ϵ_t_vec = reshape(ϵ_t_vec, (1, length(ϵ_t_vec)))
             end
             ϵ_t = distribute(ϵ_t_vec, dist = [1, nworkers()])
