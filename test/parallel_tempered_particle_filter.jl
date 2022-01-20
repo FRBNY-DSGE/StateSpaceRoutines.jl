@@ -156,7 +156,7 @@ StateSpaceRoutines.sendto(workers(), data = data)
 StateSpaceRoutines.sendto(workers(), s_t_nontemp = s_t_nontemp)
 StateSpaceRoutines.sendto(workers(), HH = HH)=#
 
-s_t_nontemp = distribute(s_t_nontemp)
+s_t_nontemp = distribute(s_t_nontemp, dist = [1, nworkers()])
 coeff_terms = distribute(coeff_terms)
 log_e_1_terms = distribute(log_e_1_terms)
 log_e_2_terms = distribute(log_e_2_terms)
@@ -167,27 +167,40 @@ coeff_vec = convert(Vector, coeff_terms)
 log_e_1_vec = convert(Vector, log_e_1_terms)
 log_e_2_vec = convert(Vector, log_e_2_terms)
 s_t_nontemp_vec = convert(Matrix, s_t_nontemp)
-@btime weight_kernel!(coeff_vec, log_e_1_vec,
-                      log_e_2_vec, φ_old, Ψ, data[:, 47], s_t_nontemp_vec,
-                      det(HH), inv(HH), initialize = false)#, parallel = false)
 
-@btime spmd(weight_kernel!,coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
-            pids = workers())
+if run_timing
+    @show "Weight_kernel with vectors in sequential"
+    @btime weight_kernel!(coeff_vec, log_e_1_vec,
+                          log_e_2_vec, φ_old, Ψ, data[:, 47], s_t_nontemp_vec,
+                          det(HH), inv(HH), initialize = false)
+
+    @show "Weight_kernel with DistributedArrays in parallel"
+    @btime spmd(weight_kernel!,coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
+                pids = workers())
+end
 spmd(weight_kernel!,coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
             pids = workers())
-weight_kernel!(coeff_vec, log_e_1_vec,
+#=weight_kernel!(coeff_vec, log_e_1_vec,
                       log_e_2_vec, φ_old, Ψ, data[:, 47], s_t_nontemp_vec,
-                      det(HH), inv(HH), initialize = false)#, parallel = false)
-# weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
-#                initialize = false, parallel = true)
-φ_new = @sync @distributed (+) for p in workers()
+                      det(HH), inv(HH), initialize = false)
+# Not needed b/c weight_kernel run earlier
+=#
+#=φ_new = @sync @distributed (+) for p in workers()
     next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 end
-# φ_new /= nworkers()
+φ_new /= nworkers()
 ## Note above is incorrect since we can't just take the mean - just wanted to confirm that it runs
-φ_new = next_φ(φ_old, coeff_vec, log_e_1_vec, log_e_2_vec, length(data[:,47]), tuning[:r_star], 2)
+=#
+φ_new = next_φ(φ_old, convert(Vector, coeff_terms), convert(Vector, log_e_1_terms), convert(Vector, log_e_2_terms),
+               length(data[:,47]), tuning[:r_star], 2)
 spmd(correction!, inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]);
      pids = workers())
+
+# Reference run
+#=φ_new_ref = next_φ(φ_old, coeff_vec, log_e_1_vec, log_e_2_vec,
+               length(data[:,47]), tuning[:r_star], 2)
+spmd(correction!, inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]);
+     pids = workers())=#
 
 @testset "Corection and Auxiliary Tests" begin
     @test convert(Vector, coeff_terms)[1] ≈ test_file_outputs["coeff_terms"][1]
@@ -213,14 +226,15 @@ end
 #@everywhere include("../src/util.jl")
 
 Random.seed!(47)
-s_t1_temp = distribute(s_t1_temp)
-ϵ_t = distribute(ϵ_t)
+@everywhere Random.seed!(47)
+s_t1_temp = distribute(s_t1_temp, dist = [1, nworkers()])
+ϵ_t = distribute(ϵ_t, dist = [1, nworkers()])
 # s_t_nontemp_std = convert(Array, s_t_nontemp)
-selection!(norm_weights, s_t1_temp, s_t_nontemp,ϵ_t, resampling_method = tuning[:resampling_method])
+selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t, resampling_method = tuning[:resampling_method])
 # s_t_nontemp = distribute(s_t_nontemp_std)
-s_t_nontemp_vec = convert(Matrix, s_t_nontemp)
-s_t1_temp_vec = convert(Matrix, s_t1_temp)
-ϵ_t_vec = convert(Matrix, ϵ_t)
+s_t_nontemp_vec = copy(convert(Matrix, s_t_nontemp))
+s_t1_temp_vec = copy(convert(Matrix, s_t1_temp))
+ϵ_t_vec = copy(convert(Matrix, ϵ_t))
 @testset "Selection Tests" begin
     @test s_t1_temp_vec[1] ≈ test_file_outputs["s_t1_temp"][1]
     @test s_t_nontemp_vec[1] ≈ test_file_outputs["s_t_nontemp"][1]
