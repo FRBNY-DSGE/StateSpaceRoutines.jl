@@ -37,7 +37,7 @@ s_t_nontemp   = test_file_inputs["s_t_nontemp"]
 HH            = cov(F_u)
 
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
-               initialize = false, parallel = false)
+               initialize = false)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
@@ -64,7 +64,7 @@ s_t_nontemp   = test_file_inputs["s_t_nontemp"]
 HH            = cov(F_u)
 
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψinc, data[:, 47], s_t_nontemp, det(HH), inv(HH);
-               initialize = false, parallel = false)
+               initialize = false)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
@@ -109,10 +109,10 @@ out_no_parallel = tempered_particle_filter(data, Φ, Ψt, F_ϵ, F_u, s_init; tun
 Random.seed!(47)
 out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψt, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true, dynamic_measurement = true)
 @testset "TPF tests" begin
-    @test out_no_parallel[1] ≈ -302.99967306704133
+    @test out_no_parallel[1] ≈ -305.2043197924593#-302.99967306704133
     # See equivalent test in tempered_particle_filter.jl
     if VERSION >= v"1.5"
-        @test out_parallel_one_worker[1] ≈ -307.9285106003482
+        @test out_parallel_one_worker[1] ≈ -305.2043197924593#-307.9285106003482
     elseif VERSION >= v"1.0"
         @test out_parallel_one_worker[1] ≈ -303.64727963725073 # Julia 6 was: -306.8211172094595
     end

@@ -4,13 +4,12 @@ using JLD, JLD2, Test, Distributions, Random, StateSpaceRoutines, BenchmarkTools
 addproc_num = 0 ## Set to 0 to not add workers
 nparts_mill = false
 nparts_mult = nparts_mill ? 10 : 1
-fixed_sched = [1.0]#[0.1,0.15,0.3,1.0]
 run_timing  = false
 only_tpf    = true
 n_states1   = false
 n_shocks1   = false
 
-@show fixed_sched, n_states1, n_shocks1
+@show n_states1, n_shocks1
 @show "Parallel " * string(addproc_num)
 @show "No of particles (in thousands): " * string(nparts_mult)
 
@@ -53,9 +52,6 @@ tuning = Dict(:r_star => 2., :c_init => 0.3, :target_accept_rate => 0.4,
               :resampling_method => :systematic, :n_mh_steps => 1,
               :n_particles => 1000 * nparts_mult, :n_presample_periods => 0,
               :allout => true, :parallel => true)
-if fixed_sched != []
-    tuning[:fixed_sched] = fixed_sched
-end
 
 # Define Φ and Ψ (can't be saved to JLD)
 if !n_states1 && n_shocks1
