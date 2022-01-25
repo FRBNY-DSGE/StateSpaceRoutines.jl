@@ -49,11 +49,11 @@ for i in 1:length(iters100)
     tpf_iters[i] = temp_out[1]
 end
 
-@show "Timing"
+#=@show "Timing"
 @btime ensemble_kalman_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init;
                        n_particles = $n_particles, n_presample_periods = $n_presample_periods,
                        allout = $allout, verbose = :none) ## 472.4 ms
-
+=#
 @assert abs(mean(iters100) - sum(kalman_out[1])) < 0.75 ## Randomness from the particles + initial states
 # @assert abs(mean(tpf_iters) - sum(kalman_out[1])) < 0.75 ## Generally not true
 
@@ -123,11 +123,11 @@ for i in 1:length(para1)
 end
 @assert abs(mean(para1) - sum(kalman_out[1])) < 0.75
 
-@show "Parallel Timing"
+#=@show "Parallel Timing"
 @btime ensemble_kalman_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init;
                        n_particles = $n_particles, n_presample_periods = $n_presample_periods,
                        allout = $allout, verbose = :none, parallel = true) ##
-
+=#
 # Test Parallel with multiple workers
 addprocs_frbny(8)
 
@@ -160,8 +160,9 @@ for i in 1:length(para_mult)
     para_mult[i] = out[1]
 end
 @assert abs(mean(para_mult) - sum(kalman_out[1])) < 0.75
-
+#=
 @show "Parallel Timing w/ multiple workers"
 @btime ensemble_kalman_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init;
                        n_particles = $n_particles, n_presample_periods = $n_presample_periods,
                        allout = $allout, verbose = :none, parallel = true) ##
+=#
