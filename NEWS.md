@@ -1,3 +1,7 @@
+# StateSpaceRoutine.jl v0.4.3 Release notes
+- Extensive tests for Tempered Particle Filter when run in parallel.
+- Sped up computation when there's only 1 state or shock.
+
 # StateSpaceRoutine.jl v0.4.2 Release notes
 - Fix Tempered Particle Filter when run in parallel with multiple nodes.
 
