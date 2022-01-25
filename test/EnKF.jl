@@ -1,4 +1,5 @@
 using JLD2, Distributions, StateSpaceRoutines, BenchmarkTools
+test_parallel = false
 # Read in from JLD
 data, TTT, RRR, CCC, ZZ, DD, F_ϵ, F_u, s_init = JLD2.jldopen("reference/tpf_main_inputs.jld2") do tpf_main_input
     tpf_main_input["data"],
@@ -128,6 +129,8 @@ end
                        n_particles = $n_particles, n_presample_periods = $n_presample_periods,
                        allout = $allout, verbose = :none, parallel = true) ##
 =#
+
+if test_parallel
 # Test Parallel with multiple workers
 addprocs_frbny(8)
 
@@ -166,3 +169,4 @@ end
                        n_particles = $n_particles, n_presample_periods = $n_presample_periods,
                        allout = $allout, verbose = :none, parallel = true) ##
 =#
+end
