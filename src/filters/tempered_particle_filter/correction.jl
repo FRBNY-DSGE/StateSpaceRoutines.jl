@@ -1,7 +1,7 @@
 """
 ```
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, y_t,
-    s_t_nontemp, det_HH, inv_HH; initialize = false, parallel = false,
+    s_t_nontemp, det_HH, inv_HH; initialize = false,
     poolmodel = false)
 ```
 
@@ -285,19 +285,12 @@ Compute (and modify in-place) incremental weights w̃ₜʲ and normalized weight
 """
 function correction!(inc_weights::Vector{Float64}, norm_weights::Vector{Float64},
                      φ_new::Float64, coeff_terms::V, log_e_1_terms::V, log_e_2_terms::V,
-                     n_obs::Int; parallel::Bool = false) where V<:AbstractVector{Float64}
+                     n_obs::Int) where V<:AbstractVector{Float64}
     # Compute incremental weights
-    n_particles = parallel ? length(inc_weights[:L]) : length(inc_weights)
-    if parallel
-        @sync @distributed for i in 1:n_particles
-            inc_weights[i] =
-                φ_new^(n_obs/2) * coeff_terms[i] * exp(log_e_1_terms[i]) * exp(φ_new*log_e_2_terms[i])
-        end
-    else
-        for i = 1:n_particles
-            inc_weights[i] =
-                φ_new^(n_obs/2) * coeff_terms[i] * exp(log_e_1_terms[i]) * exp(φ_new*log_e_2_terms[i])
-        end
+    n_particles = length(inc_weights)
+    for i = 1:n_particles
+        inc_weights[i] =
+            φ_new^(n_obs/2) * coeff_terms[i] * exp(log_e_1_terms[i]) * exp(φ_new*log_e_2_terms[i])
     end
 
     # Normalize weights

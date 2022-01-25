@@ -55,7 +55,7 @@ where `S<:AbstractFloat` and
 - `n_presample_periods::Int`: number of initial periods to omit from the
   log-likelihood calculation
 - `allout::Bool`: whether to return all outputs or just `sum(loglh)`
-- `parallel::Bool`: whether to use `SharedArray`s
+- `parallel::Bool`: whether to use `DistributedArray`s
 - `verbose::Symbol`: amount to print to STDOUT. One of `:none`, `:low`, or
   `:high`
 - `parallel_testing::Bool`: Set Random.seeds if testing parallel implementation

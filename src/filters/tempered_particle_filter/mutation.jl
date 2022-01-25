@@ -1,7 +1,7 @@
 """
 ```
 mutation!(Φ, Ψ, QQ, det_HH, inv_HH, φ_new, y_t, s_t, s_t1, ϵ_t, c, n_mh_steps;
-    parallel = false, poolmodel = false)
+    poolmodel = false)
 ```
 
 Mutate particles by taking Metropolis-Hastings steps in the `ϵ_t` space. This
