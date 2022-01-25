@@ -1,7 +1,7 @@
 name = "StateSpaceRoutines"
 uuid = "261fd431-d7e4-51f7-86ab-ce9e57fc1fff"
 authors = ["Aidan Gleich <aidan.gleich@ny.frb.org>", "Shlok Goyal <shlok.goyal@ny.frb.org>", "Alissa Johnson <alissa.johnson@ny.frb.org>"]
-version = "0.4.1"
+version = "0.4.3"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
