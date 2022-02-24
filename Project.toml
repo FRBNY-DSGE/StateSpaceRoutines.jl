@@ -17,20 +17,20 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Tracker = "9f7883ad-71c0-57eb-9f7f-b5c9e6d3789c"
 
 [compat]
+DistributedArrays = "^0.6"
 Distributions = "0.18, 0.19, 0.20, 0.21, 0.22, 0.23, 0.24, 0.25"
 PDMats = "^0.9.10, 0.10, 0.11"
 Roots = "0.7, 0.8, 1"
 Tracker = "0.2"
 julia = "1"
-DistributedArrays = "^0.6"
 
 [extras]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+JLD = "4138dd39-2aa7-5051-a626-17a0bb65d9c8"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-JLD = "4138dd39-2aa7-5051-a626-17a0bb65d9c8"
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 
 [targets]
 test = ["FileIO", "HDF5", "JLD2", "Test", "JLD", "BenchmarkTools"]
