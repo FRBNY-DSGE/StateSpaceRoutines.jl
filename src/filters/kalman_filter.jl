@@ -334,6 +334,90 @@ function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractAr
                            Zs::Vector{<:AbstractMatrix{S}}, Ds::Vector{<:AbstractVector{S}},
                            Es::Vector{<:AbstractMatrix{S}}, s_0::AbstractVector{S} = Vector{S}(undef, 0),
                            P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
+                           add_zlb_duration::Tuple{Bool, Int} = (false, 1),
+                           Nt0::Int = 0, tol::AbstractFloat = 0.0) where {S<:Real}
+    # Dimensions
+    Nt = size(y, 2) # number of periods of data
+
+    @assert first(regime_indices[1]) == 1
+    @assert last(regime_indices[end]) == Nt
+
+    # Initialize inputs and outputs
+    k = KalmanFilter(Ts[1], Rs[1], Cs[1], Qs[1], Zs[1], Ds[1], Es[1], s_0, P_0)
+
+    mynan = convert(S, NaN)
+    loglh = fill(mynan, Nt)
+
+    # Iterate through regimes
+    s_t = k.s_t
+    P_t = k.P_t
+
+    if add_zlb_duration[1]
+        zlb_st = similar(s_t)
+    end
+
+    if length(regime_indices) == 1
+        if add_zlb_duration[1]
+            loglh[1:add_zlb_duration[2]], s_t, P_t = kalman_likelihood(y[:, 1:add_zlb_duration[2]], Ts[1], Rs[1], Cs[1], Qs[1],
+                                      Zs[1], Ds[1], Es[1], s_t, P_t;
+                                      Nt0 = 0, tol = tol, switching = true)
+
+            zlb_st .= s_t
+
+            loglh[add_zlb_duration[2]+1:end] = kalman_likelihood(y[:, add_zlb_duration[2]+1:end], Ts[1], Rs[1], Cs[1], Qs[1],
+                                      Zs[1], Ds[1], Es[1], s_t, P_t;
+                                      Nt0 = 0, tol = tol, switching = false)
+        else
+            loglh = kalman_likelihood(y, Ts[1], Rs[1], Cs[1], Qs[1],
+                                      Zs[1], Ds[1], Es[1], s_t, P_t;
+                                      Nt0 = 0, tol = tol, switching = false)
+        end
+    else
+        if add_zlb_duration[1]
+            zlb_ind = findfirst(x -> add_zlb_duration[2] in x, regime_indices)
+            if add_zlb_duration[2] != regime_indices[zlb_ind][end]
+                insert!(regime_indices, (add_zlb_duration[2]+1):regime_indices[zlb_ind][end], zlb_ind+1)
+                regime_indices[zlb_ind] = regime_indices[zlb_ind][1]:add_zlb_duration[2]
+            end
+
+            for i = 1:length(regime_indices)
+                ts = regime_indices[i]
+                loglh[ts], s_t, P_t = kalman_likelihood(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i],
+                                                        Zs[i], Ds[i], Es[i], s_t, P_t;
+                                                        Nt0 = 0, tol = tol, switching = true)
+
+                if length(ts) > 0 && add_zlb_duration[2] == ts[end]
+                    zlb_st .= s_t
+                end
+            end
+        else
+            for i = 1:length(regime_indices)
+                ts = regime_indices[i]
+                loglh[ts], s_t, P_t = kalman_likelihood(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i],
+                                                        Zs[i], Ds[i], Es[i], s_t, P_t;
+                                                        Nt0 = 0, tol = tol, switching = true)
+            end
+        end
+    end
+
+    # Remove presample periods
+    loglh = remove_presample!(Nt0, loglh)
+
+    if add_zlb_duration[1]
+        return loglh, zlb_st
+    else
+        return loglh
+    end
+end
+
+#=
+function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
+                           Ts::Vector{<:AbstractMatrix{S}}, Rs::Vector{<:AbstractMatrix{S}},
+                           Cs::Vector{<:AbstractVector{S}}, Qs::Vector{<:AbstractMatrix{S}},
+                           Zs::Vector{<:AbstractMatrix{S}}, Ds::Vector{<:AbstractVector{S}},
+                           Es::Vector{<:AbstractMatrix{S}}, s_0::AbstractVector{S} = Vector{S}(undef, 0),
+                           P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
+                           add_zlb_duration::Tuple{Bool, Int} = (false, 1),
                            Nt0::Int = 0, tol::AbstractFloat = 0.0) where {S<:Real}
     # Dimensions
     Nt = size(y, 2) # number of periods of data
@@ -352,15 +436,108 @@ function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractAr
     P_t = k.P_t
 
     if length(regime_indices) == 1
-        loglh = kalman_likelihood(y, Ts[1], Rs[1], Cs[1], Qs[1],
-                                  Zs[1], Ds[1], Es[1], s_t, P_t;
-                                  Nt0 = 0, tol = tol, switching = false)
-    else
+        if add_zlb_duration[1]
+            loglh[1:add_zlb_duration[2]], s_t, P_t = kalman_likelihood(y[:, 1:add_zlb_duration[2]], Ts[1], Rs[1], Cs[1], Qs[1],
+                                      Zs[1], Ds[1], Es[1], s_t, P_t;
+                                      Nt0 = 0, tol = tol, switching = true)
+
+            ## Compute implied ZLB duration
+            ### Save settings that need to change to forecast from add_zlb_duration[2]
+            horizons = get_setting(m, :forecast_horizons)
+            orig_regime_eqcond_info = get_setting(m, :regime_eqcond_info)
+            orig_reg_forecast_start = get_setting(m, :reg_forecast_start)
+            orig_reg_post_conditional_end = get_setting(m, :reg_post_conditional_end)
+            orig_n_fcast_regimes = get_setting(m, :n_fcast_regimes)
+            orig_n_hist_regimes = get_setting(m, :n_hist_regimes)
+            orig_min_temp_altpol_len = haskey(m.settings, :min_temporary_altpolicy_length) ? get_setting(m, :min_temporary_altpolicy_length) : nothing
+            orig_max_temp_altpol_len = haskey(m.settings, :max_temporary_altpolicy_length) ? get_setting(m, :max_temporary_altpolicy_length) : nothing
+            orig_hist_temp_altpol_len = haskey(m.settings, :historical_temporary_altpolicy_length) ? get_setting(m, :historical_temporary_altpolicy_length) : nothing
+            orig_cred_vary_until = haskey(m.settings, :cred_vary_until) ? get_setting(m, :cred_vary_until) : nothing
+
+            ### Reset settings for add_zlb_duration[2]
+            for i in
+            get_setting(m, :regime_eqcond_info)[i].weights =
+weights now fixed to 2020Q4, remove ZLB in main policy?
+            reg_forecast_start = use regime_inds and the ts that's passed in
+            reg_post_conditional_end = reg_forecast_start
+            n_fcast_regimes = n_regimes - reg_forecast_start + 1
+            n_hist_regimes = n_regimes - n_fcast_regimes
+            min_temp_altpol_len (if exists) = 0
+            max_temp_altpol_len (if exists) = remove
+            historical_temporary_altpolicy_length = n_hist_regimes - 1 (this is a little bit of hard coding)
+            cred_vary_until = n_regimes
+
+
+            forecast(m, s_t, zeros(length(s_t), horizons), zeros(length(m.observables), horizons),
+                     zeros(length(m.pseudo_observables), horizons), zeros(length(m.exogenous_shocks), horizons);
+                     cond_type = :none)
+
+            ## Compute loss for ZLB duration
+
+            loglh[add_zlb_duration[2]+1:end] = kalman_likelihood(y[:, add_zlb_duration[2]+1:end], Ts[1], Rs[1], Cs[1], Qs[1],
+                                      Zs[1], Ds[1], Es[1], s_t, P_t;
+                                      Nt0 = 0, tol = tol, switching = false)
+        else
+            loglh = kalman_likelihood(y, Ts[1], Rs[1], Cs[1], Qs[1],
+                                      Zs[1], Ds[1], Es[1], s_t, P_t;
+                                      Nt0 = 0, tol = tol, switching = false)
+        end
+    elseif !add_zlb_duration[1]
         for i = 1:length(regime_indices)
             ts = regime_indices[i]
             loglh[ts], s_t, P_t = kalman_likelihood(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i],
                                                     Zs[i], Ds[i], Es[i], s_t, P_t;
                                                     Nt0 = 0, tol = tol, switching = true)
+        end
+    else
+        zlb_ind = findfirst(x -> add_zlb_duration[2] in x, regime_indices)
+        if add_zlb_duration[2] != regime_indices[zlb_ind][end]
+            insert!(regime_indices, (add_zlb_duration[2]+1):regime_indices[zlb_ind][end], zlb_ind+1)
+            regime_indices[zlb_ind] = regime_indices[zlb_ind][1]:add_zlb_duration[2]
+        end
+
+        for i = 1:length(regime_indices)
+            ts = regime_indices[i]
+            loglh[ts], s_t, P_t = kalman_likelihood(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i],
+                                                    Zs[i], Ds[i], Es[i], s_t, P_t;
+                                                    Nt0 = 0, tol = tol, switching = true)
+
+            if add_zlb_duration[2] == ts[end]
+                ## Compute implied ZLB duration
+                ### Save settings that need to change to forecast from add_zlb_duration[2]
+                horizons = get_setting(m, :forecast_horizons)
+                orig_regime_eqcond_info = get_setting(m, :regime_eqcond_info)
+                orig_reg_forecast_start = get_setting(m, :reg_forecast_start)
+                orig_reg_post_conditional_end = get_setting(m, :reg_post_conditional_end)
+                orig_n_fcast_regimes = get_setting(m, :n_fcast_regimes)
+                orig_n_hist_regimes = get_setting(m, :n_hist_regimes)
+                orig_min_temp_altpol_len = haskey(m.settings, :min_temporary_altpolicy_length) ? get_setting(m, :min_temporary_altpolicy_length) : nothing
+                orig_max_temp_altpol_len = haskey(m.settings, :max_temporary_altpolicy_length) ? get_setting(m, :max_temporary_altpolicy_length) : nothing
+                orig_hist_temp_altpol_len = haskey(m.settings, :historical_temporary_altpolicy_length) ? get_setting(m, :historical_temporary_altpolicy_length) : nothing
+                orig_cred_vary_until = haskey(m.settings, :cred_vary_until) ? get_setting(m, :cred_vary_until) : nothing
+
+                ### Reset settings for add_zlb_duration[2]
+                for a in i+1:length(get_setting(m, :regime_eqcond_info))
+                    get_setting(m, :regime_eqcond_info)[a].weights = get_setting(m, :regime_eqcond_info)[i].weights
+                    get_setting(m, :regime_eqcond_info)[a].alternative_policy = DSGE.flexible_ait()
+weights now fixed to 2020Q4, remove ZLB in main policy?
+            reg_forecast_start = use regime_inds and the ts that's passed in
+            reg_post_conditional_end = reg_forecast_start
+            n_fcast_regimes = n_regimes - reg_forecast_start + 1
+            n_hist_regimes = n_regimes - n_fcast_regimes
+            min_temp_altpol_len (if exists) = 0
+            max_temp_altpol_len (if exists) = remove
+            historical_temporary_altpolicy_length = n_hist_regimes - 1 (this is a little bit of hard coding)
+            cred_vary_until = n_regimes
+
+
+            forecast(m, s_t, zeros(length(s_t), horizons), zeros(length(m.observables), horizons),
+                     zeros(length(m.pseudo_observables), horizons), zeros(length(m.exogenous_shocks), horizons);
+                     cond_type = :none)
+
+            ## Compute loss for ZLB duration
+
+            end
         end
     end
 
@@ -369,6 +546,7 @@ function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractAr
 
     return loglh
 end
+=#
 
 function kalman_likelihood(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVector{S},
                            Q::AbstractMatrix{S}, Z::AbstractMatrix{S}, D::AbstractVector{S}, E::AbstractMatrix{S},
