@@ -174,7 +174,7 @@ function sequential_tempered_particle_filter(data::AbstractArray, Φ::Function, 
     # and a matrix of the particle locations, if desired by user
     if get_t_particle_dist
         t_norm_weights = Matrix{Float64}(undef,n_particles,T)
-        t_particle_dist = Dict{Int64,Matrix{Float64}}()
+        t_particle_dist = (n_states == 1 && n_shocks == 1) ? Dict{Int64,Vector{Float64}}() : Dict{Int64,Matrix{Float64}}()
     end
 
     # Initialize working variables
@@ -306,7 +306,6 @@ function sequential_tempered_particle_filter(data::AbstractArray, Φ::Function, 
                 selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t;
                            resampling_method = resampling_method)
             end
-
             loglh[t] += log(mean(inc_weights))
 
             ### 3. Mutation
@@ -421,7 +420,7 @@ function parallel_tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ
     # and a matrix of the particle locations, if desired by user
     if get_t_particle_dist
         t_norm_weights = Matrix{Float64}(undef,n_particles,T)
-        t_particle_dist = Dict{Int64,Matrix{Float64}}()
+        t_particle_dist = (n_states == 1 && n_shocks == 1) ? Dict{Int64,Vector{Float64}}() : Dict{Int64,Matrix{Float64}}()
     end
 
     # Initialize working variables
