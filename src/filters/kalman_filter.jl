@@ -572,6 +572,8 @@ function kalman_likelihood(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMa
         # Update and compute log-likelihood
         update!(k, y[:, t]; return_loglh = true, tol = tol)
         loglh[t] = k.loglh_t
+        println(t)
+        println(loglh[t])
     end
 
     # Remove presample periods
@@ -608,6 +610,8 @@ function kalman_likelihood(y::AbstractArray, T::TrackedMatrix{S}, R::TrackedMatr
         # Update and compute log-likelihood
         update!(k, y[:, t]; return_loglh = true, tol = tol)
         loglh[t] = k.loglh_t
+        println(t)
+        println(loglh[t])
     end
 
     # Remove presample periods
