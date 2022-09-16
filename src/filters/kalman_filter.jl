@@ -681,7 +681,11 @@ function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
 
     if return_loglh
         # p(y_t | y_{1:t-1})
-        k.loglh_t = -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2
+        if dy'*V_pred_inv*dy < 0
+            k.loglh_t = -1000000000000000000000000000000000
+        else
+            k.loglh_t = -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2
+        end
     end
     return nothing
 end
