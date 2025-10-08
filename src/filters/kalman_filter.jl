@@ -328,6 +328,8 @@ function kalman_filter(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix
     return loglh, s_pred, P_pred, s_filt, P_filt, s_0, P_0, s_T, P_T
 end
 
+
+
 function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
                            Ts::Vector{<:AbstractMatrix{S}}, Rs::Vector{<:AbstractMatrix{S}},
                            Cs::Vector{<:AbstractVector{S}}, Qs::Vector{<:AbstractMatrix{S}},
@@ -335,7 +337,7 @@ function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractAr
                            Es::Vector{<:AbstractMatrix{S}}, s_0::AbstractVector{S} = Vector{S}(undef, 0),
                            P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
                            add_zlb_duration::Tuple{Bool, Int} = (false, 1),
-                           Nt0::Int = 0, tol::AbstractFloat = 0.0) where {S<:Real}
+                           Nt0::Int = 0, tol::AbstractFloat = 0.0, switching::Bool = true) where {S<:Real}
     # Dimensions
     Nt = size(y, 2) # number of periods of data
 
@@ -368,7 +370,8 @@ function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractAr
                                       Zs[1], Ds[1], Es[1], s_t, P_t;
                                       Nt0 = 0, tol = tol, switching = false)
         else
-            loglh = kalman_likelihood(y, Ts[1], Rs[1], Cs[1], Qs[1],
+            
+            loglh = kalman_likelihood(y ,Ts[1],Rs[1], Cs[1], Qs[1],
                                       Zs[1], Ds[1], Es[1], s_t, P_t;
                                       Nt0 = 0, tol = tol, switching = false)
         end
@@ -549,11 +552,27 @@ end
 =#
 
 function kalman_likelihood(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVector{S},
-                           Q::AbstractMatrix{S}, Z::AbstractMatrix{S}, D::AbstractVector{S}, E::AbstractMatrix{S},
+                            Q::AbstractMatrix{S}, Z::AbstractMatrix{S}, D::AbstractVector{S}, E::AbstractMatrix{S},
+                            s_0::AbstractVector{S} = Vector{S}(undef, 0),
+                            P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
+                            Nt0::Int = 0, tol::AbstractFloat = 0.0,
+                            switching::Bool = true) where {S<:Real}
+
+    kalman_likelihood(y , T, R, C, Q, Z, D, E;
+                            s_0 = s_0,
+                            P_0 = P_0,
+                            Nt0 = Nt0, tol = tol,
+                            switching = switching)
+
+end
+
+function kalman_likelihood(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVector{S},
+                           Q::AbstractMatrix{S}, Z::AbstractMatrix{S}, D::AbstractVector{S}, E::AbstractMatrix{S};
                            s_0::AbstractVector{S} = Vector{S}(undef, 0),
-                           P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
+                           P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0),
                            Nt0::Int = 0, tol::AbstractFloat = 0.0,
                            switching::Bool = true) where {S<:Real}
+    
     # Dimensions
     Nt = size(y, 2) # number of periods of data
 
@@ -681,6 +700,7 @@ function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
 
     if return_loglh
         # p(y_t | y_{1:t-1})
+        @show det(V_pred)
         k.loglh_t = -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2
     end
     return nothing
