@@ -247,6 +247,7 @@ function kalman_filter(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
             s_filt[:,    ts] = s_filt_i
             P_filt[:, :, ts] = P_filt_i
         end
+
     end
 
     # Populate s_T and P_T
@@ -576,6 +577,7 @@ function kalman_likelihood(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMa
     # Dimensions
     Nt = size(y, 2) # number of periods of data
 
+
     # Initialize inputs and outputs
     k = KalmanFilter(T, R, C, Q, Z, D, E, s_0, P_0)
 
@@ -650,6 +652,7 @@ function forecast!(k::KalmanFilter{S}, RQR′::AbstractMatrix = k.R * k.Q * k.R'
 
     k.s_t = T*s_filt + C         # s_{t|t-1} = T*s_{t-1|t-1} + C
     k.P_t = T*P_filt*T' + RQR′   # P_{t|t-1} = Var s_{t|t-1} = T*P_{t-1|t-1}*T' + R*Q*R'
+    #@show P_filt
     return nothing
 end
 
@@ -677,12 +680,22 @@ function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
     s_pred = k.s_t
     P_pred = k.P_t
 
+    #println("z mat")
+    #@show Z
+
     y_pred = Z*s_pred + D             # y_{t|t-1} = Z*s_{t|t-1} + D
 
     V_pred     = Z*P_pred*Z' + E      # V_{t|t-1} = Var y_{t|t-1} = Z*P_{t|t-1}*Z' + E
     V_pred     = (V_pred + V_pred')/2 # V_pred should be symmetric; this guarantees symmetry and divides by 2 so entries aren't double
+
+    #println("Forecast covariance")
+    #@show det(V_pred)
+
     V_pred_inv = inv(V_pred)
     dy         = y_obs - y_pred       # dy = y_t - y_{t|t-1} (prediction error)
+
+    #println("Prediction error")
+    #@show dy
 
     if !k.converged
         PZV = P_pred'*Z'*V_pred_inv
@@ -697,6 +710,9 @@ function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
 
     k.s_t = s_pred + PZV*dy       # s_{t|t} = s_{t|t-1} + P_{t|t-1}'*Z'/V_{t|t-1}*dy
     k.P_t = P_pred - PZV*Z*P_pred # P_{t|t} = P_{t|t-1} - P_{t|t-1}'*Z'/V_{t|t-1}*Z*P_{t|t-1}
+
+    # Save V_pred matrix
+
 
     if return_loglh
         # p(y_t | y_{1:t-1})
