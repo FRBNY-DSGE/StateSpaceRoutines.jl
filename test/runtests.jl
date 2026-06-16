@@ -7,7 +7,8 @@ my_tests = [
             "tempered_particle_filter",
             "smoothers",
             "dyn_measure_tpf",
-            "EnKF"
+            "EnKF",
+            "tv_tpf"
             ]
 
 for test in my_tests

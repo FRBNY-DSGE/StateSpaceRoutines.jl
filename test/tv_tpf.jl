@@ -31,11 +31,11 @@ end
 # Distributions
 F_u1 = MvNormal(zeros(size(Es[1],1)),Es[1])
 F_u2 = MvNormal(zeros(size(Es[2],1)),Es[2])
-F_u_vec = AbstractVector{Distribution}([F_u1, F_u2])
+F_u_vec = Vector{Distribution}([F_u1, F_u2])
 
 F_ϵ1 = MvNormal(zeros(size(Qs[1],1)),Qs[1])
 F_ϵ2 = MvNormal(zeros(size(Qs[2],1)),Qs[2])
-F_ϵ_vec = AbstractVector{Distribution}([F_ϵ1, F_ϵ2])
+F_ϵ_vec = Vector{Distribution}([F_ϵ1, F_ϵ2])
 
 # Regime indices
 reg_ts = ones(Int64, length(regime_inds[1]))
