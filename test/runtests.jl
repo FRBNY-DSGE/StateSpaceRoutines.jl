@@ -7,6 +7,7 @@ my_tests = [
             "tempered_particle_filter",
             "smoothers",
             "dyn_measure_tpf",
+            "tv_tpf",
             "EnKF"
             ]
 

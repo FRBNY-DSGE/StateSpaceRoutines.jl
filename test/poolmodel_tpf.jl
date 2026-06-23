@@ -28,7 +28,7 @@ Random.seed!(1793)
 Ψ47_pm(x) = Ψpm(x,data[:,47])
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ47_pm, data[:, 47],
                s_t_nontemp, det(HH), inv(HH);
-               initialize = false, parallel = false,
+               initialize = false,
                poolmodel = true)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
@@ -52,7 +52,7 @@ s_t_nontemp0 = [.5; .5] * ones(1, 900)
 s_t_nontemp = hcat(s_t_nontemp0, repeat([.49; .51], 1, 100))
 weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ47_pm, data[:, 47],
                s_t_nontemp, det(HH), inv(HH);
-               initialize = false, parallel = false,
+               initialize = false,
                poolmodel = true)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))

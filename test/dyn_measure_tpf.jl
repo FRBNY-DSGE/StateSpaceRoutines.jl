@@ -1,4 +1,4 @@
-using JLD2
+using JLD2, BenchmarkTools
 
 # Read in from JLD
 tpf_main_input = load("reference/tpf_main_inputs.jld2")
@@ -36,11 +36,16 @@ inc_weights   = test_file_inputs["inc_weights"]
 s_t_nontemp   = test_file_inputs["s_t_nontemp"]
 HH            = cov(F_u)
 
-weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det(HH), inv(HH);
+det_HH = det(HH)
+inv_HH = inv(HH)
+weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47], s_t_nontemp, det_HH, inv_HH;
                initialize = false)
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
-
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
+
+@btime weight_kernel!($coeff_terms, $log_e_1_terms, $log_e_2_terms, $φ_old, $Ψ, $(data[:, 47]), $s_t_nontemp, $det_HH, $inv_HH; initialize = false)
+@btime next_φ($φ_old, $coeff_terms, $log_e_1_terms, $log_e_2_terms, $(length(data[:,47])), $(tuning[:r_star]), 2)
+@btime correction!($inc_weights, $norm_weights, $φ_new, $coeff_terms, $log_e_1_terms, $log_e_2_terms, $(length(data[:,47])))
 
 @testset "Correction and Auxiliary Tests" begin
     @test coeff_terms[1]   ≈ test_file_outputs["coeff_terms"][1]
@@ -82,7 +87,8 @@ s_t1_temp = test_file_inputs["s_t1_temp"]
 ϵ_t = test_file_inputs["eps_t"]
 
 Random.seed!(47)
-selection!(norm_weights, s_t1_temp, s_t_nontemp,ϵ_t, resampling_method = tuning[:resampling_method])
+selection!(norm_weights, s_t1_temp, s_t_nontemp, ϵ_t, resampling_method = tuning[:resampling_method])
+@btime selection!($norm_weights, $s_t1_temp, $s_t_nontemp, $ϵ_t, resampling_method = $(tuning[:resampling_method]))
 @testset "Selection Tests" begin
     @test s_t1_temp[1]   ≈ test_file_outputs["s_t1_temp"][1]
     @test s_t_nontemp[1] ≈ test_file_outputs["s_t_nontemp"][1]
@@ -95,8 +101,10 @@ accept_rate = test_file_inputs["accept_rate"]
 c = test_file_inputs["c"]
 
 c = update_c(c, accept_rate, tuning[:target_accept_rate])
+@btime update_c($c, $accept_rate, $(tuning[:target_accept_rate]))
 Random.seed!(47)
-StateSpaceRoutines.mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps])
+StateSpaceRoutines.mutation!(Φ, Ψ, QQ, det_HH, inv_HH, φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps])
+@btime StateSpaceRoutines.mutation!($Φ, $Ψ, $QQ, $det_HH, $inv_HH, $φ_new, $(data[:,47]), $s_t_nontemp, $s_t1_temp, $ϵ_t, $c, $(tuning[:n_mh_steps]))
 
 @testset "Mutation Tests" begin
     @test s_t_nontemp[1] ≈ test_file_outputs["s_t_nontemp_mutation"][1]
@@ -108,6 +116,8 @@ Random.seed!(47)
 out_no_parallel = tempered_particle_filter(data, Φ, Ψt, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = false, dynamic_measurement = true)
 Random.seed!(47)
 out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψt, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true, dynamic_measurement = true)
+@btime tempered_particle_filter($data, $Φ, $Ψt, $F_ϵ, $F_u, $s_init; $tuning..., verbose = :none, parallel = false, dynamic_measurement = true)
+@btime tempered_particle_filter($data, $Φ, $Ψt, $F_ϵ, $F_u, $s_init; $tuning..., verbose = :none, parallel = true, dynamic_measurement = true)
 @testset "TPF tests" begin
     @test out_no_parallel[1] ≈ -305.2043197924593#-302.99967306704133
     # See equivalent test in tempered_particle_filter.jl

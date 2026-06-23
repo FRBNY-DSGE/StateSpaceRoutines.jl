@@ -1,4 +1,4 @@
-using JLD, JLD2, Test, StateSpaceRoutines, Distributions, Random
+using JLD, JLD2, Test, StateSpaceRoutines, Distributions, Random, BenchmarkTools
 # Read in from JLD
 tpf_main_input = load("reference/tpf_main_inputs.jld2")
 data = tpf_main_input["data"]
@@ -39,6 +39,12 @@ weight_kernel!(coeff_terms, log_e_1_terms, log_e_2_terms, φ_old, Ψ, data[:, 47
 φ_new = next_φ(φ_old, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]), tuning[:r_star], 2)
 correction!(inc_weights, norm_weights, φ_new, coeff_terms, log_e_1_terms, log_e_2_terms, length(data[:,47]))
 
+det_HH = det(HH)
+inv_HH = inv(HH)
+@btime weight_kernel!($coeff_terms, $log_e_1_terms, $log_e_2_terms, $φ_old, $Ψ, $(data[:, 47]), $s_t_nontemp, $det_HH, $inv_HH; initialize = false)
+@btime next_φ($φ_old, $coeff_terms, $log_e_1_terms, $log_e_2_terms, $(length(data[:,47])), $(tuning[:r_star]), 2)
+@btime correction!($inc_weights, $norm_weights, $φ_new, $coeff_terms, $log_e_1_terms, $log_e_2_terms, $(length(data[:,47])))
+
 @testset "Corection and Auxiliary Tests" begin
     @test coeff_terms[1] ≈ test_file_outputs["coeff_terms"][1]
     @test log_e_1_terms[1] ≈ test_file_outputs["log_e_1_terms"][1]
@@ -53,6 +59,7 @@ s_t1_temp = test_file_inputs["s_t1_temp"]
 
 Random.seed!(47)
 selection!(norm_weights, s_t1_temp, s_t_nontemp,ϵ_t, resampling_method = tuning[:resampling_method])
+@btime selection!($norm_weights, $s_t1_temp, $s_t_nontemp, $ϵ_t, resampling_method = $(tuning[:resampling_method]))
 @testset "Selection Tests" begin
     @test s_t1_temp[1] ≈ test_file_outputs["s_t1_temp"][1]
     @test s_t_nontemp[1] ≈ test_file_outputs["s_t_nontemp"][1]
@@ -65,8 +72,10 @@ accept_rate = test_file_inputs["accept_rate"]
 c = test_file_inputs["c"]
 
 c = update_c(c, accept_rate, tuning[:target_accept_rate])
+@btime update_c($c, $accept_rate, $(tuning[:target_accept_rate]))
 Random.seed!(47)
 StateSpaceRoutines.mutation!(Φ, Ψ, QQ, det(HH), inv(HH), φ_new, data[:,47], s_t_nontemp, s_t1_temp, ϵ_t, c, tuning[:n_mh_steps])
+@btime StateSpaceRoutines.mutation!($Φ, $Ψ, $QQ, $det_HH, $inv_HH, $φ_new, $(data[:,47]), $s_t_nontemp, $s_t1_temp, $ϵ_t, $c, $(tuning[:n_mh_steps]))
 
 @testset "Mutation Tests" begin
     @test s_t_nontemp[1] ≈ test_file_outputs["s_t_nontemp_mutation"][1]
@@ -78,6 +87,8 @@ Random.seed!(47)
 out_no_parallel = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = false)
 Random.seed!(47)
 out_parallel_one_worker = tempered_particle_filter(data, Φ, Ψ, F_ϵ, F_u, s_init; tuning..., verbose = :none, parallel = true)
+@btime tempered_particle_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init; $tuning..., verbose = :none, parallel = false)
+@btime tempered_particle_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init; $tuning..., verbose = :none, parallel = true)
 @testset "TPF tests" begin
     @test out_no_parallel[1] ≈ out_parallel_one_worker[1]#-302.99967306704133
 
