@@ -55,7 +55,7 @@ end
                        n_particles = $n_particles, n_presample_periods = $n_presample_periods,
                        allout = $allout, verbose = :none) ## 472.4 ms
 =#
-@assert abs(mean(iters100) - sum(kalman_out[1])) < 0.75 ## Randomness from the particles + initial states
+@test abs(mean(iters100) - sum(kalman_out[1])) < 0.75 ## Randomness from the particles + initial states
 # @assert abs(mean(tpf_iters) - sum(kalman_out[1])) < 0.75 ## Generally not true
 
 
@@ -122,7 +122,7 @@ for i in 1:length(para1)
                                  verbose = :none, parallel = true)
     para1[i] = out[1]
 end
-@assert abs(mean(para1) - sum(kalman_out[1])) < 0.75
+@test abs(mean(para1) - sum(kalman_out[1])) < 0.75
 
 #=@show "Parallel Timing"
 @btime ensemble_kalman_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init;
