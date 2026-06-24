@@ -10,6 +10,7 @@ my_tests = [
             "tv_tpf",
             "initialization",
             "filters/util",
+            "smoothers/util",
             "filters/tempered_particle_filter/util",
             "EnKF"
             ]
