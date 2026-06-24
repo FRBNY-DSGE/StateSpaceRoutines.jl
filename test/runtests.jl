@@ -9,6 +9,7 @@ my_tests = [
             "dyn_measure_tpf",
             "tv_tpf",
             "initialization",
+            "filters/tempered_particle_filter/util",
             "EnKF"
             ]
 
