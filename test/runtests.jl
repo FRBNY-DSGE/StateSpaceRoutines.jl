@@ -9,6 +9,7 @@ my_tests = [
             "dyn_measure_tpf",
             "tv_tpf",
             "initialization",
+            "util",
             "filters/util",
             "smoothers/util",
             "filters/tempered_particle_filter/util",
