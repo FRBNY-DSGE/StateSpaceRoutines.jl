@@ -8,6 +8,7 @@ my_tests = [
             "smoothers",
             "dyn_measure_tpf",
             "tv_tpf",
+            "initialization",
             "EnKF"
             ]
 
