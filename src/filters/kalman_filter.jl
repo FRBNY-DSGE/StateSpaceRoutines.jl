@@ -553,7 +553,7 @@ end
 
 function kalman_likelihood(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVector{S},
                             Q::AbstractMatrix{S}, Z::AbstractMatrix{S}, D::AbstractVector{S}, E::AbstractMatrix{S},
-                            s_0::AbstractVector{S} = Vector{S}(undef, 0),
+                            s_0::AbstractVector{S},
                             P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
                             Nt0::Int = 0, tol::AbstractFloat = 0.0,
                             switching::Bool = true) where {S<:Real}
@@ -700,7 +700,6 @@ function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
 
     if return_loglh
         # p(y_t | y_{1:t-1})
-        @show det(V_pred)
         k.loglh_t = -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2
     end
     return nothing

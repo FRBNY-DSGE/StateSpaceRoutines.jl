@@ -145,12 +145,15 @@ function sequential_tempered_particle_filter(data::AbstractArray, Φ::Function, 
     QQerr = false
     HHerr = false
     try
-        QQ = cov(F_ϵ)
+        # `cov(::MvNormal)` returns a PDMat on modern Distributions; materialize to a
+        # dense Matrix so downstream signatures (e.g. mutation!) that expect
+        # `Matrix{Float64}` still dispatch.
+        QQ = Matrix(cov(F_ϵ))
     catch
         QQerr = true
     end
     try
-        HH = cov(F_u)
+        HH = Matrix(cov(F_u))
     catch
         HHerr = true
     end
@@ -392,12 +395,15 @@ function parallel_tempered_particle_filter(data::AbstractArray, Φ::Function, Ψ
     QQerr = false
     HHerr = false
     try
-        QQ = cov(F_ϵ)
+        # `cov(::MvNormal)` returns a PDMat on modern Distributions; materialize to a
+        # dense Matrix so downstream signatures (e.g. mutation!) that expect
+        # `Matrix{Float64}` still dispatch.
+        QQ = Matrix(cov(F_ϵ))
     catch
         QQerr = true
     end
     try
-        HH = cov(F_u)
+        HH = Matrix(cov(F_u))
     catch
         HHerr = true
     end
