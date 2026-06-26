@@ -1,7 +1,8 @@
-using JLD2, Distributions, StateSpaceRoutines, BenchmarkTools
-test_parallel = false
-# Read in from JLD
-data, TTT, RRR, CCC, ZZ, DD, F_ϵ, F_u, s_init = JLD2.jldopen("reference/tpf_main_inputs.jld2") do tpf_main_input
+using JLD2, Distributions, StateSpaceRoutines, BenchmarkTools, Test
+path = dirname(@__FILE__)
+run_benchmarks = false
+# Read in from JLD2
+data, TTT, RRR, CCC, ZZ, DD, F_ϵ, F_u, s_init = JLD2.jldopen("$path/reference/tpf_main_inputs.jld2") do tpf_main_input
     tpf_main_input["data"],
     tpf_main_input["TTT"],
     tpf_main_input["RRR"],
@@ -26,8 +27,9 @@ get_t_particle_dist = true
 s0_mean = vec(mean(s_init, dims = 2))
 P0_mean = cov(s_init, dims = 2)
 
-kalman_out = kalman_filter(data, TTT, RRR, CCC, cov(F_ϵ), ZZ, DD, cov(F_u), s0_mean, P0_mean)#, s_init, Matrix{Float64}(undef,0,0))
+kalman_out = kalman_filter(data, TTT, RRR, CCC, cov(F_ϵ), ZZ, DD, cov(F_u), s0_mean, P0_mean)
 
+#, s_init, Matrix{Float64}(undef,0,0))
 #s_0 = rand(DegenerateMvNormal(kalman_out[6], kalman_out[7]), n_particles)
 # repeat(kalman_out[6], outer = [1,n_particles])
 iters100 = zeros(50) # Run EnKF 100 times to get loglh close to truth
@@ -50,11 +52,13 @@ for i in 1:length(iters100)
     tpf_iters[i] = temp_out[1]
 end
 
-#=@show "Timing"
-@btime ensemble_kalman_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init;
-                       n_particles = $n_particles, n_presample_periods = $n_presample_periods,
-                       allout = $allout, verbose = :none) ## 472.4 ms
-=#
+if run_benchmarks
+    @show "Timing"
+    @btime ensemble_kalman_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init;
+                           n_particles = $n_particles, n_presample_periods = $n_presample_periods,
+                           allout = $allout, verbose = :none) ## 472.4 ms
+end
+
 @test abs(mean(iters100) - sum(kalman_out[1])) < 0.75 ## Randomness from the particles + initial states
 # @assert abs(mean(tpf_iters) - sum(kalman_out[1])) < 0.75 ## Generally not true
 
@@ -120,12 +124,14 @@ for i in 1:length(para1)
                                  n_particles = n_particles, n_presample_periods = n_presample_periods,
                                  allout = allout, get_t_particle_dist = get_t_particle_dist,
                                  verbose = :none, parallel = true)
-    para1[i] = out[1]
+    para1[i] = out[1]   
 end
 @test abs(mean(para1) - sum(kalman_out[1])) < 0.75
 
-#=@show "Parallel Timing"
-@btime ensemble_kalman_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init;
-                       n_particles = $n_particles, n_presample_periods = $n_presample_periods,
-                       allout = $allout, verbose = :none, parallel = true) ##
-=#
+if run_benchmarks
+    @show "Parallel Timing"
+    @btime ensemble_kalman_filter($data, $Φ, $Ψ, $F_ϵ, $F_u, $s_init;
+                           n_particles = $n_particles, n_presample_periods = $n_presample_periods,
+                           allout = $allout, verbose = :none, parallel = true) ##
+end
+
