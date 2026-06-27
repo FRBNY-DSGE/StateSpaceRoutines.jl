@@ -9,8 +9,8 @@ RRR = tpf_main_input["RRR"]
 CCC = tpf_main_input["CCC"]
 ZZ = tpf_main_input["ZZ"]
 DD = tpf_main_input["DD"]
-F_ϵ = tpf_main_input["F_epsilon"]
-F_u = tpf_main_input["F_u"]
+F_ϵ = as_mvnormal(tpf_main_input["F_epsilon"])
+F_u = as_mvnormal(tpf_main_input["F_u"])
 s_init = tpf_main_input["s_init"]
 
 # Tune algorithm

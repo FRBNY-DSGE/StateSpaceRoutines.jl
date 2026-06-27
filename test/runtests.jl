@@ -17,10 +17,33 @@ my_tests = [
             "parallel_tempered_particle_filter"
             ]
 
-# Common imports seeded into each per-file module below (mirrors what this file's
-# top-level `using`s provided when every test was included into a shared `Main`).
-const _prelude = :(using StateSpaceRoutines, Test, HDF5, JLD2, FileIO,
-                         LinearAlgebra, PDMats, Distributions, Random)
+# Common imports + helpers seeded into each per-file module below (mirrors what this
+# file's top-level `using`s provided when every test was included into a shared `Main`).
+const _prelude = quote
+    using StateSpaceRoutines, Test, HDF5, JLD2, FileIO,
+          LinearAlgebra, PDMats, Distributions, Random
+
+    # JLD2 may deserialize a saved MvNormal as an opaque JLD2.ReconstructedMutable when the
+    # installed Distributions/PDMats type layout differs from when the reference file was
+    # written (CI commonly resolves newer versions than the machine that saved it). Rebuild
+    # a real MvNormal from the loaded fields so cov()/indexing/the filter work regardless.
+    function as_mvnormal(F)
+        F isa Distributions.MvNormal && return F
+        μ = collect(getproperty(F, :μ))
+        Σobj = getproperty(F, :Σ)
+        Σ = if Σobj isa AbstractMatrix
+            Matrix(Σobj)                              # already a (PD)Matrix
+        elseif hasproperty(Σobj, :mat)
+            Matrix(getproperty(Σobj, :mat))           # PDMat.mat field
+        else
+            Matrix(getproperty(Σobj, :chol))          # fall back to the Cholesky factor
+        end
+        return MvNormal(μ, Σ)
+    end
+end
+
+# The parallel test runs directly in Main (see below); give Main the same helper.
+eval(_prelude)
 
 # Run each test file in its OWN module. Several files define top-level helpers with
 # the same names (Φ, Ψ, Ψt, …); in a shared `Main` those redefinitions triggered

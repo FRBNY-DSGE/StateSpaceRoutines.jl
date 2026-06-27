@@ -13,6 +13,8 @@ data, TTT, RRR, CCC, ZZ, DD, F_ϵ, F_u, s_init = JLD2.jldopen("$path/reference/t
     tpf_main_input["F_u"],
     tpf_main_input["s_init"]
 end
+F_ϵ = as_mvnormal(F_ϵ)
+F_u = as_mvnormal(F_u)
 
 # Tune algorithm
 n_particles = 1000
