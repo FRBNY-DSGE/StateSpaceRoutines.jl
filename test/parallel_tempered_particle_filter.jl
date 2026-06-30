@@ -3,7 +3,7 @@ using JLD, JLD2, Test, Distributions, Random, StateSpaceRoutines, BenchmarkTools
 addproc_num = 0 ## Set to 0 to not add workers
 nparts_mill = false
 nparts_mult = nparts_mill ? 10 : 1
-run_timing  = false
+run_timing  = true
 only_tpf    = true
 n_states1   = false
 n_shocks1   = false

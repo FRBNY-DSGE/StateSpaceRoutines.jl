@@ -20,7 +20,7 @@ Tracker = "9f7883ad-71c0-57eb-9f7f-b5c9e6d3789c"
 DistributedArrays = "^0.6"
 Distributions = "0.18, 0.19, 0.20, 0.21, 0.22, 0.23, 0.24, 0.25"
 PDMats = "^0.9.10, 0.10, 0.11"
-Roots = "0.7, 0.8, 1"
+Roots = "0.7, 0.8, 1, 2, 3"
 Tracker = "0.2"
 julia = "1"
 

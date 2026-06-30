@@ -51,6 +51,8 @@ tpf_out = tempered_particle_filter(y, Φ_vec, Ψ_vec, F_ϵ_vec, F_u_vec,
                          Φ_regime_inds = reg_ts, Ψ_regime_inds = reg_ts, verbose = :none,
                          F_ϵ_regime_inds = reg_ts, F_u_regime_inds = reg_ts)
 
-@assert abs(tpf_out[1] - sum(out[1])) < 20.0
+@testset "TV-TPF log-likelihood close to Kalman filter" begin
+    @test abs(tpf_out[1] - sum(out[1])) < 20.0
+end
 
 nothing
