@@ -230,7 +230,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Vector{Function},
         end
 
         # Adjust other values to remove rows/columns with NaN values
-        nonmissing = isfinite.(y_t)
+        nonmissing = isfinite.(coalesce.(y_t, NaN))
         y_t = float.(y_t[nonmissing])
 
         n_obs_t    = length(y_t)
