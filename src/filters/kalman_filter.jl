@@ -553,7 +553,7 @@ end
 
 function kalman_likelihood(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVector{S},
                             Q::AbstractMatrix{S}, Z::AbstractMatrix{S}, D::AbstractVector{S}, E::AbstractMatrix{S},
-                            s_0::AbstractVector{S} = Vector{S}(undef, 0),
+                            s_0::AbstractVector{S},
                             P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0);
                             Nt0::Int = 0, tol::AbstractFloat = 0.0,
                             switching::Bool = true) where {S<:Real}

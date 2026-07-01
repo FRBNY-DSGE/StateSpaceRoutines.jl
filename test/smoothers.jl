@@ -1,4 +1,4 @@
-using StateSpaceRoutines, JLD2, HDF5, Random
+using StateSpaceRoutines, JLD2, HDF5, Random, Test
 path = dirname(@__FILE__)
 
 # Initialize arguments to function
@@ -57,18 +57,18 @@ regime_inds0 = Vector{Vector{Int64}}(undef, nreg)
 regime_inds = Vector{UnitRange{Int64}}(undef, nreg)
 
 for i in 1:nreg
-    TTTs[i] = h5read("reference/time_varying_system.h5", "T$(i)")
-    RRRs[i] = h5read("reference/time_varying_system.h5", "R$(i)")
-    CCCs[i] = h5read("reference/time_varying_system.h5", "C$(i)")
-    ZZs[i] = h5read("reference/time_varying_system.h5", "Z$(i)")
-    DDs[i] = h5read("reference/time_varying_system.h5", "D$(i)")
-    QQs[i] = h5read("reference/time_varying_system.h5", "Q$(i)")
-    EEs[i] = h5read("reference/time_varying_system.h5", "E$(i)")
-    regime_inds0[i] = h5read("reference/time_varying_system.h5", "regime_inds$(i)")
+    TTTs[i] = h5read("$path/reference/time_varying_system.h5", "T$(i)")
+    RRRs[i] = h5read("$path/reference/time_varying_system.h5", "R$(i)")
+    CCCs[i] = h5read("$path/reference/time_varying_system.h5", "C$(i)")
+    ZZs[i] = h5read("$path/reference/time_varying_system.h5", "Z$(i)")
+    DDs[i] = h5read("$path/reference/time_varying_system.h5", "D$(i)")
+    QQs[i] = h5read("$path/reference/time_varying_system.h5", "Q$(i)")
+    EEs[i] = h5read("$path/reference/time_varying_system.h5", "E$(i)")
+    regime_inds0[i] = h5read("$path/reference/time_varying_system.h5", "regime_inds$(i)")
     regime_inds[i] = regime_inds0[i][1]:regime_inds0[i][end]
 end
 
-y = h5read("reference/time_varying_system.h5", "data")
+y = h5read("$path/reference/time_varying_system.h5", "data")
 
 # Run smoothers
 states = Dict{Symbol, Matrix{Float64}}()

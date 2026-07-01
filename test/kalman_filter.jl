@@ -1,13 +1,14 @@
-using BenchmarkTools, JLD2, HDF5
+using BenchmarkTools, JLD2, HDF5, Test, StateSpaceRoutines
 import JLD2: @load
 path = dirname(@__FILE__)
+run_benchmarks = false
 
 # Initialize arguments to function
 @load "$path/reference/kalman_filter_args.jld2" y T R C Q Z D E z0 P0
 
 # Kalman Filter (all arguments and no presample)
 out = kalman_filter(y, T, R, C, Q, Z, D, E, z0, P0)
-@btime kalman_filter($y, $T, $R, $C, $Q, $Z, $D, $E, $z0, $P0)
+run_benchmarks && @btime kalman_filter($y, $T, $R, $C, $Q, $Z, $D, $E, $z0, $P0)
 @testset "Basic Kalman Filter (all arguments, no presample)" begin
     h5open("$path/reference/kalman_filter_out.h5", "r") do h5
         @test read(h5, "log_likelihood") ≈ sum(out[1])
@@ -21,7 +22,7 @@ end
 
 # Kalman Filter (no initial conditions and no presample)
 out = kalman_filter(y, T, R, C, Q, Z, D, E)
-@btime kalman_filter($y, $T, $R, $C, $Q, $Z, $D, $E)
+run_benchmarks && @btime kalman_filter($y, $T, $R, $C, $Q, $Z, $D, $E)
 @testset "Kalman Filter (no initial conditions)" begin
     h5open("$path/reference/kalman_filter_out.h5", "r") do h5
         @test read(h5, "log_likelihood") ≈ sum(out[1])
@@ -37,7 +38,7 @@ end
 
 # Kalman filter with presample
 out = kalman_filter(y, T, R, C, Q, Z, D, E, Nt0=4)
-@btime kalman_filter($y, $T, $R, $C, $Q, $Z, $D, $E, Nt0=4)
+run_benchmarks && @btime kalman_filter($y, $T, $R, $C, $Q, $Z, $D, $E, Nt0=4)
 @testset "Kalman Filter (presample)" begin
     h5open("$path/reference/kalman_filter_out_presample.h5", "r") do h5
         @test read(h5, "log_likelihood") ≈ sum(out[1])
@@ -53,7 +54,7 @@ end
 @load "$path/reference/kalman_filter_args_zlb.jld2" y Ts Rs Cs Qs Zs Ds Es regime_inds
 
 out = kalman_filter(regime_inds, y, Ts, Rs, Cs, Qs, Zs, Ds, Es)
-@btime kalman_filter($regime_inds, $y, $Ts, $Rs, $Cs, $Qs, $Zs, $Ds, $Es)
+run_benchmarks && @btime kalman_filter($regime_inds, $y, $Ts, $Rs, $Cs, $Qs, $Zs, $Ds, $Es)
 @testset "Kalman Filter (Multi-regime/ZLB)" begin
     h5open("$path/reference/kalman_filter_out_zlb.h5", "r") do h5
         @test read(h5, "log_likelihood") ≈ sum(out[1])

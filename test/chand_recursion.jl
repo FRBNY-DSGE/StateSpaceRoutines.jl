@@ -1,5 +1,6 @@
-using BenchmarkTools
+using BenchmarkTools, HDF5, Test, StateSpaceRoutines
 path = dirname(@__FILE__)
+run_benchmarks = false
 file = h5open("$path/reference/kalman_filter_args.h5", "r")
 y = read(file, "data")
 
@@ -10,7 +11,7 @@ close(file)
 
 # Basic Chand Recursion (all arguments, no presample)
 out = chand_recursion(y, T, R, C, Q, Z, D, E, s_0, P_0)
-@btime chand_recursion($y, $T, $R, $C, $Q, $Z, $D, $E, $s_0, $P_0)
+run_benchmarks && @btime chand_recursion($y, $T, $R, $C, $Q, $Z, $D, $E, $s_0, $P_0)
 @testset "Basic Chand Recursion (no presample, all)" begin
     h5open("$path/reference/kalman_filter_out.h5", "r") do h5
         @test read(h5, "log_likelihood") ≈ out[1]
@@ -22,7 +23,7 @@ end
 
 # Chand Recursion (no initial conditions)
 out = chand_recursion(y, T, R, C, Q, Z, D, E)
-@btime chand_recursion($y, $T, $R, $C, $Q, $Z, $D, $E)
+run_benchmarks && @btime chand_recursion($y, $T, $R, $C, $Q, $Z, $D, $E)
 @testset "Chand Recursion (no initial conditions)" begin
       h5open("$path/reference/kalman_filter_out.h5", "r") do h5
           @test read(h5, "log_likelihood") ≈ out[1]
@@ -34,7 +35,7 @@ out = chand_recursion(y, T, R, C, Q, Z, D, E)
 
 # Chand Recursion (presample)
 out = chand_recursion(y, T, R, C, Q, Z, D, E, Nt0 = 4)
-@btime chand_recursion($y, $T, $R, $C, $Q, $Z, $D, $E, Nt0 = 4)
+run_benchmarks && @btime chand_recursion($y, $T, $R, $C, $Q, $Z, $D, $E, Nt0 = 4)
 @testset "Chand Recursion (presample)" begin
     h5open("$path/reference/kalman_filter_out_presample.h5", "r") do h5
         @test read(h5, "log_likelihood") ≈ out[1]
