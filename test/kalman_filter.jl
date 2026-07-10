@@ -66,5 +66,30 @@ run_benchmarks && @btime kalman_filter($regime_inds, $y, $Ts, $Rs, $Cs, $Qs, $Zs
     end
 end
 
+# Non-PD V_pred guard: a draw whose predicted-observation covariance
+# V_pred = Z*P_pred*Z' + E is not positive-definite must yield loglh = -Inf
+# (particle rejected), NOT a garbage-but-finite likelihood or a DomainError
+# from log(det(V_pred<0)). Regression test for the Vpred guard in update!
+# (src/filters/kalman_filter.jl). Feeds update! a P_pred/E that force a non-PD
+# V_pred directly, since no reference system in this file exercises that path.
+@testset "Kalman Filter (non-PD V_pred guard)" begin
+    T   = reshape([0.5], 1, 1); R = reshape([1.0], 1, 1); C = [0.0]
+    Q   = reshape([1.0], 1, 1); Z = reshape([1.0], 1, 1); D = [0.0]
+    s_0 = [0.0];                 P_0 = reshape([1.0], 1, 1)
+
+    # E has a negative eigenvalue => V_pred = Z*P_0*Z' + E = 1 - 10 = -9 (non-PD).
+    E_bad = reshape([-10.0], 1, 1)
+    k_bad = StateSpaceRoutines.KalmanFilter(T, R, C, Q, Z, D, E_bad, s_0, P_0)
+    StateSpaceRoutines.update!(k_bad, [0.5]; return_loglh = true)
+    @test k_bad.loglh_t == -Inf
+
+    # Positive control: well-posed E => V_pred = 1 + 1 = 2 (PD) => finite loglh,
+    # confirming the guard does not over-trigger on healthy draws.
+    E_ok = reshape([1.0], 1, 1)
+    k_ok = StateSpaceRoutines.KalmanFilter(T, R, C, Q, Z, D, E_ok, s_0, P_0)
+    StateSpaceRoutines.update!(k_ok, [0.5]; return_loglh = true)
+    @test isfinite(k_ok.loglh_t)
+end
+
 
 nothing

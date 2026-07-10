@@ -700,7 +700,11 @@ function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
 
     if return_loglh
         # p(y_t | y_{1:t-1})
-        k.loglh_t = -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2
+        if all(real(eigvals(V_pred_inv)) .> 0) == false # This Vpred fix removes particles where likelihoods blow up due to non-positive definite matrix
+            k.loglh_t = -Inf
+        else
+            k.loglh_t = -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2
+        end
     end
     return nothing
 end
