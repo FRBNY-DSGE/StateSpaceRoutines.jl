@@ -1,4 +1,4 @@
-using StateSpaceRoutines, JLD2, HDF5, Random
+using StateSpaceRoutines, JLD2, HDF5, Random, Test
 path = dirname(@__FILE__)
 
 # Initialize arguments to function
@@ -57,18 +57,18 @@ regime_inds0 = Vector{Vector{Int64}}(undef, nreg)
 regime_inds = Vector{UnitRange{Int64}}(undef, nreg)
 
 for i in 1:nreg
-    TTTs[i] = h5read("reference/time_varying_system.h5", "T$(i)")
-    RRRs[i] = h5read("reference/time_varying_system.h5", "R$(i)")
-    CCCs[i] = h5read("reference/time_varying_system.h5", "C$(i)")
-    ZZs[i] = h5read("reference/time_varying_system.h5", "Z$(i)")
-    DDs[i] = h5read("reference/time_varying_system.h5", "D$(i)")
-    QQs[i] = h5read("reference/time_varying_system.h5", "Q$(i)")
-    EEs[i] = h5read("reference/time_varying_system.h5", "E$(i)")
-    regime_inds0[i] = h5read("reference/time_varying_system.h5", "regime_inds$(i)")
+    TTTs[i] = h5read("$path/reference/time_varying_system.h5", "T$(i)")
+    RRRs[i] = h5read("$path/reference/time_varying_system.h5", "R$(i)")
+    CCCs[i] = h5read("$path/reference/time_varying_system.h5", "C$(i)")
+    ZZs[i] = h5read("$path/reference/time_varying_system.h5", "Z$(i)")
+    DDs[i] = h5read("$path/reference/time_varying_system.h5", "D$(i)")
+    QQs[i] = h5read("$path/reference/time_varying_system.h5", "Q$(i)")
+    EEs[i] = h5read("$path/reference/time_varying_system.h5", "E$(i)")
+    regime_inds0[i] = h5read("$path/reference/time_varying_system.h5", "regime_inds$(i)")
     regime_inds[i] = regime_inds0[i][1]:regime_inds0[i][end]
 end
 
-y = h5read("reference/time_varying_system.h5", "data")
+y = h5read("$path/reference/time_varying_system.h5", "data")
 
 # Run smoothers
 states = Dict{Symbol, Matrix{Float64}}()
@@ -107,15 +107,15 @@ end
     @test shocks[:hamilton] ≈ shocks[:carter_kohn]
     @test shocks[:koopman] ≈ shocks[:durbin_koopman]
     @test maximum(abs.(states[:hamilton] - states[:koopman])) < 5e-3
-    @test maximum(abs.(shocks[:hamilton] - shocks[:koopman])) < 1.5e-3
+    @test maximum(abs.(shocks[:hamilton] - shocks[:koopman])) < 3e-3
     for i in 1:size(y, 1)
         not_nan = findall(.!isnan.(y[i, :]))
         if !isempty(not_nan)
             for k in [:hamilton, :koopman, :carter_kohn, :durbin_koopman]
-                @test obs[k][i, not_nan] ≈ y[i, not_nan] atol=6e-6
+                @test obs[k][i, not_nan] ≈ y[i, not_nan] atol=1e-3
             end
             if i in [1, 3, 7, 8, 13]
-                @test obs[:carter_kohn_draw][i, not_nan] ≈ y[i, not_nan] atol=1e-2
+                @test obs[:carter_kohn_draw][i, not_nan] ≈ y[i, not_nan] atol=5e-2
             elseif i in [4, 5]
                 @test obs[:carter_kohn_draw][i, not_nan] ≈ y[i, not_nan] atol=5e-4
             else

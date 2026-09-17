@@ -117,7 +117,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Vector{Function},
     if isempty(F_u_regime_inds) || length(F_u_regime_inds) != T || F_u_regime_inds[end] != length(F_u)
         @warn "Length of F_u's regime indices don't match number of F_u distributions. Using first distribution for all regimes."
         F_u_regime_inds = ones(Int64,T)
-        F_u = [F_[1]]
+        F_u = [F_u[1]]
     end
 
     # Initialize more constants
@@ -131,12 +131,13 @@ function tempered_particle_filter(data::AbstractArray, Φ::Vector{Function},
     QQerr = false
     HHerr = false
     try
-        QQ = [cov(F_ϵ[i]) for i in 1:length(F_ϵ)]
+        # materialize PDMat -> dense Matrix (see note in tempered_particle_filter.jl)
+        QQ = [Matrix(cov(F_ϵ[i])) for i in 1:length(F_ϵ)]
     catch
         QQerr = true
     end
     try
-        HH = [cov(F_u[i]) for i in 1:length(F_u)]
+        HH = [Matrix(cov(F_u[i])) for i in 1:length(F_u)]
     catch
         HHerr = true
     end
@@ -230,7 +231,7 @@ function tempered_particle_filter(data::AbstractArray, Φ::Vector{Function},
         end
 
         # Adjust other values to remove rows/columns with NaN values
-        nonmissing = .!ismissing_infinite.(y_t)
+        nonmissing = isfinite.(coalesce.(y_t, NaN))
         y_t = float.(y_t[nonmissing])
 
         n_obs_t    = length(y_t)

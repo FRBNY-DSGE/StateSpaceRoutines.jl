@@ -5,20 +5,39 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        julia-version: [1.5]
+        # Migrated to Julia 1.12. (1.5 no longer passes: the RNG-dependent reference
+        # outputs were regenerated on 1.12's default RNG, so the old MersenneTwister
+        # stream mismatches.)
+        julia-version: ['1.12']
         julia-arch: [x64]
-        os: [ubuntu-latest, windows-latest]
+        # ubuntu-only for now: the parallel DistributedArrays/SPMD paths are the least
+        # stable part of the stack; add windows back once that's solid.
+        os: [ubuntu-latest]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: "Set up Julia"
-        uses: julia-actions/setup-julia@latest
+        uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.julia-version }}
-      - uses: julia-actions/julia-buildpkg@master
-      - uses: julia-actions/julia-runtest@master
+          arch: ${{ matrix.julia-arch }}
+
+      # TEMPORARY (dependency-ordering): StateSpaceRoutines' tests use ModelConstructors
+      # (DegenerateMvNormal in test/tv_tpf.jl). The *registered* ModelConstructors
+      # (<= 0.2.4) caps DataFrames <= 0.22 / Distributions <= 0.24, which is
+      # unsatisfiable against the Julia 1.12 stack -> the test sandbox fails to resolve.
+      # Pin the 1.12-migrated ModelConstructors (its `integration` branch) so resolution
+      # succeeds. REMOVE this step once a 1.12-compatible ModelConstructors is registered.
+      - name: "Use in-development ModelConstructors"
+        run: julia --project=. -e 'using Pkg; Pkg.add(PackageSpec(url="https://github.com/FRBNY-DSGE/ModelConstructors.jl", rev="integration"))'
+
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1
-      - uses: codecov/codecov-action@v1
+      - uses: codecov/codecov-action@v4
         with:
-          file: lcov.info
+          files: lcov.info
+        # NOTE: codecov-action@v4+ may require CODECOV_TOKEN as a repo secret for
+        # uploads (even on public repos). Add it under Settings -> Secrets if uploads 401.
