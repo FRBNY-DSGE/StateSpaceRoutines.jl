@@ -329,8 +329,16 @@ function kalman_filter(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix
     return loglh, s_pred, P_pred, s_filt, P_filt, s_0, P_0, s_T, P_T
 end
 
+"""
+    kalman_likelihood(regime_indices, y, Ts, Rs, Cs, Qs, Zs, Ds, Es, ...;
+                      add_zlb_duration=(false, 1))
 
-
+For regime switching, pass one system matrix per entry of `regime_indices`.
+When `add_zlb_duration` selects a date inside a regime, the filter uses that
+regime's matrices on both sides of the date and returns the filtered state at
+the selected date alongside the likelihood vector. `regime_indices` is never
+modified. An already duplicated system entry is accepted for compatibility.
+"""
 function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractArray,
                            Ts::Vector{<:AbstractMatrix{S}}, Rs::Vector{<:AbstractMatrix{S}},
                            Cs::Vector{<:AbstractVector{S}}, Qs::Vector{<:AbstractMatrix{S}},
@@ -379,15 +387,22 @@ function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractAr
     else
         if add_zlb_duration[1]
             zlb_ind = findfirst(x -> add_zlb_duration[2] in x, regime_indices)
-            if add_zlb_duration[2] != regime_indices[zlb_ind][end]
-                insert!(regime_indices, zlb_ind+1, (add_zlb_duration[2]+1):regime_indices[zlb_ind][end])
-                regime_indices[zlb_ind] = regime_indices[zlb_ind][1]:add_zlb_duration[2]
+            isnothing(zlb_ind) && throw(BoundsError(regime_indices, add_zlb_duration[2]))
+            split_regime = add_zlb_duration[2] != last(regime_indices[zlb_ind])
+            filter_indices = split_regime ? copy(regime_indices) : regime_indices
+            if split_regime
+                insert!(filter_indices, zlb_ind+1, (add_zlb_duration[2]+1):last(regime_indices[zlb_ind]))
+                filter_indices[zlb_ind] = first(regime_indices[zlb_ind]):add_zlb_duration[2]
             end
+            # A split uses the same system on both sides of the selected date.
+            # Also accept the historical n+1-system input for compatibility.
+            extra_system = split_regime && length(Ts) == length(filter_indices)
 
-            for i = 1:length(regime_indices)
-                ts = regime_indices[i]
-                loglh[ts], s_t, P_t = kalman_likelihood(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i],
-                                                        Zs[i], Ds[i], Es[i], s_t, P_t;
+            for i = 1:length(filter_indices)
+                ts = filter_indices[i]
+                sys_ind = split_regime && !extra_system && i > zlb_ind ? i - 1 : i
+                loglh[ts], s_t, P_t = kalman_likelihood(y[:, ts], Ts[sys_ind], Rs[sys_ind], Cs[sys_ind], Qs[sys_ind],
+                                                        Zs[sys_ind], Ds[sys_ind], Es[sys_ind], s_t, P_t;
                                                         Nt0 = 0, tol = tol, switching = true)
 
                 if length(ts) > 0 && add_zlb_duration[2] == ts[end]

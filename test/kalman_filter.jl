@@ -66,6 +66,47 @@ run_benchmarks && @btime kalman_filter($regime_inds, $y, $Ts, $Rs, $Cs, $Qs, $Zs
     end
 end
 
+@testset "Kalman likelihood split regime uses existing systems without mutation" begin
+    inds = UnitRange{Int}[1:4, 5:8, 9:12]
+    obs = reshape(collect(0.1:0.1:1.2), 1, :)
+    Ts = [reshape([v], 1, 1) for v in (0.5, 0.6, 0.7)]
+    Rs = [reshape([1.0], 1, 1) for _ in 1:3]
+    Cs = [zeros(1) for _ in 1:3]
+    Qs = [reshape([1.0], 1, 1) for _ in 1:3]
+    Zs = [reshape([1.0], 1, 1) for _ in 1:3]
+    Ds = [zeros(1) for _ in 1:3]
+    Es = [reshape([0.1], 1, 1) for _ in 1:3]
+    baseline = kalman_likelihood(inds, obs, Ts, Rs, Cs, Qs, Zs, Ds, Es)
+    filt = kalman_filter(inds, obs, Ts, Rs, Cs, Qs, Zs, Ds, Es)
+
+    for d in (2, 6, 10)
+        input_inds = copy(inds)
+        split_lh, split_state = kalman_likelihood(input_inds, obs, Ts, Rs, Cs, Qs,
+            Zs, Ds, Es; add_zlb_duration=(true, d))
+        @test isequal(split_lh, baseline)
+        @test isequal(split_state, filt[4][:, d])
+        @test input_inds == inds
+    end
+
+    duplicate(v) = vcat(v[1:2], v[2:2], v[3:3])
+    legacy_inds = copy(inds)
+    legacy_lh, legacy_state = kalman_likelihood(legacy_inds, obs,
+        duplicate(Ts), duplicate(Rs), duplicate(Cs), duplicate(Qs),
+        duplicate(Zs), duplicate(Ds), duplicate(Es); add_zlb_duration=(true, 6))
+    @test isequal(legacy_lh, baseline)
+    @test isequal(legacy_state, filt[4][:, 6])
+    @test legacy_inds == inds
+
+    input_inds = copy(inds)
+    @test_throws BoundsError kalman_likelihood(input_inds, obs, Ts, Rs, Cs, Qs,
+        Zs, Ds, Es; add_zlb_duration=(true, 13))
+    @test input_inds == inds
+    input_inds = copy(inds)
+    @test_throws BoundsError kalman_likelihood(input_inds, obs, Ts[1:2], Rs, Cs, Qs,
+        Zs, Ds, Es; add_zlb_duration=(true, 6))
+    @test input_inds == inds
+end
+
 # Non-PD V_pred guard: a draw whose predicted-observation covariance
 # V_pred = Z*P_pred*Z' + E is not positive-definite must yield loglh = -Inf
 # (particle rejected), NOT a garbage-but-finite likelihood or a DomainError
