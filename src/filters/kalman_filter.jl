@@ -380,7 +380,7 @@ function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractAr
         if add_zlb_duration[1]
             zlb_ind = findfirst(x -> add_zlb_duration[2] in x, regime_indices)
             if add_zlb_duration[2] != regime_indices[zlb_ind][end]
-                insert!(regime_indices, (add_zlb_duration[2]+1):regime_indices[zlb_ind][end], zlb_ind+1)
+                insert!(regime_indices, zlb_ind+1, (add_zlb_duration[2]+1):regime_indices[zlb_ind][end])
                 regime_indices[zlb_ind] = regime_indices[zlb_ind][1]:add_zlb_duration[2]
             end
 
@@ -496,7 +496,7 @@ weights now fixed to 2020Q4, remove ZLB in main policy?
     else
         zlb_ind = findfirst(x -> add_zlb_duration[2] in x, regime_indices)
         if add_zlb_duration[2] != regime_indices[zlb_ind][end]
-            insert!(regime_indices, (add_zlb_duration[2]+1):regime_indices[zlb_ind][end], zlb_ind+1)
+            insert!(regime_indices, zlb_ind+1, (add_zlb_duration[2]+1):regime_indices[zlb_ind][end])
             regime_indices[zlb_ind] = regime_indices[zlb_ind][1]:add_zlb_duration[2]
         end
 
