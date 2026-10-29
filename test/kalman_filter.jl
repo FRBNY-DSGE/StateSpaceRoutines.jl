@@ -96,16 +96,18 @@ end
 # arrays (794fb02): one new array per product and period, missing rows dropped per period.
 function alloc_filter(regime_inds, y, Ts, Rs, Cs, Qs, Zs, Ds, Es, s_0, P_0)
     Nt, Ns = size(y, 2), length(s_0)
-    loglh  = fill(NaN, Nt)
-    s_pred = fill(NaN, Ns, Nt); P_pred = fill(NaN, Ns, Ns, Nt)
-    s_filt = fill(NaN, Ns, Nt); P_filt = fill(NaN, Ns, Ns, Nt)
+    S      = eltype(Ts[1])
+    mynan  = convert(S, NaN)   # outputs have the system's element type, as in kalman_filter
+    loglh  = fill(mynan, Nt)
+    s_pred = fill(mynan, Ns, Nt); P_pred = fill(mynan, Ns, Ns, Nt)
+    s_filt = fill(mynan, Ns, Nt); P_filt = fill(mynan, Ns, Ns, Nt)
     s_t, P_t = s_0, P_0
     for (i, ts) in enumerate(regime_inds)
         T, C = Ts[i], Cs[i]
         RQR′ = Rs[i] * Qs[i] * Rs[i]'
         for t in ts
-            s_t = T*s_t + C
-            P_t = T*P_t*T' + RQR′
+            s_t = convert(AbstractVector{S}, T*s_t + C)  # KalmanFilter's fields are {S}: assignment converts
+            P_t = convert(AbstractMatrix{S}, T*P_t*T' + RQR′)
             s_pred[:, t] = s_t; P_pred[:, :, t] = P_t
 
             y_obs      = y[:, t]
@@ -121,7 +123,7 @@ function alloc_filter(regime_inds, y, Ts, Rs, Cs, Qs, Zs, Ds, Es, s_0, P_0)
             V_pred_inv = inv(V_pred)
             dy         = y_obs - y_pred
             PZV        = P_t'*Z'*V_pred_inv
-            s_t, P_t   = s_t + PZV*dy, P_t - PZV*Z*P_t
+            s_t, P_t   = convert(AbstractVector{S}, s_t + PZV*dy), convert(AbstractMatrix{S}, P_t - PZV*Z*P_t)
             s_filt[:, t] = s_t; P_filt[:, :, t] = P_t
             loglh[t] = all(real(eigvals(V_pred_inv)) .> 0) == false ? -Inf :
                 -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2
@@ -136,8 +138,8 @@ end
     ym[1, 3:12] .= NaN; ym[2:end, 20] .= NaN; ym[:, 30] .= NaN; ym[end, 40:45] .= NaN
     z0_in, P0_in = copy(z0), copy(P0)
     k = StateSpaceRoutines.KalmanFilter(T, R, C, Q, Z, D, E, z0, P0)
-    @test StateSpaceRoutines.kalman_workspace(k, 0.0) isa StateSpaceRoutines.KalmanWorkspace # work arrays in use
-    @test StateSpaceRoutines.kalman_workspace(k, 1e-6) === nothing # tol > 0: allocating path
+    @test StateSpaceRoutines.kalman_workspace(k, ym, 0.0) isa StateSpaceRoutines.KalmanWorkspace # work arrays in use
+    @test StateSpaceRoutines.kalman_workspace(k, ym, 1e-6) === nothing # tol > 0: allocating path
     ref = alloc_filter([1:size(ym, 2)], ym, [T], [R], [C], [Q], [Z], [D], [E], z0, P0)
 
     out = kalman_filter(ym, T, R, C, Q, Z, D, E, z0, P0)
@@ -193,6 +195,28 @@ end
         @test isequal(out[8], ref[6]) && isequal(out[9], ref[7])
         @test isequal(kalman_likelihood(ri, ym, Tr, Rr, Cr, Qr, Zr, Dr, Er), ref[1])
         @test isequal(kalman_likelihood(ri, ym, Tr, Rr, Cr, Qr, Zr, Dr, Er, s_init, P_init), ref[1])
+    end
+end
+
+@testset "Kalman Filter (Float32 system: work arrays only for Float32 data, bitwise)" begin
+    @load "$path/reference/kalman_filter_args.jld2" y T R C Q Z D E z0 P0
+    ym = copy(y)
+    ym[1, 3:12] .= NaN; ym[2:end, 20] .= NaN; ym[:, 30] .= NaN
+    sys = map(x -> Float32.(x), (T, R, C, Q, Z, D, E))
+    s0, P0f = Float32.(z0), Float32.(P0)
+    inds = [1:100, 101:size(ym, 2)]
+    for yd in (ym, Float32.(ym))          # Float64 data: allocating path (dy in Float64); Float32 data: work arrays
+        k = StateSpaceRoutines.KalmanFilter(sys..., s0, P0f)
+        @test (StateSpaceRoutines.kalman_workspace(k, yd, 0.0) === nothing) == (nonmissingtype(eltype(yd)) == Float64)
+        ref = alloc_filter([1:size(yd, 2)], yd, map(x -> [x], sys)..., s0, P0f)
+        out = kalman_filter(yd, sys..., s0, P0f)
+        for j in 1:5
+            @test isequal(out[j], ref[j])
+        end
+        @test isequal(out[8], ref[6]) && isequal(out[9], ref[7])
+        @test isequal(kalman_likelihood(yd, sys..., s0, P0f; switching = false), ref[1])
+        refr = alloc_filter(inds, yd, map(x -> [x, x], sys)..., s0, P0f)
+        @test isequal(kalman_likelihood(inds, yd, map(x -> [x, x], sys)..., s0, P0f), refr[1])
     end
 end
 

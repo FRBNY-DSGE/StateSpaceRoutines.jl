@@ -91,14 +91,15 @@ KalmanWorkspace{S}(Ns::Int, Ny::Int) where {S<:Real} =
 
 """
 ```
-kalman_workspace(k, tol, ws = nothing)
+kalman_workspace(k, y, tol, ws = nothing)
 ```
 
 Return `ws` if it fits `k`, else a new `KalmanWorkspace`, or `nothing` if `k` is not
-made of dense BLAS arrays or `tol > 0` (then the allocating `forecast!`/`update!` are used).
+made of dense BLAS arrays, the data `y` are of another element type (the allocating path
+would compute `dy` in the wider type), or `tol > 0` (then the allocating `forecast!`/`update!` are used).
 """
-function kalman_workspace(k::KalmanFilter{S}, tol::AbstractFloat, ws = nothing) where {S<:Real}
-    if !(S <: Union{Float32, Float64} && tol == 0 &&
+function kalman_workspace(k::KalmanFilter{S}, y::AbstractArray, tol::AbstractFloat, ws = nothing) where {S<:Real}
+    if !(S <: Union{Float32, Float64} && tol == 0 && nonmissingtype(eltype(y)) === S &&
          k.T isa Matrix{S} && k.R isa Matrix{S} && k.C isa Vector{S} && k.Q isa Matrix{S} &&
          k.Z isa Matrix{S} && k.D isa Vector{S} && k.E isa Matrix{S} &&
          k.s_t isa Vector{S} && k.P_t isa Matrix{S})
@@ -361,7 +362,7 @@ function kalman_filter(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix
     P_0 = k.P_t
 
     # Work arrays, reused every period
-    ws = kalman_workspace(k, tol)
+    ws = kalman_workspace(k, y, tol)
 
     # Loop through periods t
     RQR′ = R * Q * R'
@@ -475,7 +476,7 @@ function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractAr
                 end
             end
         else
-            ws = kalman_workspace(k, tol) # work arrays shared by the regimes
+            ws = kalman_workspace(k, y, tol) # work arrays shared by the regimes
             for i = 1:length(regime_indices)
                 ts = regime_indices[i]
                 loglh[ts], s_t, P_t = _kalman_likelihood(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i],
@@ -674,7 +675,7 @@ function _kalman_likelihood(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractM
     loglh = fill(mynan, Nt)
 
     # Work arrays, reused every period
-    ws = kalman_workspace(k, tol, ws)
+    ws = kalman_workspace(k, y, tol, ws)
 
     # Loop through periods t
     RQR′ = R * Q * R'
