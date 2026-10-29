@@ -44,6 +44,76 @@ end
 
 """
 ```
+KalmanWorkspace{S}(Ns, Ny)
+```
+
+Work arrays for `forecast!` and `update!`, allocated once per filter call instead of
+once per period. `s_t`, `P_t` alternate between the `pred` and `filt` buffers, and the
+measurement-equation arrays are kept for each number of observed series `Ny_t`
+(missing data). The products are the same `mul!` calls, in the same order, that
+`*` makes in the allocating `forecast!`/`update!`, so the output is bitwise equal.
+"""
+struct KalmanObsWorkspace{S<:Real}
+    y_obs::Vector{S}   # Ny_t
+    y_pred::Vector{S}  # Ny_t
+    dy::Vector{S}      # Ny_t
+    Z::Matrix{S}       # Ny_t x Ns
+    D::Vector{S}       # Ny_t
+    E::Matrix{S}       # Ny_t x Ny_t
+    ZP::Matrix{S}      # Z*P_{t|t-1}, Ny_t x Ns
+    V::Matrix{S}       # Z*P_{t|t-1}*Z' + E
+    V_sym::Matrix{S}   # (V + V')/2
+    PZ::Matrix{S}      # P_{t|t-1}'*Z', Ns x Ny_t
+    PZV::Matrix{S}     # P_{t|t-1}'*Z'*V^{-1}, Ns x Ny_t
+    PZVdy::Vector{S}   # Ns
+end
+
+KalmanObsWorkspace{S}(Ns::Int, Ny::Int) where {S<:Real} =
+    KalmanObsWorkspace{S}(Vector{S}(undef, Ny), Vector{S}(undef, Ny), Vector{S}(undef, Ny),
+                          Matrix{S}(undef, Ny, Ns), Vector{S}(undef, Ny), Matrix{S}(undef, Ny, Ny),
+                          Matrix{S}(undef, Ny, Ns), Matrix{S}(undef, Ny, Ny), Matrix{S}(undef, Ny, Ny),
+                          Matrix{S}(undef, Ns, Ny), Matrix{S}(undef, Ns, Ny), Vector{S}(undef, Ns))
+
+struct KalmanWorkspace{S<:Real}
+    s_pred::Vector{S}  # s_{t|t-1}
+    P_pred::Matrix{S}  # P_{t|t-1}
+    s_filt::Vector{S}  # s_{t|t}
+    P_filt::Matrix{S}  # P_{t|t}
+    NsNs::Matrix{S}    # T*P_{t-1|t-1} in forecast!, P_{t|t-1}'*Z'/V*Z*P_{t|t-1} in update!
+    obs_rows::Vector{Int}                      # rows of non-missing observables
+    obs::Dict{Int, KalmanObsWorkspace{S}}      # keyed by Ny_t
+end
+
+KalmanWorkspace{S}(Ns::Int, Ny::Int) where {S<:Real} =
+    KalmanWorkspace{S}(Vector{S}(undef, Ns), Matrix{S}(undef, Ns, Ns), Vector{S}(undef, Ns),
+                       Matrix{S}(undef, Ns, Ns), Matrix{S}(undef, Ns, Ns), Vector{Int}(undef, Ny),
+                       Dict{Int, KalmanObsWorkspace{S}}())
+
+"""
+```
+kalman_workspace(k, y, tol, ws = nothing)
+```
+
+Return `ws` if it fits `k`, else a new `KalmanWorkspace`, or `nothing` if `k` is not
+made of dense BLAS arrays, the data `y` are of another element type (the allocating path
+would compute `dy` in the wider type), or `tol > 0` (then the allocating `forecast!`/`update!` are used).
+"""
+function kalman_workspace(k::KalmanFilter{S}, y::AbstractArray, tol::AbstractFloat, ws = nothing) where {S<:Real}
+    if !(S <: Union{Float32, Float64} && tol == 0 && nonmissingtype(eltype(y)) === S &&
+         k.T isa Matrix{S} && k.R isa Matrix{S} && k.C isa Vector{S} && k.Q isa Matrix{S} &&
+         k.Z isa Matrix{S} && k.D isa Vector{S} && k.E isa Matrix{S} &&
+         k.s_t isa Vector{S} && k.P_t isa Matrix{S})
+        return nothing
+    end
+    Ns, Ny = size(k.T, 1), size(k.Z, 1)
+    if ws isa KalmanWorkspace{S} && length(ws.s_pred) == Ns && length(ws.obs_rows) == Ny
+        return ws
+    end
+    return KalmanWorkspace{S}(Ns, Ny)
+end
+
+"""
+```
 init_stationary_states(T, R, C, Q)
 ```
 
@@ -291,18 +361,29 @@ function kalman_filter(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix
     s_0 = k.s_t
     P_0 = k.P_t
 
+    # Work arrays, reused every period
+    ws = kalman_workspace(k, y, tol)
+
     # Loop through periods t
     RQR′ = R * Q * R'
     for t = 1:Nt
         # Forecast
-        forecast!(k, RQR′) # calculate RQR′ once for efficiency
+        if isnothing(ws)
+            forecast!(k, RQR′) # calculate RQR′ once for efficiency
+        else
+            forecast!(k, RQR′, ws)
+        end
         if return_pred
             s_pred[:,    t] = k.s_t
             P_pred[:, :, t] = k.P_t
         end
 
         # Update and compute log-likelihood
-        update!(k, y[:, t]; return_loglh = return_loglh, tol = tol)
+        if isnothing(ws)
+            update!(k, y[:, t]; return_loglh = return_loglh, tol = tol)
+        else
+            update!(k, view(y, :, t), ws; return_loglh = return_loglh)
+        end
         if return_filt
             s_filt[:,    t] = k.s_t
             P_filt[:, :, t] = k.P_t
@@ -311,10 +392,10 @@ function kalman_filter(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix
             loglh[t]        = k.loglh_t
         end
 
-        # Update s_0 and P_0 if Nt0 > 0
+        # Update s_0 and P_0 if Nt0 > 0 (copies: the work arrays are overwritten)
         if t == Nt0
-            s_0 = k.s_t
-            P_0 = k.P_t
+            s_0 = copy(k.s_t)
+            P_0 = copy(k.P_t)
         end
     end
 
@@ -410,11 +491,12 @@ function kalman_likelihood(regime_indices::Vector{UnitRange{Int}}, y::AbstractAr
                 end
             end
         else
+            ws = kalman_workspace(k, y, tol) # work arrays shared by the regimes
             for i = 1:length(regime_indices)
                 ts = regime_indices[i]
-                loglh[ts], s_t, P_t = kalman_likelihood(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i],
-                                                        Zs[i], Ds[i], Es[i], s_t, P_t;
-                                                        Nt0 = 0, tol = tol, switching = true)
+                loglh[ts], s_t, P_t = _kalman_likelihood(y[:, ts], Ts[i], Rs[i], Cs[i], Qs[i],
+                                                         Zs[i], Ds[i], Es[i], s_t, P_t,
+                                                         0, tol, true, ws)
             end
         end
     end
@@ -588,7 +670,15 @@ function kalman_likelihood(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMa
                            P_0::AbstractMatrix{S} = Matrix{S}(undef, 0, 0),
                            Nt0::Int = 0, tol::AbstractFloat = 0.0,
                            switching::Bool = true) where {S<:Real}
-    
+    _kalman_likelihood(y, T, R, C, Q, Z, D, E, s_0, P_0, Nt0, tol, switching, nothing)
+end
+
+# `ws`: work arrays to reuse (from the regime-switching method), or `nothing`
+function _kalman_likelihood(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMatrix{S}, C::AbstractVector{S},
+                            Q::AbstractMatrix{S}, Z::AbstractMatrix{S}, D::AbstractVector{S}, E::AbstractMatrix{S},
+                            s_0::AbstractVector{S}, P_0::AbstractMatrix{S}, Nt0::Int, tol::AbstractFloat,
+                            switching::Bool, ws) where {S<:Real}
+
     # Dimensions
     Nt = size(y, 2) # number of periods of data
 
@@ -599,14 +689,20 @@ function kalman_likelihood(y::AbstractArray, T::AbstractMatrix{S}, R::AbstractMa
     mynan = convert(S, NaN)
     loglh = fill(mynan, Nt)
 
+    # Work arrays, reused every period
+    ws = kalman_workspace(k, y, tol, ws)
+
     # Loop through periods t
     RQR′ = R * Q * R'
     for t = 1:Nt
-        # Forecast
-        forecast!(k, RQR′) # calculate RQR′ once for efficiency
-
-        # Update and compute log-likelihood
-        update!(k, y[:, t]; return_loglh = true, tol = tol)
+        # Forecast and update, compute log-likelihood
+        if isnothing(ws)
+            forecast!(k, RQR′) # calculate RQR′ once for efficiency
+            update!(k, y[:, t]; return_loglh = true, tol = tol)
+        else
+            forecast!(k, RQR′, ws)
+            update!(k, view(y, :, t), ws; return_loglh = true)
+        end
         loglh[t] = k.loglh_t
     end
 
@@ -727,4 +823,99 @@ function update!(k::KalmanFilter{S}, y_obs::AbstractArray;
         end
     end
     return nothing
+end
+
+"""
+```
+forecast!(k::KalmanFilter, RQR′, ws::KalmanWorkspace)
+update!(k::KalmanFilter, y_obs, ws::KalmanWorkspace; return_loglh = true)
+```
+
+In-place versions of `forecast!` and `update!` (with `tol = 0`): the results are
+written into the work arrays `ws` and `k` points at them. Every product is the
+`mul!` that `*` calls in the allocating versions, with the same association
+(see `LinearAlgebra._tri_matmul`), so the results are bitwise equal.
+"""
+function forecast!(k::KalmanFilter{S}, RQR′::AbstractMatrix, ws::KalmanWorkspace{S}) where {S<:Real}
+    _forecast!(ws.s_pred, ws.P_pred, ws.NsNs, k.T, k.C, k.s_t, k.P_t, RQR′)
+    k.s_t = ws.s_pred
+    k.P_t = ws.P_pred
+    return nothing
+end
+
+function _forecast!(s_pred, P_pred, TP, T, C, s_filt, P_filt, RQR′)
+    mul!(s_pred, T, s_filt)      # s_{t|t-1} = T*s_{t-1|t-1} + C
+    s_pred .+= C
+    mul!(TP, T, P_filt)          # P_{t|t-1} = (T*P_{t-1|t-1})*T' + R*Q*R'
+    mul!(P_pred, TP, T')
+    P_pred .+= RQR′
+    return nothing
+end
+
+function update!(k::KalmanFilter{S}, y_obs::AbstractArray, ws::KalmanWorkspace{S};
+                 return_loglh::Bool = true) where {S<:Real}
+
+    # Keep rows of measurement equation corresponding to non-missing observables
+    rows = ws.obs_rows
+    Ny   = 0
+    for i in eachindex(y_obs)
+        x = y_obs[i]
+        if !(ismissing(x) || isnan(x))
+            Ny += 1
+            rows[Ny] = i
+        end
+    end
+    w   = get!(() -> KalmanObsWorkspace{S}(length(ws.s_pred), Ny), ws.obs, Ny)
+    obs = view(rows, 1:Ny)
+    w.y_obs .= view(y_obs, obs)
+    w.Z     .= view(k.Z, obs, :)
+    w.D     .= view(k.D, obs)
+    w.E     .= view(k.E, obs, obs)
+
+    k.PZV, loglh_t = _update!(w, ws.s_filt, ws.P_filt, ws.NsNs, k.s_t, k.P_t, return_loglh)
+    k.s_t = ws.s_filt
+    k.P_t = ws.P_filt
+    if return_loglh
+        k.loglh_t = loglh_t
+    end
+    return nothing
+end
+
+function _update!(w::KalmanObsWorkspace{S}, s_filt::Vector{S}, P_filt::Matrix{S}, X::Matrix{S},
+                  s_pred::Vector{S}, P_pred::Matrix{S}, return_loglh::Bool) where {S<:Real}
+    y_obs, Z, D, E, dy = w.y_obs, w.Z, w.D, w.E, w.dy
+    Ny = length(y_obs)
+
+    y_pred = mul!(w.y_pred, Z, s_pred) # y_{t|t-1} = Z*s_{t|t-1} + D
+    y_pred .+= D
+
+    ZP     = mul!(w.ZP, Z, P_pred)     # V_{t|t-1} = Var y_{t|t-1} = (Z*P_{t|t-1})*Z' + E
+    V      = mul!(w.V, ZP, Z')
+    V    .+= E
+    V_pred = w.V_sym
+    V_pred .= (V .+ V') ./ 2           # V_pred should be symmetric
+
+    V_pred_inv = inv(V_pred)
+    dy .= y_obs .- y_pred              # dy = y_t - y_{t|t-1} (prediction error)
+
+    PZV = mul!(w.PZV, mul!(w.PZ, P_pred', Z'), V_pred_inv) # (P_{t|t-1}'*Z')*V_{t|t-1}^{-1}
+
+    s_filt .= s_pred .+ mul!(w.PZVdy, PZV, dy) # s_{t|t} = s_{t|t-1} + PZV*dy
+    # P_{t|t} = P_{t|t-1} - PZV*Z*P_{t|t-1}; for Ny < Ns `*` computes PZV*(Z*P_{t|t-1})
+    if Ny < size(P_pred, 1)
+        P_filt .= P_pred .- mul!(X, PZV, ZP)
+    else
+        P_filt .= P_pred .- PZV*Z*P_pred
+    end
+
+    loglh_t = nothing
+    if return_loglh
+        # p(y_t | y_{1:t-1})
+        if all(real(eigvals(V_pred_inv)) .> 0) == false # Vpred fix: see update! above
+            loglh_t = -Inf
+        else
+            loglh_t = -(Ny*log(2π) + log(det(V_pred)) + dy'*V_pred_inv*dy)/2
+        end
+    end
+    return PZV, loglh_t
 end
